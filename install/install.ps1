@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Install the Revayat skill into one or more coding agents.
+    Install the Revayat Novel skill into one or more coding agents.
 
 .DESCRIPTION
-    Copies skills/revayat/ into each agent's real skill directory. Copies, never
+    Copies skills/revayat-novel/ into each agent's real skill directory. Copies, never
     links: several agents do not follow junctions or symlinks when discovering
     skills, so a real directory is the only reliable form.
 
@@ -41,7 +41,7 @@ Set-StrictMode -Version Latest
 
 # Resolve relative to this script, so the installer works from any directory.
 $RepoRoot  = Split-Path -Parent $PSScriptRoot
-$SkillName = 'revayat'
+$SkillName = 'revayat-novel'
 $Source    = Join-Path $RepoRoot "skills\$SkillName"
 
 if (-not (Test-Path -LiteralPath (Join-Path $Source 'SKILL.md'))) {
@@ -78,7 +78,7 @@ if ($Scope -eq 'project') {
 }
 
 Write-Host ''
-Write-Host "Revayat installer" -ForegroundColor Cyan
+Write-Host "Revayat Novel installer" -ForegroundColor Cyan
 Write-Host "  source : $Source"
 Write-Host "  scope  : $Scope$(if ($Scope -eq 'project') { " ($Path)" })"
 Write-Host ''
@@ -86,8 +86,8 @@ Write-Host ''
 # OpenCode and Antigravity read instructions from AGENTS.md rather than by
 # scanning a skills directory. The markers make the section replaceable without
 # disturbing anything else the user keeps in that file.
-$BeginMark = '<!-- BEGIN revayat -->'
-$EndMark   = '<!-- END revayat -->'
+$BeginMark = '<!-- BEGIN revayat-novel -->'
+$EndMark   = '<!-- END revayat-novel -->'
 
 function Write-AgentsPointer {
     param([string] $File, [string] $SkillDir)
@@ -105,7 +105,7 @@ function Write-AgentsPointer {
     $section = @(
         '',
         $BeginMark,
-        '## Revayat — Persian book translation',
+        '## Revayat Novel — Persian book translation',
         '',
         'To translate a book into Persian and produce a Word file, follow',
         ('`' + $SkillDir + '/SKILL.md`. Wherever it says `{SKILL_DIR}`, read that as'),
@@ -175,9 +175,9 @@ Write-Host 'Python dependencies:' -ForegroundColor Cyan
 Write-Host "  pip install -r `"$(Join-Path $Source 'requirements.txt')`""
 Write-Host ''
 Write-Host 'Then check the install with:' -ForegroundColor Cyan
-Write-Host "  python `"$(Join-Path $Source 'scripts\revayat.py')`" doctor"
+Write-Host "  python `"$(Join-Path $Source 'scripts\revayat-novel.py')`" doctor"
 Write-Host ''
-Write-Host 'Activate the skill by its name, which is "revayat" — the value of'
+Write-Host 'Activate the skill by its name, which is "revayat-novel" — the value of'
 Write-Host 'name: in SKILL.md, not the folder name.'
 Write-Host ''
 

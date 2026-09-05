@@ -1,13 +1,13 @@
-"""Revayat — one entry point for every pipeline stage.
+"""Revayat Novel — one entry point for every pipeline stage.
 
-    python revayat.py extract  book.pdf --out work/
-    python revayat.py glossary scan --book work/book.json --out work/glossary.json
-    python revayat.py chunk    build --book work/book.json --out work/chunks
-    python revayat.py merge    --book work/book.json --chunks work/chunks
-    python revayat.py falint   fix --book work/book.json
-    python revayat.py qa       check --book work/book.json
-    python revayat.py build    --book work/book.json --out out/book.fa.docx
-    python revayat.py qa       docx --file out/book.fa.docx --book work/book.json
+    python revayat-novel.py extract  book.pdf --out work/
+    python revayat-novel.py glossary scan --book work/book.json --out work/glossary.json
+    python revayat-novel.py chunk    build --book work/book.json --out work/chunks
+    python revayat-novel.py merge    --book work/book.json --chunks work/chunks
+    python revayat-novel.py falint   fix --book work/book.json
+    python revayat-novel.py qa       check --book work/book.json
+    python revayat-novel.py build    --book work/book.json --out out/book.fa.docx
+    python revayat-novel.py qa       docx --file out/book.fa.docx --book work/book.json
 
 ``doctor`` reports which optional tools are present, so a missing OCR engine is
 a clear message up front rather than a confusing failure mid-book.

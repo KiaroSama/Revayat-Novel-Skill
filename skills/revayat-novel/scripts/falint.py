@@ -266,7 +266,7 @@ def lint_book(book: dict[str, Any]) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
-    parser = argparse.ArgumentParser(prog="revayat falint", description=__doc__)
+    parser = argparse.ArgumentParser(prog="revayat-novel falint", description=__doc__)
     parser.add_argument("action", choices=["fix", "lint"])
     parser.add_argument("--book", required=True)
     parser.add_argument("--digits", choices=["persian", "keep"], default="persian")

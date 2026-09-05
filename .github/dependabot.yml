@@ -6,7 +6,7 @@ updates:
   # without fixing anything. Security updates ignore this limit and still open
   # pull requests.
   - package-ecosystem: pip
-    directory: /skills/revayat
+    directory: /skills/revayat-novel
     schedule:
       interval: weekly
     open-pull-requests-limit: 0

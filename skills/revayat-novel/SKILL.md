@@ -1,12 +1,12 @@
 ---
-name: revayat
+name: revayat-novel
 description: Translate a whole book from English (or another language) into publication-quality Persian and produce a professional Word document. Handles scanned, digital and mixed PDFs with OCR, removes colour watermarks, keeps every illustration at its original size, and builds real Word footnotes, a clickable table of contents, RTL typography and a locked name glossary. Use for translating novels, non-fiction, PDFs, EPUBs or DOCX files into Persian (فارسی).
 license: MIT
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent, AskUserQuestion
-metadata: {"homepage":"https://github.com/KiaroSama/Revayat-Skill","requires":{"bins":["python3"],"pip":["pymupdf","python-docx","beautifulsoup4","pillow"],"optional":["ocrmypdf","tesseract","ghostscript","mineru"]}}
+metadata: {"homepage":"https://github.com/KiaroSama/Revayat-Novel-Skill","requires":{"bins":["python3"],"pip":["pymupdf","python-docx","beautifulsoup4","pillow"],"optional":["ocrmypdf","tesseract","ghostscript","mineru"]}}
 ---
 
-# Revayat — English → Persian book translation
+# Revayat Novel — English → Persian book translation
 
 Run the nine steps below **in order**. Each one is a command plus a rule for
 what to do with its output. Do not improvise a different order, and do not skip
@@ -15,10 +15,10 @@ a step because the previous one looked fine.
 Set two variables once, then use them everywhere:
 
 - `SKILL_DIR` — the folder holding this file. In a Claude Code plugin it is
-  `${CLAUDE_PLUGIN_ROOT}/skills/revayat`.
+  `${CLAUDE_PLUGIN_ROOT}/skills/revayat-novel`.
 - `WORK` — a working folder for this book, e.g. `work/`.
 
-Every command is `python3 $SKILL_DIR/scripts/revayat.py <stage> …`.
+Every command is `python3 $SKILL_DIR/scripts/revayat-novel.py <stage> …`.
 
 ---
 
@@ -41,7 +41,7 @@ Every command is `python3 $SKILL_DIR/scripts/revayat.py <stage> …`.
 ## Step 1 — Check the tools
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py doctor
+python3 $SKILL_DIR/scripts/revayat-novel.py doctor
 ```
 
 - `"ready": true` → continue.
@@ -53,7 +53,7 @@ python3 $SKILL_DIR/scripts/revayat.py doctor
 ## Step 2 — Extract
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py extract "<input file>" --out $WORK
+python3 $SKILL_DIR/scripts/revayat-novel.py extract "<input file>" --out $WORK
 ```
 
 For a Persian-language source, add `--ocr-lang fas`. For other languages use the
@@ -81,7 +81,7 @@ entirely, or `--clean-scan force` when a stamp survived.
 a correct one, because both are fluent Persian:
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py ocr-sidecar   --pdf $WORK/ocr.pdf --out $WORK --lang fas --book $WORK/book.json
+python3 $SKILL_DIR/scripts/revayat-novel.py ocr-sidecar   --pdf $WORK/ocr.pdf --out $WORK --lang fas --book $WORK/book.json
 ```
 
 This writes `source.ocr.json` (per word, line, block and page: box, confidence,
@@ -96,7 +96,7 @@ photograph on it is not a separate picture until something finds it:
 
 ```bash
 mineru -p $WORK/cleaned.pdf -o $WORK/mineru -b pipeline -l arabic
-python3 $SKILL_DIR/scripts/revayat.py extract "<input file>" --out $WORK   --figures-from-mineru $WORK/mineru
+python3 $SKILL_DIR/scripts/revayat-novel.py extract "<input file>" --out $WORK   --figures-from-mineru $WORK/mineru
 ```
 
 Run MinerU on `cleaned.pdf`, not the original, or it crops the watermark as if
@@ -108,7 +108,7 @@ where it is. Use `--figures-page-offset N` when MinerU ran over a page range.
 **Then look at the result before going further:**
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py qa check --book $WORK/book.json --allow-incomplete
+python3 $SKILL_DIR/scripts/revayat-novel.py qa check --book $WORK/book.json --allow-incomplete
 ```
 
 Ignore `untranslated-block` here — nothing is translated yet. You are looking
@@ -118,7 +118,7 @@ extraction failed: see `references/extraction.md`.
 ## Step 3 — Glossary
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py glossary scan \
+python3 $SKILL_DIR/scripts/revayat-novel.py glossary scan \
   --book $WORK/book.json --out $WORK/glossary.json
 ```
 
@@ -142,7 +142,7 @@ Delete entries that are not real names. Then continue.
 ## Step 4 — Chunk
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py chunk build \
+python3 $SKILL_DIR/scripts/revayat-novel.py chunk build \
   --book $WORK/book.json --out $WORK/chunks --glossary $WORK/glossary.json
 ```
 
@@ -186,13 +186,13 @@ it does not, do them one at a time — the result is the same, only slower.
 Check what is left at any time:
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py chunk status --chunks $WORK/chunks
+python3 $SKILL_DIR/scripts/revayat-novel.py chunk status --chunks $WORK/chunks
 ```
 
 ## Step 6 — Merge
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py merge --book $WORK/book.json --chunks $WORK/chunks
+python3 $SKILL_DIR/scripts/revayat-novel.py merge --book $WORK/book.json --chunks $WORK/chunks
 ```
 
 | Field | Meaning | Action |
@@ -207,7 +207,7 @@ Re-running merge after a fix is always safe.
 ## Step 7 — Persian typography
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py falint fix --book $WORK/book.json
+python3 $SKILL_DIR/scripts/revayat-novel.py falint fix --book $WORK/book.json
 ```
 
 Mechanical only, and safe to run twice. Add `--digits keep` if the book must
@@ -216,7 +216,7 @@ keep Latin numerals.
 ## Step 8 — Gate, then build
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py qa check \
+python3 $SKILL_DIR/scripts/revayat-novel.py qa check \
   --book $WORK/book.json --assets $WORK/assets --glossary $WORK/glossary.json
 ```
 
@@ -248,7 +248,7 @@ expected, because there is no worksheet for them.
 Then build:
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py build \
+python3 $SKILL_DIR/scripts/revayat-novel.py build \
   --book $WORK/book.json --assets $WORK/assets --out out/book.fa.docx \
   --font "Vazirmatn" --size 11.5
 ```
@@ -261,7 +261,7 @@ list in `references/docx-and-ooxml.md`.
 ## Step 9 — Verify and report
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat.py qa docx --file out/book.fa.docx --book $WORK/book.json
+python3 $SKILL_DIR/scripts/revayat-novel.py qa docx --file out/book.fa.docx --book $WORK/book.json
 ```
 
 If `"ok": false`, fix it before telling the user the file is ready.

@@ -27,12 +27,15 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+# Any project-local virtualenv, whatever it is called.
+/.*-venv/
+/.uv-cache/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
 
-# --- Revayat working directories and outputs ---
-*_revayat/
+# --- Revayat Novel working directories and outputs ---
+*_revayat-novel/
 /work/
 /out/
 *.docx

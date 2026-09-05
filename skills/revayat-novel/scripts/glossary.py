@@ -29,7 +29,7 @@ from typing import Any, Iterable
 
 import bookir as ir
 
-SCHEMA = "revayat/glossary@1"
+SCHEMA = "revayat-novel/glossary@1"
 
 #: How many book-wide frequent names ride along in every chunk's term table.
 GLOBAL_TOP_N = 25
@@ -387,7 +387,7 @@ def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]
 
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
-    parser = argparse.ArgumentParser(prog="revayat glossary")
+    parser = argparse.ArgumentParser(prog="revayat-novel glossary")
     sub = parser.add_subparsers(dest="action", required=True)
 
     p_scan = sub.add_parser("scan", help="propose candidate names from book.json")

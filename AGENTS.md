@@ -1,14 +1,14 @@
 # AGENTS.md
 
 Repository guide for coding agents working **on** this project. If you want to
-*use* the skill to translate a book, read `skills/revayat/SKILL.md` instead.
+*use* the skill to translate a book, read `skills/revayat-novel/SKILL.md` instead.
 
 ## What this repository is
 
 An agent skill that translates a whole book into Persian and builds a
 professional Word document. It ships as three things from one tree:
 
-- a **skill** — `skills/revayat/`, self-contained, copyable into any agent's
+- a **skill** — `skills/revayat-novel/`, self-contained, copyable into any agent's
   skill directory
 - a **plugin** — `.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/` plus
   root `commands/`
@@ -18,8 +18,8 @@ professional Word document. It ships as three things from one tree:
 ## Layout
 
 ```
-skills/revayat/
-  SKILL.md          the skill; `name: revayat` is the activation key
+skills/revayat-novel/
+  SKILL.md          the skill; `name: revayat-novel` is the activation key
   scripts/*.py      the pipeline (see below)
   references/*.md   loaded on demand, not up front
   requirements.txt  the single dependency manifest
@@ -44,7 +44,7 @@ tests/              pytest; fixtures are generated, never committed
 | `qa.py` | deterministic gates over the IR and over the built package |
 | `ooxml.py` | footnotes, bookmarks, TOC field, bidi — what python-docx lacks |
 | `build_docx.py` | IR to Word |
-| `revayat.py` | CLI dispatcher and `doctor` |
+| `revayat-novel.py` | CLI dispatcher and `doctor` |
 
 ## Rules that are load-bearing
 
@@ -70,7 +70,7 @@ tests/              pytest; fixtures are generated, never committed
 ## Working on it
 
 ```bash
-pip install -r skills/revayat/requirements.txt
+pip install -r skills/revayat-novel/requirements.txt
 python -m pytest tests -q
 ```
 

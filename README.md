@@ -1,4 +1,4 @@
-# Revayat — روایت
+# Revayat Novel — روایت
 
 **Translate a whole book into publication-quality Persian, and get a Word file a publisher could work from.**
 
@@ -30,9 +30,9 @@ to be right rather than approximately right.
 ## Install
 
 ```bash
-git clone https://github.com/KiaroSama/Revayat-Skill.git
-cd Revayat-Skill
-pip install -r skills/revayat/requirements.txt
+git clone https://github.com/KiaroSama/Revayat-Novel-Skill.git
+cd Revayat-Novel-Skill
+pip install -r skills/revayat-novel/requirements.txt
 ```
 
 Then install the skill into whichever agents you use:
@@ -54,16 +54,16 @@ project. Both installers behave identically on Linux, macOS and Windows.
 ### As a Claude Code plugin
 
 ```
-/plugin marketplace add KiaroSama/Revayat-Skill
-/plugin install revayat@KiaroSama/Revayat-Skill
+/plugin marketplace add KiaroSama/Revayat-Novel-Skill
+/plugin install revayat-novel@KiaroSama/Revayat-Novel-Skill
 ```
 
-That also gives you `/translate-book`, `/revayat-resume` and `/revayat-qa`.
+That also gives you `/translate-book`, `/revayat-novel-resume` and `/revayat-novel-qa`.
 
 ### Check the install
 
 ```bash
-python skills/revayat/scripts/revayat.py doctor
+python skills/revayat-novel/scripts/revayat-novel.py doctor
 ```
 
 Optional, and only for scanned or mixed PDFs:
@@ -97,18 +97,18 @@ where you decide what each character is called in Persian.
 ### Or drive it yourself
 
 ```bash
-S=skills/revayat/scripts
+S=skills/revayat-novel/scripts
 
-python $S/revayat.py extract book.pdf --out work/
-python $S/revayat.py glossary scan --book work/book.json --out work/glossary.json
+python $S/revayat-novel.py extract book.pdf --out work/
+python $S/revayat-novel.py glossary scan --book work/book.json --out work/glossary.json
 #   … fill in the Persian names in work/glossary.json …
-python $S/revayat.py chunk build --book work/book.json --out work/chunks --glossary work/glossary.json
+python $S/revayat-novel.py chunk build --book work/book.json --out work/chunks --glossary work/glossary.json
 #   … translate work/chunks/chunkNNNN.md -> out_chunkNNNN.md …
-python $S/revayat.py merge  --book work/book.json --chunks work/chunks
-python $S/revayat.py falint fix --book work/book.json
-python $S/revayat.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
-python $S/revayat.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
-python $S/revayat.py qa     docx --file out/book.fa.docx --book work/book.json
+python $S/revayat-novel.py merge  --book work/book.json --chunks work/chunks
+python $S/revayat-novel.py falint fix --book work/book.json
+python $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
+python $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
+python $S/revayat-novel.py qa     docx --file out/book.fa.docx --book work/book.json
 ```
 
 ## How it works
@@ -171,17 +171,17 @@ Two more limits worth knowing up front:
 
 The skill loads these on demand rather than up front:
 
-- [`translation-policy.md`](skills/revayat/references/translation-policy.md) — what a faithful literary translation requires
-- [`persian-typography.md`](skills/revayat/references/persian-typography.md) — RTL, ZWNJ, punctuation, mixed scripts
-- [`extraction.md`](skills/revayat/references/extraction.md) — OCR routing, difficult books, the IR schema
-- [`glossary-and-voice.md`](skills/revayat/references/glossary-and-voice.md) — naming policy, aliases, character voice
-- [`docx-and-ooxml.md`](skills/revayat/references/docx-and-ooxml.md) — every build option and what Word structure it produces
-- [`troubleshooting.md`](skills/revayat/references/troubleshooting.md) — the failures you are most likely to hit
+- [`translation-policy.md`](skills/revayat-novel/references/translation-policy.md) — what a faithful literary translation requires
+- [`persian-typography.md`](skills/revayat-novel/references/persian-typography.md) — RTL, ZWNJ, punctuation, mixed scripts
+- [`extraction.md`](skills/revayat-novel/references/extraction.md) — OCR routing, difficult books, the IR schema
+- [`glossary-and-voice.md`](skills/revayat-novel/references/glossary-and-voice.md) — naming policy, aliases, character voice
+- [`docx-and-ooxml.md`](skills/revayat-novel/references/docx-and-ooxml.md) — every build option and what Word structure it produces
+- [`troubleshooting.md`](skills/revayat-novel/references/troubleshooting.md) — the failures you are most likely to hit
 
 ## Development
 
 ```bash
-pip install -r skills/revayat/requirements.txt
+pip install -r skills/revayat-novel/requirements.txt
 python -m pytest tests -q
 ```
 

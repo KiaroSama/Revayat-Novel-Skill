@@ -21,7 +21,7 @@ import zipfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO / "skills" / "revayat" / "scripts"))
+sys.path.insert(0, str(REPO / "skills" / "revayat-novel" / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import bookir as ir            # noqa: E402
@@ -155,7 +155,7 @@ def translate(worksheet: str) -> str:
 
 def main() -> int:
     ir.use_utf8_stdio()
-    work = Path(tempfile.mkdtemp(prefix="revayat-e2e-"))
+    work = Path(tempfile.mkdtemp(prefix="revayat-novel-e2e-"))
     try:
         print(f"working in {work}")
 
