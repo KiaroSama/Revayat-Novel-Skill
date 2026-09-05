@@ -87,6 +87,10 @@ RTL_MIN_CHARS = 40
 #: An empty band this share of the body height, *between* two inked bands, is
 #: a hole in the page rather than a chapter ending early.
 BLANK_BAND_SHARE = 0.35
+#: How close to the bottom of the body a band must end to count as pinned
+#: there — a footnote, or the last line of a full page. Measured on a real
+#: build, the footnote block ended within a few points of the body bottom.
+FOOTNOTE_FOOT_TOLERANCE_PT = 12.0
 #: Text over a picture, as a share of the smaller of the two areas.
 OVERLAP_SHARE = 0.15
 #: Characters of a block's translation used to find it on the rendered page.
@@ -96,6 +100,13 @@ PROBE_CHARS = 48
 #: Below this a probe is too generic to prove a duplicate — "«بله.»" repeats in
 #: any novel — so a short block is checked for presence only.
 PROBE_MIN_CHARS = 12
+
+#: Below this, in either dimension, a drawn object is a glyph rather than an
+#: illustration: a tab leader's dots, a bullet, the rule above a footnote. A
+#: book plate is never this small, and treating one as a picture produced 60
+#: "text sits on a picture" findings on a table of contents overlapping its own
+#: leader dots.
+GLYPH_MAX_PT = 24.0
 
 _SPACE = re.compile(r"\s+")
 
@@ -291,14 +302,50 @@ def _check_page_size(target: dict[str, Any], setup: dict[str, Any],
                    + (" — the page is on its side" if turned else ""))
 
 
+def is_illustration(image: dict[str, Any]) -> bool:
+    """Big enough to be a picture in a book rather than a drawn glyph."""
+    box = image.get("bbox") or [0, 0, 0, 0]
+    return (box[2] - box[0]) >= GLYPH_MAX_PT and (box[3] - box[1]) >= GLYPH_MAX_PT
+
+
+def is_furniture(box: list[float], setup: dict[str, Any],
+                 page_height: float) -> bool:
+    """Is this content the page's own furniture rather than the book's text?
+
+    A running head sits above the top margin and a page number below the bottom
+    one — that is where they belong, and reporting them as overflow means a
+    correct document comes back with a finding on every page. Measured on a
+    three-page build: 60 findings, every one of them a page number.
+
+    A check that fires on correct output is worse than no check, because the
+    next reader learns to skip the report.
+    """
+    top, bottom = setup["margin_top_pt"], page_height - setup["margin_bottom_pt"]
+    return box[3] <= top + BODY_TOLERANCE_PT or box[1] >= bottom - BODY_TOLERANCE_PT
+
+
 def _check_body_area(target: dict[str, Any], setup: dict[str, Any],
-                     report: qa.Report, unit: str) -> None:
-    """Anything off the trim is clipped; anything past the margins overflows."""
+                     report: qa.Report, unit: str, *,
+                     margins: bool = True) -> None:
+    """Anything off the trim is clipped; anything past the margins overflows.
+
+    ``margins=False`` keeps only the clipping half, and the assembled document
+    is checked that way. The margin half asks "did this paragraph overflow the
+    body I laid out", which is a real question about a page built from the IR
+    and the wrong question about the whole book: Word's own generated
+    furniture — a table of contents with hanging indents and tab leaders, a
+    footnote rule — legitimately sits in the margin. Measured on a three-page
+    build, asking it there produced 60 findings and every one was the TOC.
+
+    Running off the *paper* is unambiguous at either scope, so that half stays.
+    """
     left, top, right, bottom = body_rect(setup)
     page_w, page_h = target["width_pt"], target["height_pt"]
 
     for item in target["blocks"] + target["images"]:
         box = item["bbox"]
+        if is_furniture(box, setup, page_h):
+            continue
         what = _flat(item.get("text", ""))[:40] or "a picture"
         if (box[0] < -BODY_TOLERANCE_PT or box[1] < -BODY_TOLERANCE_PT
                 or box[2] > page_w + BODY_TOLERANCE_PT
@@ -306,7 +353,9 @@ def _check_body_area(target: dict[str, Any], setup: dict[str, Any],
             report.add(qa.ERROR, "text-clipped", unit,
                        f"{what!r} at {box} runs off a {page_w}×{page_h}pt page")
             continue
-        if (box[0] < left - BODY_TOLERANCE_PT or box[1] < top - BODY_TOLERANCE_PT
+        if margins and (
+                box[0] < left - BODY_TOLERANCE_PT
+                or box[1] < top - BODY_TOLERANCE_PT
                 or box[2] > right + BODY_TOLERANCE_PT
                 or box[3] > bottom + BODY_TOLERANCE_PT):
             report.add(qa.ERROR, "text-overflow", unit,
@@ -415,6 +464,7 @@ def _check_blank_regions(target: dict[str, Any], setup: dict[str, Any],
     spans = sorted(
         (max(top, item["bbox"][1]), min(bottom, item["bbox"][3]))
         for item in target["blocks"] + target["images"]
+            if not is_furniture(item["bbox"], setup, target["height_pt"])
         if item["bbox"][3] > top and item["bbox"][1] < bottom
     )
     if not spans:
@@ -429,17 +479,43 @@ def _check_blank_regions(target: dict[str, Any], setup: dict[str, Any],
         else:
             merged.append([start, end])
 
-    for before, after in zip(merged, merged[1:]):
+    # A footnote is pinned to the foot of the page however little text sits
+    # above it, so the space before it is layout rather than a hole.
+    #
+    # What identifies it is not where it starts but that it *ends* flush with
+    # the bottom of the body — a footnote is anchored there. Judging by where a
+    # band starts swallows real holes: a paragraph stranded in the lower half
+    # of an otherwise empty page starts low too, and that is exactly the
+    # build-gave-up shape this check exists to catch.
+    for index, (before, after) in enumerate(zip(merged, merged[1:])):
         gap = after[0] - before[1]
+        pinned_to_the_foot = (index == len(merged) - 2
+                              and after[1] >= bottom - FOOTNOTE_FOOT_TOLERANCE_PT)
+        if pinned_to_the_foot:
+            continue
         if gap > BLANK_BAND_SHARE * height:
             report.add(qa.ERROR, "blank-region", unit,
                        f"{gap:.0f}pt of nothing between {before[1]:.0f} and "
                        f"{after[0]:.0f}, in a {height:.0f}pt body")
 
 
-def _check_overlap(target: dict[str, Any], report: qa.Report, unit: str) -> None:
+def _check_overlap(target: dict[str, Any], report: qa.Report, unit: str,
+                   setup: dict[str, Any] | None = None) -> None:
+    """Text sitting on a picture. Page furniture is not text sitting on a picture.
+
+    ``setup`` is optional so the existing per-page callers keep working; when it
+    is given, a page number in the footer stops being reported as a collision
+    with the glyphs Word puts beside it.
+    """
+    height = target["height_pt"]
     for block in target["blocks"]:
+        if setup and is_furniture(block["bbox"], setup, height):
+            continue
         for image in target["images"]:
+            if not is_illustration(image):
+                continue
+            if setup and is_furniture(image["bbox"], setup, height):
+                continue
             shared = _intersection(block["bbox"], image["bbox"])
             smaller = min(_area(block["bbox"]), _area(image["bbox"]))
             if smaller > 0 and shared / smaller > OVERLAP_SHARE:
@@ -653,10 +729,146 @@ def _write(work_dir: Path, page: int, body: dict[str, Any]) -> dict[str, Any]:
 # CLI
 # --------------------------------------------------------------------------- #
 
+def check_direction_in_document(docx: Path) -> list[dict[str, Any]]:
+    """Is the built document right-to-left? Asked of the file, not the render.
+
+    The one direction check that cannot lie. A rendered page tells you where
+    ink landed, and for Arabic script PyMuPDF's block boxes do not report that
+    faithfully — so a correct document comes back looking flush-left. The
+    `w:bidi` on a paragraph, and on the style it inherits from, is the setting
+    Word actually obeys.
+    """
+    import zipfile
+
+    findings: list[dict[str, Any]] = []
+    with zipfile.ZipFile(docx) as archive:
+        document = archive.read("word/document.xml").decode("utf-8")
+        styles = archive.read("word/styles.xml").decode("utf-8")
+
+    normal = re.search(r'<w:style [^>]*w:styleId="Normal".*?</w:style>',
+                       styles, re.S)
+    inherits = bool(normal and "<w:bidi" in normal.group(0))
+
+    paragraphs = [p for p in re.findall(r"<w:p.*?</w:p>", document, re.S)
+                  if "<w:t" in p]
+    without = [p for p in paragraphs if "<w:bidi" not in p]
+    if without and not inherits:
+        findings.append({
+            "severity": qa.ERROR, "code": "document-not-rtl", "unit": "document",
+            "detail": f"{len(without)} of {len(paragraphs)} paragraphs carry no "
+                      f"w:bidi and the Normal style does not supply one, so "
+                      f"Word will set them left-to-right",
+        })
+    return findings
+
+
+def check_document(work_dir: Path, book_path: Path, docx: Path, *,
+                   dpi: int = DEFAULT_DPI,
+                   timeout: float = wordrender.DEFAULT_TIMEOUT) -> dict[str, Any]:
+    """Render the finished document and check every page of it.
+
+    Accepting pages one at a time is necessary and not sufficient. A page that
+    was right on its own can still be wrong once the book is assembled: the
+    material ahead of it reflows, so a plate that sat comfortably mid-page can
+    end up split across a break, and a heading that had room under it can end up
+    the last line on a page. Nothing in the per-page reports can see that,
+    because each of them looked at a document that did not exist yet.
+
+    So this is not a repeat of the page checks — it is the same checks asked of
+    the artefact the reader actually receives.
+    """
+    work_dir, book_path, docx = Path(work_dir), Path(book_path), Path(docx)
+    book = ir.load_book(book_path)
+
+    try:
+        rendered = render_docx(docx, work_dir / "renders" / "final",
+                               timeout=timeout)
+    except RenderError as error:
+        return _write_document(work_dir, {
+            "ok": False, "verified": False, "unverified": str(error),
+            "detail": f"the assembled document was not checked: {error}. It is "
+                      f"unverified, not passed.",
+        })
+
+    pymupdf = _pymupdf()
+    if pymupdf is None:
+        return _write_document(work_dir, {
+            "ok": False, "verified": False,
+            "unverified": "PyMuPDF is not installed, so no page could be read back",
+        })
+
+    document = pymupdf.open(str(rendered))
+    try:
+        total = len(document)
+    finally:
+        document.close()
+
+    pages: list[dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
+    # The built document paginates on its own terms — Persian reflows — so its
+    # page N is not the source's page N. Each rendered page is checked against
+    # what the IR says should be *somewhere* in the book, which is what catches
+    # a block lost or duplicated during assembly.
+    setup = book.get("page", ir.default_page_setup())
+    for index in range(total):
+        view = page_view(rendered, index)
+        summary = check_assembled_page(
+            view, setup, f"page{index + 1:04d}").summary()
+        pages.append({"page": index + 1, "ok": summary["ok"],
+                      "errors": summary["errors"], "warnings": summary["warnings"]})
+        for finding in summary["findings"]:
+            findings.append({"page": index + 1, **finding})
+
+    findings += check_direction_in_document(docx)
+
+    return _write_document(work_dir, {
+        "ok": not findings,
+        "verified": True,
+        "laid_out_by": wordrender.backend(),
+        "pages": total,
+        "findings": findings[:60],
+        "render": str(rendered),
+        "per_page": pages,
+    })
+
+
+def check_assembled_page(target: dict[str, Any], setup: dict[str, Any],
+                         unit: str) -> qa.Report:
+    """The checks that still mean something once the book is assembled.
+
+    Ownership by source page does not survive assembly — the built document
+    paginates on its own terms, so "these blocks belong on page 7" is no longer
+    a question anyone can ask. What remains is everything intrinsic to the page
+    in front of you: nothing off the trim, nothing outside the body, Persian set
+    right-to-left, no hole where a page of text should be, no text over a plate.
+    """
+    report = qa.Report()
+    _check_page_size(target, setup, report, unit)
+    _check_body_area(target, setup, report, unit, margins=False)
+    _check_blank_regions(target, setup, report, unit)
+    _check_overlap(target, report, unit, setup)
+    # Direction is deliberately not judged here. `_check_direction` reads the
+    # alignment of PyMuPDF's block boxes, and for Arabic script those do not
+    # reliably reflect what is on the page: measured on a document whose every
+    # paragraph carries `w:bidi`, it reported all of them as left-to-right.
+    # The document's own XML answers the question exactly, so
+    # `check_direction_in_document` asks it there instead.
+    return report
+
+
+def _write_document(work_dir: Path, body: dict[str, Any]) -> dict[str, Any]:
+    written = {"schema": SCHEMA, "scope": "document", **body}
+    ir.write_text(Path(work_dir) / "qa" / "document.json",
+                  json.dumps(written, ensure_ascii=False, indent=1))
+    return written
+
+
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--book", required=True)
     parser.add_argument("--work", required=True, help="the working directory")
-    parser.add_argument("--page", type=int, required=True, help="1-based")
+    parser.add_argument("--page", type=int, default=None,
+                        help="1-based source page; omit to check the whole "
+                             "assembled document instead")
     parser.add_argument("--target-pdf", default=None,
                         help="the translated document, converted to PDF by "
                              "whatever tool you like — this never runs one")
@@ -677,6 +889,17 @@ def main(argv: list[str] | None = None) -> int:
                                      description=__doc__)
     add_arguments(parser)
     args = parser.parse_args(argv)
+
+    if args.page is None:
+        # No page named: the subject is the finished document. Accepting pages
+        # one at a time cannot see a plate that assembly pushed across a break.
+        if not args.docx:
+            parser.error("--docx is required when no --page is given: there is "
+                         "nothing to check without the assembled document")
+        whole = check_document(Path(args.work), Path(args.book), Path(args.docx),
+                               dpi=args.dpi)
+        print(json.dumps(whole, ensure_ascii=False, indent=1))
+        return 0 if whole["ok"] else 1
 
     written = check(
         Path(args.work), Path(args.book), args.page,
