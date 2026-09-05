@@ -20,6 +20,13 @@ python3 scripts/revayat.py build --book work/book.json --out out/book.fa.docx [o
 | `--captions` / `--no-captions` | on | render image alt text as a caption |
 | `--rtl` / `--no-rtl` | on | `--no-rtl` for a left-to-right target language |
 | `--page-breaks` | `chapter` | `chapter`, `source` or `none` |
+| `--heading-size` | `style` | `style` uses Word's Heading N sizes; `source` reproduces the point size measured in the original book |
+
+`--heading-size style` is the default because Word's heading styles give a
+coherent document even when the source's own sizes are erratic. Use
+`--heading-size source` when the brief is to reproduce the book's exact
+typography — extraction records the real point size of every heading it finds,
+and this reinstates it.
 
 `--page-breaks chapter` breaks before each level-1 heading. `source` also
 honours hard page breaks from the original. Soft page breaks recorded from PDF

@@ -64,6 +64,53 @@ skill's other dependencies, even if its script directory is not on PATH.
 text layer. Say so explicitly to the user — a book that comes back suspiciously
 short is usually this.
 
+## Colour watermarks on a scan
+
+A scanned book is one raster per page, so a watermark is burned into the pixels:
+there is no image object to drop and no text run to filter. It also degrades OCR
+wherever it crosses a line.
+
+`extract` removes it automatically before OCR. The signal is narrow and
+measured: body text in a scan is *grayscale* — on a real 1785x2577 page every
+text pixel had HSV saturation 0 — while a colour watermark reaches 255. So
+"saturated pixels" selects the watermark and nothing else.
+
+Two guards stop it eating real content:
+
+- a page is only cleaned when its coloured fraction is small. A watermark
+  measured 0.24% of a page; an illustration is orders of magnitude more, so
+  artwork pages are skipped automatically. On a real 70-page book this cleaned
+  52 pages and correctly left 18 illustration pages alone.
+- only saturated pixels change. Grayscale content is untouched.
+
+| Flag | Effect |
+| --- | --- |
+| `--clean-scan auto` | default: clean pages that look like text with a stamp |
+| `--clean-scan off` | never touch the raster |
+| `--clean-scan force` | clean even pages that look like artwork |
+| `--ghost-threshold N` | also whiten grey pixels lighter than N (0-255) |
+
+**Where the watermark lies on top of text, removal is lossy and cannot be
+otherwise.** Those glyph pixels were blended with the stamp when it was applied,
+so the original ink value is not in the file any more. `--ghost-threshold 120`
+does erase the grey remnant, but it eats the letters underneath it too. The
+default therefore removes colour only. For this pipeline that is usually moot:
+the deliverable is built from OCR'd *text*, so the watermark never reaches the
+Word file either way — what matters is which version Tesseract reads better.
+
+## Languages other than English
+
+Pass the Tesseract language code: `--ocr-lang fas` for Persian, `ara`, `deu`,
+`fra`, and so on. `tesseract --list-langs` shows what is installed; extra
+languages are `.traineddata` files from the `tessdata` or `tessdata_best`
+repositories, dropped into Tesseract's own `tessdata` directory.
+
+If you point `TESSDATA_PREFIX` at a directory of your own, **copy the whole
+`tessdata` folder**, not just the language files. It also contains `configs/`,
+and without those Tesseract fails with the misleading
+`read_params_file: Can't open hocr`, which OCRmyPDF reports as
+`TesseractConfigError`.
+
 ## When the extraction is poor
 
 Symptoms and what they mean:

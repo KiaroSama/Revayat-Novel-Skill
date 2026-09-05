@@ -23,6 +23,7 @@ to be right rather than approximately right.
 | **Persian typography, not just Persian words** | `ی`/`ک`, `، ؛ ؟`, `«»`, Persian digits, and zero-width non-joiners for `می‌رود` and `کتاب‌ها` — with URLs, identifiers and Latin words protected from every rule. |
 | **Right-to-left done properly** | `w:bidi` on paragraphs, `w:rtl` on Persian runs, and Latin names left-to-right inside them. Nothing is ever reversed to fake direction. |
 | **Names that hold across the book** | A locked glossary is injected into every chunk, so chapter 12 cannot rename a character chapter 3 introduced — and nicknames stay nicknames. |
+| **Watermarks removed from scans** | A colour stamp burned into a scanned page is detected by saturation — body text measures exactly 0, a watermark reaches 255 — and whitened. Pages that are genuinely artwork are left alone automatically. |
 | **Deterministic quality gates** | Missing paragraphs, dropped footnote markers, omissions caught by length ratio, altered images, dead TOC links. Counts and hashes, not a second opinion from a model. |
 
 ## Install
@@ -43,9 +44,11 @@ Then install the skill into whichever agents you use:
 powershell -ExecutionPolicy Bypass -File .\install\install.ps1
 ```
 
-By default this installs into every agent it finds (`~/.claude`, `~/.kiro`,
-`~/.codex`, `~/.cursor`, `~/.cline`). Use `--agent claude` for one, and
-`--scope project --path <dir>` to install into a single project instead.
+By default this installs into every agent it finds — Claude Code, Kiro, Codex,
+Cursor, Cline, Hermes, OpenCode and Antigravity. OpenCode and Antigravity also
+get an `AGENTS.md` pointer, because that is how they discover instructions.
+Use `--agent claude` for one, and `--scope project --path <dir>` for a single
+project. Both installers behave identically on Linux, macOS and Windows.
 
 ### As a Claude Code plugin
 
@@ -183,6 +186,11 @@ python -m pytest tests -q
 
 Fixtures are generated, not committed: the suite builds its own PDF, EPUB and
 DOCX, so it stays fast and no third-party book text is vendored in.
+
+`tests/e2e_pipeline.py` runs every stage against a generated book — extract,
+glossary, chunk, merge, typography, QA, build, package verification — so a break
+in the seam between two stages fails even when each module's own tests pass. CI
+runs it on Linux, macOS and Windows.
 
 ## Credits
 

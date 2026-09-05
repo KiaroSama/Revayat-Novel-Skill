@@ -272,6 +272,11 @@ def validate_book(book: dict[str, Any]) -> list[str]:
 # Anything else is literal. A lone ``*`` in prose is escaped as ``\*``.
 
 FOOTNOTE_TOKEN = re.compile(r"\[\[fn:(fn\d{4})\]\]")
+#: Any footnote token, including the ``tr-NN`` form a translator writes before
+#: merge allocates it a book-wide id. Kept separate from the canonical pattern
+#: on purpose: a ``tr-NN`` left in a finished book is a defect, and
+#: :func:`validate_book` should still catch it.
+ANY_FOOTNOTE_TOKEN = re.compile(r"\[\[fn:([A-Za-z0-9_-]+)\]\]")
 _INLINE = re.compile(
     r"(?P<token>\[\[fn:fn\d{4}\]\])"
     r"|(?P<code>(?<!\\)`(?P<code_body>[^`]*)`)"

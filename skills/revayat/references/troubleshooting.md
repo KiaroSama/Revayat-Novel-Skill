@@ -108,3 +108,33 @@ a different number of words. Systematic warnings are a prompt problem.
 In a scan, an illustration is usually part of the page raster rather than a
 separate PDF image object, so there is nothing to extract. Use MinerU, whose
 layout model finds and crops the figure regions — see `extraction.md`.
+
+## `TesseractConfigError` / `read_params_file: Can't open hocr`
+
+`TESSDATA_PREFIX` points at a directory that holds language files but not
+Tesseract's `configs/` folder. Copy the whole `tessdata` directory, not just the
+`.traineddata` files. Nothing is wrong with the book.
+
+## OCR produced almost no text from a scan
+
+Check `clean_scan` in the extract report. If pages were cleaned and the text is
+still missing, re-run with `--clean-scan off` and compare: the cleaner should
+never blank a page, and if it does that is a bug worth reporting. Otherwise the
+scan is simply too poor for Tesseract — try MinerU (see `extraction.md`).
+
+Also confirm the language: a Persian scan read with the default `--ocr-lang eng`
+returns very little. Use `--ocr-lang fas`.
+
+## The watermark is still faintly visible
+
+Expected, and documented. Colour is removed; the grey remnant where the stamp
+overlapped text cannot be separated from the text without damaging it.
+`--ghost-threshold 120` removes the remnant at the cost of eroding the letters
+underneath. It does not affect the Word output, which is built from the
+recognised text rather than the page image.
+
+## A whole illustration page was left with its watermark
+
+The cleaner skips pages whose coloured fraction looks like artwork rather than a
+stamp, to avoid wiping real pictures. `--clean-scan force` overrides that for a
+page you know is text.
