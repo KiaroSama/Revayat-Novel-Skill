@@ -252,7 +252,11 @@ jobs:
 
           used = set()
           for doc in docs:
-              used |= set(re.findall(r"revayat\.py\s+([a-z_]+)", doc.read_text(encoding="utf-8")))
+              # A stage name may contain a hyphen (`ocr-sidecar`). Stopping at
+              # one turns it into `ocr`, which is not a stage, so the guard
+              # fails on documentation that is in fact correct.
+              used |= set(re.findall(r"revayat\.py\s+([a-z][a-z_-]*)",
+                                     doc.read_text(encoding="utf-8")))
 
           unknown = used - available
           assert not unknown, f"docs reference stages that do not exist: {unknown}"
