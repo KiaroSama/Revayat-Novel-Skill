@@ -25,8 +25,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import difflib
 import io
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -173,10 +175,13 @@ def build_page(tsv: str, page_number: int, *, dpi: int = DEFAULT_DPI,
                 "confidence": confidence,
                 "grade": grade(confidence, high=high, low=low),
                 "text": " ".join(w["text"] for w in words),
-                # Only the words a reviewer would actually have to look at are
-                # kept. Storing every word turns a 400-page book into a
-                # hundred-megabyte sidecar nobody opens.
-                "low_words": [w for w in words if w["conf"] < low],
+                # Every word, not just the alarming ones. A reviewer checking a
+                # low line needs to see the confident words around it to judge
+                # the reading, and a later pass that wants a different threshold
+                # cannot recover words that were thrown away at write time.
+                # The file is written compactly for this reason; source.ocr.txt
+                # is the copy meant for human eyes.
+                "words": words,
             })
         if not lines:
             continue
@@ -296,7 +301,11 @@ def write(sidecar: dict[str, Any], out_dir: Path) -> dict[str, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "source.ocr.json"
     text_path = out_dir / "source.ocr.txt"
-    ir.write_text(json_path, json.dumps(sidecar, ensure_ascii=False, indent=1))
+    # Compact, not indented: with a record per recognised word an indented
+    # 400-page sidecar is tens of megabytes of whitespace. source.ocr.txt beside
+    # it is the readable copy, and any JSON tool will pretty-print this one.
+    ir.write_text(json_path, json.dumps(sidecar, ensure_ascii=False,
+                                        separators=(",", ":")))
     ir.write_text(text_path, "\n\n".join(
         f"[page {page['page']}]\n{page_text(page)}" for page in sidecar["pages"]
     ))
@@ -319,19 +328,59 @@ def overlap(first: list[float], second: list[float]) -> float:
     return intersection / smaller if smaller > 0 else 0.0
 
 
+#: Below this much agreement between the two recognitions, the score belongs to
+#: different text and must not be reported as this block's confidence.
+MINIMUM_TEXT_AGREEMENT = 0.6
+
+_NOISE = re.compile(r"[^0-9a-z؀-ۿ]+")
+
+
+def text_agreement(first: str, second: str) -> float:
+    """How much two recognitions of the same region actually agree, 0..1.
+
+    Case, spacing and punctuation are dropped first: they are exactly what two
+    OCR passes disagree about harmlessly, and leaving them in would reject
+    matches that are in fact the same sentence.
+    """
+    left = _NOISE.sub("", first.lower())
+    right = _NOISE.sub("", second.lower())
+    if not left and not right:
+        return 1.0
+    if not left or not right:
+        return 0.0
+    return difflib.SequenceMatcher(None, left, right).ratio()
+
+
+def block_text(block: dict[str, Any]) -> str:
+    """The whole recognised text of one sidecar block, lines joined."""
+    return " ".join(line["text"] for line in block.get("lines", []))
+
+
 def attach(book: dict[str, Any], sidecar: dict[str, Any], *,
-           minimum_overlap: float = 0.35) -> dict[str, Any]:
+           minimum_overlap: float = 0.35,
+           minimum_agreement: float = MINIMUM_TEXT_AGREEMENT) -> dict[str, Any]:
     """Stamp each text block with the confidence of the region it came from.
 
-    Matching is by box overlap on the same page rather than by index: the two
-    passes segment a page differently often enough that positional pairing
-    quietly mislabels blocks, and a wrong confidence is worse than none at all.
+    Two things have to line up before a score is allowed onto a block.
+
+    *Geometry*, because the two passes segment a page differently often enough
+    that pairing by index quietly mislabels blocks — so the match is by box
+    overlap on the same page.
+
+    *Text*, because this sidecar is a **second, independent recognition** of the
+    same pages, not a readout of what OCRmyPDF embedded. Two passes over a hard
+    scan can read the same region as different words. Overlapping boxes alone
+    would then bind a confident score to a word the book does not contain, which
+    is the one failure mode worse than having no score at all: it silences the
+    warning instead of raising it. A region whose two readings disagree is
+    recorded as `review-required`, not as a confidence.
     """
     by_page = {int(page["page"]): page.get("blocks", [])
                for page in sidecar.get("pages", [])}
     thresholds = sidecar.get("thresholds", {})
+    low = float(thresholds.get("low", DEFAULT_LOW))
 
-    matched = unmatched = 0
+    matched = unmatched = disputed = 0
     counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
     for block in ir.iter_text_blocks(book):
         box = block.get("bbox")
@@ -341,23 +390,47 @@ def attach(book: dict[str, Any], sidecar: dict[str, Any], *,
         if best is None or overlap(box, best["bbox"]) < minimum_overlap:
             unmatched += 1
             continue
+
+        agreement = text_agreement(ir.plain_text(block.get("text") or ""),
+                                   block_text(best))
+        if agreement < minimum_agreement:
+            disputed += 1
+            block["ocr"] = {
+                "grade": "review-required",
+                "confidence": None,
+                "source_block": best["id"],
+                "source_bbox": best["bbox"],
+                "agreement": round(agreement, 3),
+                "second_pass_text": block_text(best)[:200],
+                "reason": "the confidence pass read this region as different text",
+            }
+            continue
+
         matched += 1
-        words = [w for line in best["lines"] for w in line["low_words"]]
+        words = [w for line in best["lines"] for w in line.get("words", [])]
         block["ocr"] = {
             "confidence": best["confidence"],
             "grade": best["grade"],
             "source_block": best["id"],
             "source_bbox": best["bbox"],
-            "low_words": [w["text"] for w in words][:12],
+            "agreement": round(agreement, 3),
+            # A word record with no score is not evidence of confidence, so it
+            # is surfaced rather than assumed good; a hand-edited sidecar must
+            # not be able to crash the attach pass either.
+            "low_words": [w["text"] for w in words
+                          if float(w.get("conf", 0.0)) < low][:12],
         }
         counts[best["grade"]] = counts.get(best["grade"], 0) + 1
 
     summary = {
         "matched": matched,
         "unmatched": unmatched,
+        "disputed": disputed,
         "by_grade": counts,
+        "provenance": "second independent recognition pass, not the embedded layer",
         "thresholds": {"high": float(thresholds.get("high", DEFAULT_HIGH)),
-                       "low": float(thresholds.get("low", DEFAULT_LOW))},
+                       "low": low,
+                       "text_agreement": minimum_agreement},
     }
     book.setdefault("source", {})["ocr"] = {
         "sidecar": "source.ocr.json",
