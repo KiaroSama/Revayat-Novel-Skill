@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import bookir as ir
+import runstate
 
 ZWNJ = "‌"
 
@@ -288,6 +289,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         report = fix_book(book, options)
         ir.save_book(book, book_path)
+        # The source side is the input: typography rewrites targets, so hashing
+        # the file would mark this stage stale against its own output.
+        runstate.RunState(book_path.parent).record("typography", {
+            "book": runstate.source_digest(book),
+            "digits": str(args.digits),
+        }, {"changed": str(report.get("count", len(report.get("changed", []))))})
         report["changed"] = report["changed"][:args.limit]
         print(json.dumps(report, ensure_ascii=False, indent=1))
         return 0

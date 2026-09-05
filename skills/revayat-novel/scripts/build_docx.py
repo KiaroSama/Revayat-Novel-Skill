@@ -31,6 +31,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.shared import Pt
 
 import bookir as ir
+import runstate
 import layout
 import ooxml
 
@@ -502,6 +503,10 @@ def main(argv: list[str] | None = None) -> int:
     assets = Path(args.assets) if args.assets else book_path.parent / "assets"
 
     report = Builder(book, assets, args).build(Path(args.out))
+    runstate.RunState(book_path.parent).record("build", {
+        "book": runstate.source_digest(book),
+        "font": str(args.font),
+    }, {"document": runstate.file_hash(args.out)})
     print(json.dumps(report, ensure_ascii=False, indent=1))
     return 0
 
