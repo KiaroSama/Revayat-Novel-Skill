@@ -12,13 +12,26 @@ Run the nine steps below **in order**. Each one is a command plus a rule for
 what to do with its output. Do not improvise a different order, and do not skip
 a step because the previous one looked fine.
 
-Set two variables once, then use them everywhere:
+Set four variables once, then use them everywhere:
 
 - `SKILL_DIR` — the folder holding this file. In a Claude Code plugin it is
   `${CLAUDE_PLUGIN_ROOT}/skills/revayat-novel`.
 - `WORK` — a working folder for this book, e.g. `work/`.
+- `PY` — the Python interpreter. **Resolve it once**; `python3` does not exist
+  on most Windows installations, so a command line that hard-codes it works on
+  two platforms out of three:
+  - macOS / Linux: `PY=python3`
+  - Windows: `PY=python` — or `PY="py -3"` if the launcher is what is installed
+  - if neither runs, `doctor` in step 1 will not start, and that is the signal
+- `OCR_LANG` — the Tesseract code for the language **printed in the book you are
+  translating**, not the language you are translating into. For the usual
+  English → Persian job that is `eng`. A Persian source is `fas`; German `deu`,
+  French `fra`, Arabic `ara`. **The same value must be used at every OCR step.**
+  Recognising English pages with the Persian model returns confident-looking
+  nonsense, which is worse than a low score because nothing downstream can see
+  it.
 
-Every command is `python3 $SKILL_DIR/scripts/revayat-novel.py <stage> …`.
+Every command is `$PY $SKILL_DIR/scripts/revayat-novel.py <stage> …`.
 
 ---
 
@@ -41,7 +54,7 @@ Every command is `python3 $SKILL_DIR/scripts/revayat-novel.py <stage> …`.
 ## Step 1 — Check the tools
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py doctor
+$PY $SKILL_DIR/scripts/revayat-novel.py doctor
 ```
 
 - `"ready": true` → continue.
@@ -53,11 +66,12 @@ python3 $SKILL_DIR/scripts/revayat-novel.py doctor
 ## Step 2 — Extract
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py extract "<input file>" --out $WORK
+$PY $SKILL_DIR/scripts/revayat-novel.py extract "<input file>" --out $WORK --ocr-lang $OCR_LANG
 ```
 
-For a Persian-language source, add `--ocr-lang fas`. For other languages use the
-Tesseract code (`deu`, `fra`, `ara`, …).
+`$OCR_LANG` is the language *printed in the book*, set once above. Getting it
+wrong here is not a visible failure: OCR still returns text, it is simply the
+wrong text.
 
 Read the JSON it prints and follow the table:
 
@@ -78,37 +92,52 @@ entirely, or `--clean-scan force` when a stamp survived.
 **If the book was scanned, do these two extra passes now.**
 
 *Recognition confidence* — without it a misread word is indistinguishable from
-a correct one, because both are fluent Persian:
+a correct one, because both are ordinary words of the source language, sitting
+in a grammatical sentence. Nothing later in the pipeline can tell them apart,
+and the translator will render the wrong one faithfully.
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py ocr-sidecar   --pdf $WORK/ocr.pdf --out $WORK --lang fas --book $WORK/book.json
+$PY $SKILL_DIR/scripts/revayat-novel.py ocr-sidecar \
+  --pdf $WORK/ocr.pdf --out $WORK --lang $OCR_LANG --book $WORK/book.json
 ```
 
-This writes `source.ocr.json` (per word, line, block and page: box, confidence,
-reading order, and what preprocessing ran) and `source.ocr.txt`, then stamps
-each block in `book.json` with the confidence of the region it came from.
-Blocks graded `low` are reported by `qa check` as `ocr-low-confidence`, and
-accepting one means looking at the page image. Thresholds default to 85 and 60
-and move with `--high` / `--low`.
+`--lang` here is the **same `$OCR_LANG` you gave `extract`**. It has to be: this
+pass re-recognises the same pages to find out how sure the engine was, so a
+different model reads different words and scores something the book does not
+say.
+
+This writes `source.ocr.json` — box, confidence and reading order for every
+word, aggregated up to line, block and page, plus what preprocessing ran — and
+`source.ocr.txt`, then stamps each block in `book.json` with the confidence of
+the region it came from. Blocks graded `low` are reported by `qa check` as
+`ocr-low-confidence`, and accepting one means looking at the page image.
+Thresholds default to 85 and 60 and move with `--high` / `--low`.
 
 *Illustrations inside a scan* — a scanned page is one flat image, so a
 photograph on it is not a separate picture until something finds it:
 
 ```bash
-mineru -p $WORK/cleaned.pdf -o $WORK/mineru -b pipeline -l arabic
-python3 $SKILL_DIR/scripts/revayat-novel.py extract "<input file>" --out $WORK   --figures-from-mineru $WORK/mineru
+mineru -p $WORK/cleaned.pdf -o $WORK/mineru -b pipeline -l en
+$PY $SKILL_DIR/scripts/revayat-novel.py extract "<input file>" --out $WORK \
+  --figures-from-mineru $WORK/mineru
 ```
 
+MinerU's `-l` takes its own codes, not Tesseract's: `en` for an English source,
+`arabic` for Persian or Arabic script. Match it to the book, the same way
+`$OCR_LANG` is matched — layout detection uses the script to segment the page.
+
 Run MinerU on `cleaned.pdf`, not the original, or it crops the watermark as if
-it were a figure. **Take only the pictures from MinerU.** Its own recognised
-text for Persian comes back with the words *and the letters inside them*
-reversed; Tesseract with `fas` reads the same page correctly, so the text stays
-where it is. Use `--figures-page-offset N` when MinerU ran over a page range.
+it were a figure. **Take only the pictures from MinerU.** Measured on a real
+Persian scan, its own recognised text came back with the words *and the letters
+inside them* reversed, while Tesseract read the same page correctly — so the
+text keeps coming from the OCR pass above and MinerU is used only for the one
+thing OCR cannot do, which is finding where a picture sits in a flat raster.
+Use `--figures-page-offset N` when MinerU ran over a page range.
 
 **Then look at the result before going further:**
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py qa check --book $WORK/book.json --allow-incomplete
+$PY $SKILL_DIR/scripts/revayat-novel.py qa check --book $WORK/book.json --allow-incomplete
 ```
 
 Ignore `untranslated-block` here — nothing is translated yet. You are looking
@@ -118,7 +147,7 @@ extraction failed: see `references/extraction.md`.
 ## Step 3 — Glossary
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py glossary scan \
+$PY $SKILL_DIR/scripts/revayat-novel.py glossary scan \
   --book $WORK/book.json --out $WORK/glossary.json
 ```
 
@@ -142,7 +171,7 @@ Delete entries that are not real names. Then continue.
 ## Step 4 — Chunk
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py chunk build \
+$PY $SKILL_DIR/scripts/revayat-novel.py chunk build \
   --book $WORK/book.json --out $WORK/chunks --glossary $WORK/glossary.json
 ```
 
@@ -186,13 +215,13 @@ it does not, do them one at a time — the result is the same, only slower.
 Check what is left at any time:
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py chunk status --chunks $WORK/chunks
+$PY $SKILL_DIR/scripts/revayat-novel.py chunk status --chunks $WORK/chunks
 ```
 
 ## Step 6 — Merge
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py merge --book $WORK/book.json --chunks $WORK/chunks
+$PY $SKILL_DIR/scripts/revayat-novel.py merge --book $WORK/book.json --chunks $WORK/chunks
 ```
 
 | Field | Meaning | Action |
@@ -207,7 +236,7 @@ Re-running merge after a fix is always safe.
 ## Step 7 — Persian typography
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py falint fix --book $WORK/book.json
+$PY $SKILL_DIR/scripts/revayat-novel.py falint fix --book $WORK/book.json
 ```
 
 Mechanical only, and safe to run twice. Add `--digits keep` if the book must
@@ -216,7 +245,7 @@ keep Latin numerals.
 ## Step 8 — Gate, then build
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py qa check \
+$PY $SKILL_DIR/scripts/revayat-novel.py qa check \
   --book $WORK/book.json --assets $WORK/assets --glossary $WORK/glossary.json
 ```
 
@@ -248,7 +277,7 @@ expected, because there is no worksheet for them.
 Then build:
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py build \
+$PY $SKILL_DIR/scripts/revayat-novel.py build \
   --book $WORK/book.json --assets $WORK/assets --out out/book.fa.docx \
   --font "Vazirmatn" --size 11.5
 ```
@@ -261,7 +290,7 @@ list in `references/docx-and-ooxml.md`.
 ## Step 9 — Verify and report
 
 ```bash
-python3 $SKILL_DIR/scripts/revayat-novel.py qa docx --file out/book.fa.docx --book $WORK/book.json
+$PY $SKILL_DIR/scripts/revayat-novel.py qa docx --file out/book.fa.docx --book $WORK/book.json
 ```
 
 If `"ok": false`, fix it before telling the user the file is ready.
