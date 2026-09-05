@@ -8,7 +8,7 @@ actually hard: scanned pages, illustrations that must keep their size and place,
 names that must not drift across forty chapters, and Persian typography that has
 to be right rather than approximately right.
 
-[فارسی](README.fa.md) · [MIT licensed](LICENSE)
+[MIT licensed](LICENSE) · [فارسی](README.fa.md)
 
 ---
 
