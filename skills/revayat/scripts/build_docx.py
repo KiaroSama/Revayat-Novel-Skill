@@ -251,8 +251,26 @@ class Builder:
         anchor = block.get("_anchor")
         text = self._text_of(block)
         self.write_markup(paragraph, text)
+        self._apply_source_size(paragraph, block)
         if anchor:
             self.bookmarks.wrap(paragraph, anchor, ir.plain_text(text))
+
+    def _apply_source_size(self, paragraph, block: dict[str, Any]) -> None:
+        """Reproduce the heading's size from the source book, when asked.
+
+        Extraction records the real point size of every heading it finds. The
+        default still uses the Word ``Heading N`` styles — they give a coherent
+        document even when the source's own sizes are erratic — but
+        ``--heading-size source`` reinstates the book's exact metrics, which is
+        what "keep the book's styling" actually means.
+        """
+        if self.options.heading_size != "source":
+            return
+        size = block.get("font_size_pt")
+        if not size:
+            return
+        for run in paragraph.runs:
+            run.font.size = Pt(float(size))
 
     def _text_block(self, block: dict[str, Any]) -> None:
         text = self._text_of(block)
@@ -393,6 +411,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--rtl", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--page-breaks", choices=["chapter", "source", "none"],
                         default="chapter")
+    parser.add_argument("--heading-size", choices=["style", "source"], default="style",
+                        help="'style' uses Word's Heading N sizes; 'source' reproduces "
+                             "the point size measured in the original book")
 
 
 def main(argv: list[str] | None = None) -> int:

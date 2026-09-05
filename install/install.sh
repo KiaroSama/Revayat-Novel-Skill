@@ -32,7 +32,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$AGENT" in
-    claude|kiro|codex|cursor|cline|all) ;;
+    claude|kiro|codex|cursor|cline|hermes|opencode|antigravity|all) ;;
     *) printf 'unknown agent: %s\n' "$AGENT" >&2; exit 2 ;;
 esac
 case "$SCOPE" in
@@ -57,18 +57,56 @@ if [ "$SCOPE" = "project" ]; then
     PROJECT_PATH="$(cd -- "$PROJECT_PATH" && pwd)"
 fi
 
+# Where each agent keeps its config. The skill lands in <folder>/skills/<name>.
 agent_folder() {
     case "$1" in
-        claude) printf '.claude' ;;
-        kiro)   printf '.kiro' ;;
-        codex)  printf '.codex' ;;
-        cursor) printf '.cursor' ;;
-        cline)  printf '.cline' ;;
+        claude)      printf '.claude' ;;
+        kiro)        printf '.kiro' ;;
+        codex)       printf '.codex' ;;
+        cursor)      printf '.cursor' ;;
+        cline)       printf '.cline' ;;
+        hermes)      printf '.hermes' ;;
+        opencode)    printf '.opencode' ;;
+        antigravity) printf '.agents' ;;
     esac
 }
 
+# OpenCode and Antigravity discover instructions through AGENTS.md rather than a
+# skills directory, so they also get a short pointer section there. The markers
+# make the section replaceable without disturbing anything else in the file.
+BEGIN_MARK='<!-- BEGIN revayat -->'
+END_MARK='<!-- END revayat -->'
+
+write_agents_pointer() {
+    target_file="$1"
+    skill_dir="$2"
+    mkdir -p -- "$(dirname -- "$target_file")"
+    [ -f "$target_file" ] || : > "$target_file"
+
+    # Drop any previous Revayat section, keep everything else the user wrote.
+    tmp="$target_file.revayat.tmp"
+    awk -v b="$BEGIN_MARK" -v e="$END_MARK" '
+        $0 == b { skip = 1 } !skip { print } $0 == e { skip = 0 }
+    ' "$target_file" > "$tmp"
+
+    {
+        cat -- "$tmp"
+        cat <<EOF
+
+$BEGIN_MARK
+## Revayat — Persian book translation
+
+To translate a book into Persian and produce a Word file, follow
+\`$skill_dir/SKILL.md\`. Wherever it says \`{SKILL_DIR}\`, read that as
+\`$skill_dir\`.
+$END_MARK
+EOF
+    } > "$target_file"
+    rm -f -- "$tmp"
+}
+
 if [ "$AGENT" = "all" ]; then
-    TARGETS="claude kiro codex cursor cline"
+    TARGETS="claude kiro codex cursor cline hermes opencode antigravity"
 else
     TARGETS="$AGENT"
 fi
@@ -112,6 +150,17 @@ for name in $TARGETS; do
     # Never ship caches or a local virtualenv into an agent's skill directory.
     find "$destination" \( -name __pycache__ -o -name .pytest_cache \
         -o -name .venv -o -name venv \) -type d -prune -exec rm -rf -- {} + 2>/dev/null || true
+
+    # OpenCode and Antigravity discover instructions through AGENTS.md rather
+    # than by scanning a skills directory, so they need the pointer as well.
+    case "$name" in
+        opencode|antigravity)
+            pointer_base="$HOME"
+            [ "$SCOPE" = "project" ] && pointer_base="$PROJECT_PATH"
+            write_agents_pointer "$pointer_base/AGENTS.md" "$destination"
+            printf '  wrote AGENTS.md pointer for %s\n' "$name"
+            ;;
+    esac
 
     printf '  installed -> %s\n' "$destination"
     installed="$installed $name"

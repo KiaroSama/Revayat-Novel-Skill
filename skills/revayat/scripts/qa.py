@@ -70,10 +70,19 @@ def check_book(
     assets: Path | None = None,
     glossary: dict[str, Any] | None = None,
     require_complete: bool = True,
+    strict: bool = False,
 ) -> Report:
+    """Gate the translated book.
+
+    ``strict`` promotes the fidelity findings — emphasis that did not survive,
+    a locked name that drifted — from advice to blocking errors. They are
+    warnings by default because Persian legitimately needs a different number
+    of emphasised words sometimes; for publication work that latitude is not
+    wanted, and this is the switch that removes it.
+    """
     report = Report()
     _check_coverage(book, report, require_complete)
-    _check_structure_parity(book, report)
+    _check_structure_parity(book, report, strict)
     _check_lengths(book, report)
     _check_footnotes(book, report)
     if assets is not None:
@@ -82,7 +91,7 @@ def check_book(
     if glossary:
         for violation in gl.check(glossary, book):
             report.add(
-                WARNING, "glossary-drift", violation["block"],
+                ERROR if strict else WARNING, "glossary-drift", violation["block"],
                 f"expected {violation['expected']!r} for "
                 f"{violation['source_forms']}: {violation['excerpt']}",
             )
@@ -99,23 +108,40 @@ def _check_coverage(book: dict[str, Any], report: Report, require_complete: bool
                        ir.plain_text(block["text"])[:120])
 
 
-def _check_structure_parity(book: dict[str, Any], report: Report) -> None:
-    """Emphasis and footnote markers must survive translation intact."""
+def _check_structure_parity(book: dict[str, Any], report: Report,
+                            strict: bool = False) -> None:
+    """Emphasis and footnote markers must survive translation intact.
+
+    Footnotes are compared by origin, not by count. Every note that came with
+    the book has to still be there; a note the *translator* added is a new
+    marker with no counterpart in the source, and that is the feature working,
+    not a defect.
+    """
+    added_by_translator = {
+        note["id"] for note in book.get("footnotes", [])
+        if note.get("origin") == "translator"
+    }
+
     for block in ir.iter_text_blocks(book):
         source, target = block.get("text") or "", block.get("target") or ""
         if not target.strip():
             continue
 
-        source_notes = sorted(ir.footnote_refs(source))
-        target_notes = sorted(ir.footnote_refs(target))
-        if source_notes != target_notes:
+        source_notes = set(ir.footnote_refs(source))
+        target_notes = set(ir.footnote_refs(target))
+        dropped = sorted(source_notes - target_notes)
+        invented = sorted(target_notes - source_notes - added_by_translator)
+        if dropped:
             report.add(ERROR, "footnote-marker-lost", block["id"],
-                       f"source {source_notes} vs target {target_notes}")
+                       f"the source's note(s) {dropped} are missing from the translation")
+        if invented:
+            report.add(ERROR, "footnote-marker-invented", block["id"],
+                       f"marker(s) {invented} point at notes the book never had")
 
         source_emphasis = ir.emphasis_signature(source)
         target_emphasis = ir.emphasis_signature(target)
         if source_emphasis != target_emphasis:
-            report.add(WARNING, "emphasis-parity", block["id"],
+            report.add(ERROR if strict else WARNING, "emphasis-parity", block["id"],
                        f"(bold, italic, verbatim) {source_emphasis} -> {target_emphasis}")
 
 
@@ -270,6 +296,8 @@ def main(argv: list[str] | None = None) -> int:
     p_check.add_argument("--assets", default=None)
     p_check.add_argument("--glossary", default=None)
     p_check.add_argument("--allow-incomplete", action="store_true")
+    p_check.add_argument("--strict", action="store_true",
+                         help="treat emphasis loss and glossary drift as errors")
     p_check.add_argument("--limit", type=int, default=60)
 
     p_docx = sub.add_parser("docx", help="gate the built .docx")
@@ -286,7 +314,8 @@ def main(argv: list[str] | None = None) -> int:
         glossary = gl.load(Path(args.glossary)) if args.glossary else None
         report = check_book(book, assets=assets if assets.exists() else None,
                             glossary=glossary,
-                            require_complete=not args.allow_incomplete)
+                            require_complete=not args.allow_incomplete,
+                            strict=args.strict)
     else:
         book = ir.load_book(args.book) if args.book else None
         report = check_docx(Path(args.file), book)

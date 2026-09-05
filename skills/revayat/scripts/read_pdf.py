@@ -111,11 +111,35 @@ def _body_font_size(pages: list[dict[str, Any]]) -> float:
     return sizes.most_common(1)[0][0]
 
 
-def _heading_level(size: float, body_size: float, text: str, bold: bool) -> int | None:
-    """Classify a short line as a heading, or ``None`` for body text."""
+#: Words that open a chapter even when the type size does not change, in the
+#: source languages this skill actually sees.
+_CHAPTER_WORD = re.compile(
+    r"^\s*(?:chapter|part|book|prologue|epilogue|interlude"
+    r"|فصل|بخش|پیش‌?گفتار|مقدمه|پس‌?گفتار|درآمد)\b",
+    re.I,
+)
+
+
+def _heading_level(size: float, body_size: float, text: str, bold: bool,
+                   *, ocr: bool = False) -> int | None:
+    """Classify a short line as a heading, or ``None`` for body text.
+
+    On an OCR layer the size is a per-line *estimate* that jitters, so only an
+    unambiguous jump counts and the weaker signals — a bold run-in subheading,
+    a modest size bump — are dropped. Trusting them there turned ordinary
+    paragraphs into 939 false headings on a real 70-page scan.
+    """
     if len(text) > 120 or not text.strip():
         return None
     ratio = size / body_size if body_size else 1.0
+
+    if ocr:
+        if ratio >= 1.9:
+            return 1
+        if ratio >= 1.55:
+            return 2
+        return 2 if _CHAPTER_WORD.match(text) else None
+
     if ratio >= 1.8:
         return 1
     if ratio >= 1.45:
@@ -126,7 +150,7 @@ def _heading_level(size: float, body_size: float, text: str, bold: bool) -> int 
     if bold and ratio >= 1.0 and len(text) <= 60 and not text.rstrip().endswith((".", "!", "?")):
         return 4
     # "CHAPTER SEVEN" style small-caps headings keep the body size.
-    if re.match(r"^\s*(chapter|part|book|prologue|epilogue|interlude)\b", text, re.I):
+    if _CHAPTER_WORD.match(text):
         return 2
     return None
 
@@ -151,8 +175,16 @@ def _join_lines(lines: list[str]) -> str:
 #: Two lines belong to the same paragraph while their sizes agree this closely.
 SIZE_GROUP_TOLERANCE = 0.06
 
+#: In a text layer produced by OCR the "font size" is an *estimate* fitted to
+#: each recognised line, not typography. Measured on a real scanned page, spans
+#: of one uniform body paragraph ranged 11.5–15.0pt — a ±14% spread. At the
+#: born-digital tolerance that splits almost every line into its own block, so
+#: OCR gets a much wider one.
+OCR_SIZE_GROUP_TOLERANCE = 0.28
 
-def _block_groups(block: dict[str, Any], drop: set[str]) -> list[dict[str, Any]]:
+
+def _block_groups(block: dict[str, Any], drop: set[str],
+                  tolerance: float = SIZE_GROUP_TOLERANCE) -> list[dict[str, Any]]:
     """Split one PyMuPDF text block into same-size line groups.
 
     A single PDF text block routinely holds the tail of a paragraph *and* the
@@ -187,7 +219,7 @@ def _block_groups(block: dict[str, Any], drop: set[str]) -> list[dict[str, Any]]
         same = (
             current is not None
             and current["size"] > 0
-            and abs(size - current["size"]) / current["size"] <= SIZE_GROUP_TOLERANCE
+            and abs(size - current["size"]) / current["size"] <= tolerance
         )
         if same:
             current["lines"].append(markup)
@@ -267,6 +299,7 @@ def read_pdf(
     lang_source: str = "en",
     lang_target: str = "fa-IR",
     max_pages: int | None = None,
+    ocr_text: bool = False,
 ) -> dict[str, Any]:
     asset_dir.mkdir(parents=True, exist_ok=True)
     doc = pymupdf.open(path)
@@ -274,6 +307,7 @@ def read_pdf(
         return _read_open_pdf(
             doc, path, asset_dir,
             lang_source=lang_source, lang_target=lang_target, max_pages=max_pages,
+            ocr_text=ocr_text,
         )
     finally:
         doc.close()
@@ -287,7 +321,9 @@ def _read_open_pdf(
     lang_source: str,
     lang_target: str,
     max_pages: int | None,
+    ocr_text: bool = False,
 ) -> dict[str, Any]:
+    tolerance = OCR_SIZE_GROUP_TOLERANCE if ocr_text else SIZE_GROUP_TOLERANCE
     page_count = len(doc) if max_pages is None else min(len(doc), max_pages)
     raw_pages = [
         doc[i].get_text("dict", sort=True) for i in range(page_count)
@@ -340,7 +376,7 @@ def _read_open_pdf(
         for raw_block in page_dict.get("blocks", []):
             if raw_block.get("type") != 0:
                 continue
-            for group in _block_groups(raw_block, drop):
+            for group in _block_groups(raw_block, drop, tolerance):
                 page_chars += len(group["markup"])
                 text_items.append((group["bbox"][1], "text", group))
 
@@ -374,7 +410,8 @@ def _read_open_pdf(
 
             markup = payload["markup"]
             level = _heading_level(
-                payload["size"], body_size, ir.plain_text(markup), payload["bold"]
+                payload["size"], body_size, ir.plain_text(markup), payload["bold"],
+                ocr=ocr_text,
             )
             if level is not None:
                 add("heading", page=page_no, level=level, bbox=payload["bbox"],
@@ -386,11 +423,27 @@ def _read_open_pdf(
     book["source"]["scanned_pages"] = scanned_pages
     book["source"]["body_font_pt"] = body_size
     book["source"]["running_heads_dropped"] = sorted(drop)[:20]
+    book["source"]["from_ocr"] = ocr_text
     return book
 
 
 #: Sentence-final characters. A paragraph ending in one of these is complete.
-_SENTENCE_END = ".!?:;»”\"'*`)]"
+#: Includes the Persian question mark, semicolon and ellipsis, so a Persian
+#: paragraph is recognised as finished by the same rule as an English one.
+_SENTENCE_END = ".!?:;»”\"'*`)]؟؛…،"
+
+
+def _continues(first: str) -> bool:
+    """Does this opening character suggest the previous paragraph ran on?
+
+    In a cased script a lower-case opener is the signal. Persian, Arabic,
+    Hebrew and CJK have no case at all, and ``'م'.islower()`` is ``False`` —
+    so testing case alone silently disables paragraph merging for every one of
+    them, leaving the translator a book of one-line fragments. For a caseless
+    opener the decision rests entirely on the previous paragraph having ended
+    mid-sentence, which is the stronger half of the signal anyway.
+    """
+    return not first.isupper()
 
 
 def _merge_split_paragraphs(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -424,7 +477,7 @@ def _merge_split_paragraphs(blocks: list[dict[str, Any]]) -> list[dict[str, Any]
 
         tail = ir.plain_text(previous.get("text", "")).rstrip()
         head = ir.plain_text(block.get("text", "")).lstrip()
-        if tail and head and tail[-1] not in _SENTENCE_END and head[:1].islower():
+        if tail and head and tail[-1] not in _SENTENCE_END and _continues(head[0]):
             previous["text"] = f"{previous['text'].rstrip()} {block['text'].lstrip()}"
             if block.get("bbox") and previous.get("bbox"):
                 previous["bbox"] = _union(previous["bbox"], block["bbox"])

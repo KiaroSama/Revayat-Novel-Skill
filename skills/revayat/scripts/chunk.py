@@ -29,9 +29,17 @@ OVERSHOOT = 0.35
 #: Characters of neighbouring source shown for pronoun/entity resolution.
 CONTEXT_CHARS = 450
 
-#: The worksheet unit header. ``#`` is part of the id character set because an
-#: image caption is addressed as ``b00075#alt``.
-HEADER = re.compile(r"^@@\s+(?P<id>[A-Za-z0-9_#]+)\s+(?P<kind>[a-z0-9]+)\s*$")
+#: The worksheet unit header. The id character set has to cover every shape an
+#: id can take: ``b00042`` blocks, ``b00075#alt`` image captions, ``fn0007``
+#: source footnotes and ``tr-01`` notes the translator adds. Omitting the
+#: hyphen did not reject a translator's note — it stopped the header being
+#: recognised at all, so the note's body was silently swallowed into the
+#: previous paragraph and merge still reported success.
+HEADER = re.compile(r"^@@\s+(?P<id>[A-Za-z0-9_#-]+)\s+(?P<kind>[a-z0-9]+)\s*$")
+
+#: A footnote the translator introduced, numbered per chunk. Merge allocates it
+#: a real book-wide id.
+TRANSLATOR_NOTE = re.compile(r"^tr-[A-Za-z0-9_-]+$")
 
 _KIND_BY_TYPE = {
     "paragraph": "para",
@@ -147,7 +155,8 @@ def render_worksheet(
     ]
 
     table = gl.render_term_table(
-        gl.entries_for_text(glossary, source_blob), glossary.get("policy", {})
+        gl.entries_for_text(glossary, source_blob), glossary.get("policy", {}),
+        block_ids=ids,
     )
     if table:
         lines += ["## Names — use these exact forms", "", table, ""]

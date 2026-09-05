@@ -106,6 +106,12 @@ def make_entry(index: int, source: str, *, category: str = "unknown",
         "gender": "unknown",
         "locked": False,
         "frequency": frequency,
+        # The block this entity first appears in. Chunks are translated in
+        # parallel by agents that cannot see each other, so "is this the first
+        # mention?" cannot be left to each one's judgement — every chunk would
+        # answer yes and the book would repeat the original spelling forever.
+        # Deciding it once, here, makes it deterministic.
+        "first_block_id": "",
         "notes": "",
     }
 
@@ -131,6 +137,22 @@ def _strip_possessive(name: str) -> str:
     return " ".join(word for word in words if word)
 
 
+def _trim_stopwords(name: str) -> str:
+    """Drop ordinary words that a capitalised run swept up at either end.
+
+    A sentence opening with "Then Elizabeth Bennet arrived" capitalises *Then*,
+    so the run reads as one three-word name. Rejecting only runs made entirely
+    of stopwords leaves "Then Elizabeth Bennet" competing with the real entity
+    and splitting its frequency in two.
+    """
+    words = name.split()
+    while words and words[0].lower() in _STOPWORDS:
+        words.pop(0)
+    while words and words[-1].lower() in _STOPWORDS:
+        words.pop()
+    return " ".join(words)
+
+
 def _guess_category(name: str, contexts: list[str]) -> str:
     blob = " ".join(contexts).lower()
     if re.search(rf"\b(?:in|at|to|from|near|towards?)\s+{re.escape(name.lower())}\b", blob):
@@ -151,13 +173,16 @@ def scan(book: dict[str, Any], *, minimum: int = 3, limit: int = 400) -> list[di
     counts: Counter[str] = Counter()
     mid_sentence: Counter[str] = Counter()
     contexts: dict[str, list[str]] = {}
+    first_block: dict[str, str] = {}
 
     for block in ir.iter_text_blocks(book):
         if block.get("type") == "heading":
             continue
         text = ir.plain_text(block.get("text") or "")
         for match in _NAME_RUN.finditer(text):
-            name = _strip_possessive(re.sub(r"\s+", " ", match.group(1)).strip())
+            name = _trim_stopwords(
+                _strip_possessive(re.sub(r"\s+", " ", match.group(1)).strip())
+            )
             if len(name) < 3:
                 continue
             words = name.split()
@@ -166,8 +191,13 @@ def scan(book: dict[str, Any], *, minimum: int = 3, limit: int = 400) -> list[di
             if len(words) == 1 and (name.lower() in _STOPWORDS or _CONTRACTION.match(name)):
                 continue
             counts[name] += 1
+            first_block.setdefault(name, block["id"])
             before = text[max(0, match.start() - 40):match.start()]
-            if not _SENTENCE_START.search(before):
+            # If a leading stopword was trimmed off, the *name* did not open the
+            # sentence even though the matched run did — "Then Elizabeth Bennet"
+            # is real evidence of a name used mid-sentence.
+            trimmed_lead = not match.group(1).startswith(name)
+            if trimmed_lead or not _SENTENCE_START.search(before):
                 mid_sentence[name] += 1
             contexts.setdefault(name, [])
             if len(contexts[name]) < 5:
@@ -205,6 +235,11 @@ def scan(book: dict[str, Any], *, minimum: int = 3, limit: int = 400) -> list[di
             frequency=candidates[name] + sum(candidates.get(a, 0) for a in aliases.get(name, ())),
             aliases=aliases.get(name, ()),
         )
+        # Earliest mention of the entity or any of its aliases. Block ids are
+        # zero-padded and allocated in reading order, so min() is the earliest.
+        seen_at = [first_block[form] for form in (name, *aliases.get(name, ()))
+                   if form in first_block]
+        entry["first_block_id"] = min(seen_at) if seen_at else ""
         entry["notes"] = ""
         proposals.append(entry)
     return proposals
@@ -246,26 +281,41 @@ def entries_for_text(glossary: dict[str, Any], text: str, *,
     return hit
 
 
-def render_term_table(entries: list[dict[str, Any]], policy: dict[str, Any]) -> str:
-    """A compact Markdown table for injection into a translation prompt."""
+def render_term_table(entries: list[dict[str, Any]], policy: dict[str, Any],
+                      *, block_ids: Iterable[str] = ()) -> str:
+    """A compact Markdown table for injection into a translation prompt.
+
+    ``block_ids`` are the blocks this chunk covers. The "Use" column then states
+    the answer outright — the long form here, the short form there — instead of
+    asking the translator to work out whether this is the entity's first
+    appearance. It cannot know: it only sees its own chunk. Left to judgement,
+    every parallel chunk decides "yes, first mention" and the original spelling
+    is repeated throughout the book.
+    """
     rows = [entry for entry in entries if canonical(entry)]
     if not rows:
         return ""
     parenthetical = policy.get("original_parenthetical", "first_mention")
+    here = set(block_ids)
+
     lines = [
-        "| English | Aliases (keep distinct) | Persian (use exactly) | First mention |",
-        "| --- | --- | --- | --- |",
+        "| English | Aliases (keep distinct) | Use exactly this |",
+        "| --- | --- | --- |",
     ]
     for entry in sorted(rows, key=lambda e: -int(e.get("frequency", 0))):
-        first = entry.get("first_form") or canonical(entry)
-        if parenthetical == "never":
-            first = canonical(entry)
+        introduce = (
+            parenthetical != "never"
+            and bool(entry.get("first_form"))
+            and (not here or entry.get("first_block_id") in here)
+        )
+        form = entry["first_form"] if introduce else canonical(entry)
+        note = "  ← first mention, introduce it here" if introduce else ""
         lines.append(
-            "| {source} | {aliases} | {target} | {first} |".format(
+            "| {source} | {aliases} | {form}{note} |".format(
                 source=entry["source"],
                 aliases="، ".join(entry.get("aliases", [])) or "—",
-                target=canonical(entry),
-                first=first,
+                form=form,
+                note=note,
             )
         )
     return "\n".join(lines)

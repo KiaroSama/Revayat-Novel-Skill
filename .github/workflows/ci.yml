@@ -21,9 +21,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Oldest and newest supported interpreters, on both the platform most
-        # contributors use and the one most users run this on.
-        os: [ubuntu-latest, windows-latest]
+        # All three platforms people actually run this on, at the oldest and
+        # newest supported interpreters.
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python: ["3.10", "3.13"]
 
     steps:
@@ -50,6 +50,90 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: python skills/revayat/scripts/revayat.py doctor
 
+  pipeline:
+    name: end-to-end pipeline (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: skills/revayat/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r skills/revayat/requirements.txt
+
+      # Runs every stage against a generated book, so a break anywhere in the
+      # chain fails here even when each module's unit tests still pass.
+      - name: extract -> chunk -> merge -> typography -> QA -> build -> verify
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python tests/e2e_pipeline.py
+
+  install:
+    name: installer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install into every agent layout (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install/install.sh
+          target="$(mktemp -d)"
+          for dir in .claude .kiro .codex .cursor .cline .hermes .opencode .agents; do
+            mkdir -p "$target/$dir"
+          done
+          bash install/install.sh --scope project --path "$target" --agent all --force
+          found=$(find "$target" -name SKILL.md | wc -l | tr -d ' ')
+          test "$found" -eq 8 || { echo "expected 8 skill copies, found $found"; exit 1; }
+          test -f "$target/AGENTS.md"
+          # Re-running must replace the pointer section, never stack copies.
+          bash install/install.sh --scope project --path "$target" --agent opencode --force
+          marks=$(grep -c 'BEGIN revayat' "$target/AGENTS.md")
+          test "$marks" -eq 1 || { echo "AGENTS.md pointer duplicated ($marks)"; exit 1; }
+          test -z "$(find "$target" -name __pycache__)"
+          echo "installer OK: 8 copies, single pointer, no caches"
+
+      - name: Install into every agent layout (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'install/install.ps1'), [ref]$null, [ref]$errors)
+          if ($errors) { $errors; throw 'install.ps1 does not parse' }
+
+          $target = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
+          foreach ($d in '.claude','.kiro','.codex','.cursor','.cline','.hermes','.opencode','.agents') {
+            New-Item -ItemType Directory -Path (Join-Path $target $d) -Force | Out-Null
+          }
+          & ./install/install.ps1 -Agent all -Scope project -Path $target -Force | Out-Null
+          $found = @(Get-ChildItem -Path $target -Recurse -Filter SKILL.md).Count
+          if ($found -ne 8) { throw "expected 8 skill copies, found $found" }
+          if (-not (Test-Path (Join-Path $target 'AGENTS.md'))) { throw 'no AGENTS.md pointer' }
+          & ./install/install.ps1 -Agent opencode -Scope project -Path $target -Force | Out-Null
+          $marks = (Select-String -Path (Join-Path $target 'AGENTS.md') -Pattern 'BEGIN revayat').Count
+          if ($marks -ne 1) { throw "AGENTS.md pointer duplicated ($marks)" }
+          Write-Output 'installer OK: 8 copies, single pointer'
+
   lint:
     name: manifests and encoding
     runs-on: ubuntu-latest
@@ -64,7 +148,7 @@ jobs:
       - name: Every plugin manifest is valid JSON and agrees on version
         run: |
           python - <<'PY'
-          import json, pathlib, sys
+          import json, pathlib
 
           manifests = sorted(pathlib.Path(".").glob("*-plugin/plugin.json"))
           assert manifests, "no plugin manifests found"
@@ -138,4 +222,42 @@ jobs:
           missing = referenced - on_disk
           assert not missing, f"SKILL.md references files that do not exist: {missing}"
           print(f"ok: skill '{name}', {len(on_disk)} reference files, none dangling")
+          PY
+
+      - name: Every command the docs promise actually exists
+        run: |
+          python - <<'PY'
+          import pathlib, re, subprocess, sys
+
+          stages = subprocess.run(
+              [sys.executable, "skills/revayat/scripts/revayat.py", "--help"],
+              capture_output=True, text=True, check=True,
+          ).stdout
+          available = set(re.search(r"stages: (.+)", stages).group(1).split(", "))
+
+          docs = [pathlib.Path("README.md"), pathlib.Path("skills/revayat/SKILL.md")]
+          docs += list(pathlib.Path("skills/revayat/references").glob("*.md"))
+
+          used = set()
+          for doc in docs:
+              used |= set(re.findall(r"revayat\.py\s+([a-z_]+)", doc.read_text(encoding="utf-8")))
+
+          unknown = used - available
+          assert not unknown, f"docs reference stages that do not exist: {unknown}"
+          print(f"ok: {len(used)} documented stages, all real ({sorted(available)})")
+          PY
+
+      - name: Every test suite on disk is reachable
+        run: |
+          python - <<'PY'
+          import pathlib, subprocess, sys
+
+          on_disk = {p.name for p in pathlib.Path("tests").glob("test_*.py")}
+          collected = subprocess.run(
+              [sys.executable, "-m", "pytest", "tests", "--collect-only", "-q"],
+              capture_output=True, text=True,
+          ).stdout
+          missing = [name for name in on_disk if name.replace(".py", "") not in collected]
+          assert not missing, f"test files never collected by CI: {missing}"
+          print(f"ok: all {len(on_disk)} test modules are collected")
           PY
