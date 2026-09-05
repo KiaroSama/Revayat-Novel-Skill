@@ -199,7 +199,7 @@ def merge(
 
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
-    parser = argparse.ArgumentParser(prog="revayat merge", description=__doc__)
+    parser = argparse.ArgumentParser(prog="revayat-novel merge", description=__doc__)
     parser.add_argument("--book", required=True)
     parser.add_argument("--chunks", required=True)
     parser.add_argument("--only", nargs="*", default=None,

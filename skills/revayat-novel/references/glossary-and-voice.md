@@ -15,7 +15,7 @@ and the cheapest to prevent.
 
 ```json
 {
-  "schema": "revayat/glossary@1",
+  "schema": "revayat-novel/glossary@1",
   "policy": {
     "original_parenthetical": "first_mention",
     "lock_canonical": true,
@@ -128,7 +128,7 @@ a new name, add the entry and re-run `scan` (it preserves existing entries and
 only appends), then refresh frequencies:
 
 ```bash
-python3 scripts/revayat.py glossary count --glossary work/glossary.json --book work/book.json
+python3 scripts/revayat-novel.py glossary count --glossary work/glossary.json --book work/book.json
 ```
 
 Chunks already translated are not re-translated automatically. Decide whether

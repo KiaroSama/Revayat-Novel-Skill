@@ -555,7 +555,7 @@ def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
 
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
-    parser = argparse.ArgumentParser(prog="revayat qa", description=__doc__)
+    parser = argparse.ArgumentParser(prog="revayat-novel qa", description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
 
     p_check = sub.add_parser("check", help="gate book.json before building")

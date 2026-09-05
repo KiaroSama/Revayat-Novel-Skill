@@ -148,7 +148,7 @@ def render_worksheet(
     source_blob = "\n".join(text for _, _, text in units)
 
     lines: list[str] = [
-        f"<!-- revayat worksheet {index:04d}/{total:04d} "
+        f"<!-- revayat-novel worksheet {index:04d}/{total:04d} "
         f"| units {len(units)} | {len(source_blob)} source chars -->",
         "<!-- Reply with the same @@ headers, in the same order, Persian text "
         "underneath each. Do not add, drop, merge or reorder headers. -->",
@@ -309,7 +309,7 @@ def build(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     manifest: dict[str, Any] = {
-        "schema": "revayat/chunks@1",
+        "schema": "revayat-novel/chunks@1",
         "book": str(book_path),
         "book_sha256": book["source"].get("sha256", ""),
         # Recorded beside the book because it is the other input that decides
@@ -428,7 +428,7 @@ def status(out_dir: Path) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
-    parser = argparse.ArgumentParser(prog="revayat chunk")
+    parser = argparse.ArgumentParser(prog="revayat-novel chunk")
     sub = parser.add_subparsers(dest="action", required=True)
 
     p_build = sub.add_parser("build", help="write worksheets and a manifest")

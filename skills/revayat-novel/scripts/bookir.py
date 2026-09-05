@@ -1,4 +1,4 @@
-"""Book IR — the structured source of truth for a Revayat translation.
+"""Book IR — the structured source of truth for a Revayat Novel translation.
 
 Markdown is deliberately *not* the source of truth. A book is a list of typed
 blocks that keep page geometry, image bytes and footnote identity, while only
@@ -8,7 +8,7 @@ reliably than a bespoke XML dialect, and which QA can verify by counting).
 Schema (``book.json``)::
 
     {
-      "schema": "revayat/bookir@1",
+      "schema": "revayat-novel/bookir@1",
       "source": {"path", "sha256", "format", "pages"},
       "meta":   {"title", "author", "lang_source", "lang_target", "title_target"},
       "page":   {"width_pt", "height_pt", "margin_*_pt"},
@@ -33,7 +33,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-SCHEMA = "revayat/bookir@1"
+SCHEMA = "revayat-novel/bookir@1"
 
 PT_PER_INCH = 72.0
 EMU_PER_PT = 12700

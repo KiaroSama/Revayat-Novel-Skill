@@ -441,7 +441,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
-    parser = argparse.ArgumentParser(prog="revayat build", description=__doc__)
+    parser = argparse.ArgumentParser(prog="revayat-novel build", description=__doc__)
     add_arguments(parser)
     args = parser.parse_args(argv)
 

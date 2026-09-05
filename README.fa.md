@@ -1,6 +1,6 @@
 <div dir="rtl">
 
-# روایت — Revayat
+# روایت — Revayat Novel
 
 **ترجمهٔ کامل یک کتاب به فارسیِ در حد چاپ، و تحویل یک فایل ورد که یک ناشر بتواند رویش کار کند.**
 
@@ -30,9 +30,9 @@
 <div dir="ltr">
 
 ```bash
-git clone https://github.com/KiaroSama/Revayat-Skill.git
-cd Revayat-Skill
-pip install -r skills/revayat/requirements.txt
+git clone https://github.com/KiaroSama/Revayat-Novel-Skill.git
+cd Revayat-Novel-Skill
+pip install -r skills/revayat-novel/requirements.txt
 ```
 
 </div>
@@ -58,20 +58,20 @@ powershell -ExecutionPolicy Bypass -File .\install\install.ps1
 <div dir="ltr">
 
 ```
-/plugin marketplace add KiaroSama/Revayat-Skill
-/plugin install revayat@KiaroSama/Revayat-Skill
+/plugin marketplace add KiaroSama/Revayat-Novel-Skill
+/plugin install revayat-novel@KiaroSama/Revayat-Novel-Skill
 ```
 
 </div>
 
-این کار دستورهای `/translate-book`، `/revayat-resume` و `/revayat-qa` را هم اضافه می‌کند.
+این کار دستورهای `/translate-book`، `/revayat-novel-resume` و `/revayat-novel-qa` را هم اضافه می‌کند.
 
 ### بررسی نصب
 
 <div dir="ltr">
 
 ```bash
-python skills/revayat/scripts/revayat.py doctor
+python skills/revayat-novel/scripts/revayat-novel.py doctor
 ```
 
 </div>
@@ -111,18 +111,18 @@ sudo apt install ghostscript               # Debian/Ubuntu
 <div dir="ltr">
 
 ```bash
-S=skills/revayat/scripts
+S=skills/revayat-novel/scripts
 
-python $S/revayat.py extract book.pdf --out work/
-python $S/revayat.py glossary scan --book work/book.json --out work/glossary.json
+python $S/revayat-novel.py extract book.pdf --out work/
+python $S/revayat-novel.py glossary scan --book work/book.json --out work/glossary.json
 #   … نام‌های فارسی را در work/glossary.json پر کنید …
-python $S/revayat.py chunk build --book work/book.json --out work/chunks --glossary work/glossary.json
+python $S/revayat-novel.py chunk build --book work/book.json --out work/chunks --glossary work/glossary.json
 #   … work/chunks/chunkNNNN.md را ترجمه و در out_chunkNNNN.md بنویسید …
-python $S/revayat.py merge  --book work/book.json --chunks work/chunks
-python $S/revayat.py falint fix --book work/book.json
-python $S/revayat.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
-python $S/revayat.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
-python $S/revayat.py qa     docx --file out/book.fa.docx --book work/book.json
+python $S/revayat-novel.py merge  --book work/book.json --chunks work/chunks
+python $S/revayat-novel.py falint fix --book work/book.json
+python $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
+python $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
+python $S/revayat-novel.py qa     docx --file out/book.fa.docx --book work/book.json
 ```
 
 </div>
@@ -179,19 +179,19 @@ book.pdf / .epub / .docx
 
 اسکیل این‌ها را در زمان نیاز می‌خواند، نه از ابتدا:
 
-- [`translation-policy.md`](skills/revayat/references/translation-policy.md) — یک ترجمهٔ ادبی وفادار چه چیزهایی می‌خواهد
-- [`persian-typography.md`](skills/revayat/references/persian-typography.md) — RTL، نیم‌فاصله، نشانه‌گذاری، متن دوخطی
-- [`extraction.md`](skills/revayat/references/extraction.md) — مسیریابی OCR، کتاب‌های دشوار، ساختار IR
-- [`glossary-and-voice.md`](skills/revayat/references/glossary-and-voice.md) — سیاست نام‌گذاری، نام‌های مستعار، لحن شخصیت
-- [`docx-and-ooxml.md`](skills/revayat/references/docx-and-ooxml.md) — همهٔ گزینه‌های ساخت و ساختار ورد حاصل از هرکدام
-- [`troubleshooting.md`](skills/revayat/references/troubleshooting.md) — پرتکرارترین مشکل‌هایی که به آن‌ها برمی‌خورید
+- [`translation-policy.md`](skills/revayat-novel/references/translation-policy.md) — یک ترجمهٔ ادبی وفادار چه چیزهایی می‌خواهد
+- [`persian-typography.md`](skills/revayat-novel/references/persian-typography.md) — RTL، نیم‌فاصله، نشانه‌گذاری، متن دوخطی
+- [`extraction.md`](skills/revayat-novel/references/extraction.md) — مسیریابی OCR، کتاب‌های دشوار، ساختار IR
+- [`glossary-and-voice.md`](skills/revayat-novel/references/glossary-and-voice.md) — سیاست نام‌گذاری، نام‌های مستعار، لحن شخصیت
+- [`docx-and-ooxml.md`](skills/revayat-novel/references/docx-and-ooxml.md) — همهٔ گزینه‌های ساخت و ساختار ورد حاصل از هرکدام
+- [`troubleshooting.md`](skills/revayat-novel/references/troubleshooting.md) — پرتکرارترین مشکل‌هایی که به آن‌ها برمی‌خورید
 
 ## توسعه
 
 <div dir="ltr">
 
 ```bash
-pip install -r skills/revayat/requirements.txt
+pip install -r skills/revayat-novel/requirements.txt
 python -m pytest tests -q
 ```
 
@@ -232,5 +232,3 @@ python -m pytest tests -q
 ## مجوز
 
 [MIT](LICENSE)
-
-</div>

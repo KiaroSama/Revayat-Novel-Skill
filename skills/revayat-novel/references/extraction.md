@@ -2,7 +2,7 @@
 
 ## The three shapes a PDF arrives in
 
-`revayat extract` probes every page and classifies the file before doing
+`revayat-novel extract` probes every page and classifies the file before doing
 anything:
 
 | `probe.kind` | What it means | What happens |
@@ -53,7 +53,7 @@ brew install ghostscript                   # macOS
 sudo apt install ghostscript               # Debian/Ubuntu
 ```
 
-`revayat.py doctor` reports all three. On Windows it looks for
+`revayat-novel.py doctor` reports all three. On Windows it looks for
 `gswin64c`/`gswin32c` as well as `gs`, because Ghostscript does not ship a
 binary called `gs` there.
 
@@ -153,12 +153,12 @@ Neither of these is reimplemented here; the adapters import their output.
 ```bash
 # MinerU: OCR + layout analysis + figure extraction
 mineru -p book.pdf -o work/mineru
-python3 scripts/revayat.py extract --from-mineru work/mineru --out work/
+python3 scripts/revayat-novel.py extract --from-mineru work/mineru --out work/
 ```
 
 ```bash
 # Marker or Docling, or any Markdown you already have
-python3 scripts/revayat.py extract --from-markdown work/book.md --out work/
+python3 scripts/revayat-novel.py extract --from-markdown work/book.md --out work/
 ```
 
 The Markdown importer resolves `![alt](path)` images relative to the Markdown

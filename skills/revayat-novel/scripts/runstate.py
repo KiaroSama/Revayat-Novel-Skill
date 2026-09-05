@@ -27,7 +27,7 @@ from typing import Any, Mapping
 
 import bookir as ir
 
-SCHEMA = "revayat/runstate@1"
+SCHEMA = "revayat-novel/runstate@1"
 
 #: The stages that leave reusable output behind, in pipeline order.
 STAGES = ("extract", "glossary", "chunk", "translate", "typography", "build")

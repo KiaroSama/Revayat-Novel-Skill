@@ -201,7 +201,7 @@ def run_ocr(
             "  3. Ghostscript: https://ghostscript.com/releases/gsdnld.html\n"
             "     Not in winget; on macOS `brew install ghostscript`, on Debian\n"
             "     `apt install ghostscript`. Make sure its bin/ is on PATH.\n"
-            "  Then run `revayat.py doctor` to confirm all three are found.\n"
+            "  Then run `revayat-novel.py doctor` to confirm all three are found.\n"
             "  Or re-run with --ocr off to extract only the pages that already\n"
             "  have a text layer."
         )
@@ -792,7 +792,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
-    parser = argparse.ArgumentParser(prog="revayat extract", description=__doc__)
+    parser = argparse.ArgumentParser(prog="revayat-novel extract", description=__doc__)
     add_arguments(parser)
     args = parser.parse_args(argv)
     try:
