@@ -3,7 +3,7 @@
 ## Build options
 
 ```bash
-python3 scripts/revayat-novel.py build --book work/book.json --out out/book.fa.docx [options]
+$PY scripts/revayat-novel.py build --book work/book.json --out out/book.fa.docx [options]
 ```
 
 | Option | Default | Notes |
@@ -74,7 +74,7 @@ ratio preserved.
 ## Verifying the result
 
 ```bash
-python3 scripts/revayat-novel.py qa docx --file out/book.fa.docx --book work/book.json
+$PY scripts/revayat-novel.py qa docx --file out/book.fa.docx --book work/book.json
 ```
 
 This reads the saved package, not the builder's own report:
