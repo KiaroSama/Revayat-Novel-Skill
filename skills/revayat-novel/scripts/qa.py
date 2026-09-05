@@ -235,20 +235,51 @@ def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
     whole book. The worksheet already names the chunk that owns the
     introduction; this is the gate that proves it was obeyed.
     """
+    policy = (glossary.get("policy") or {}).get("original_parenthetical", "first_mention")
     targets = [(block["id"], block.get("target") or "")
                for block in ir.iter_text_blocks(book)]
+
     for entry in glossary.get("entries", []):
         match = _PARENTHETICAL.search(entry.get("first_form") or "")
-        if not match:
+        if not match or not entry.get("locked"):
             continue
         introduction = match.group(0)
-        where = [block_id for block_id, target in targets if introduction in target]
-        if len(where) > 1:
-            owner = entry.get("first_block_id") or where[0]
-            report.add(ERROR, "first-mention-repeated", entry.get("id") or introduction,
-                       f"{introduction} is introduced in {len(where)} blocks "
-                       f"({', '.join(where[:4])}); keep it in {owner} and re-run "
-                       f"the other chunk(s)")
+        name = entry.get("id") or introduction
+        owner = entry.get("first_block_id") or ""
+
+        # Counted, not merely located. A block-level list cannot tell one
+        # introduction from three inside the same paragraph, which is exactly
+        # what a chunk repeating itself produces.
+        placements = [(block_id, target.count(introduction))
+                      for block_id, target in targets if introduction in target]
+        total = sum(count for _, count in placements)
+
+        if policy == "never":
+            if total:
+                report.add(ERROR, "first-mention-forbidden", name,
+                           f"policy is 'never' but {introduction} appears "
+                           f"{total} time(s)")
+            continue
+
+        if total == 0:
+            report.add(ERROR, "first-mention-missing", name,
+                       f"{introduction} never appears; the name is introduced "
+                       f"nowhere in the book")
+            continue
+
+        if total > 1:
+            where = ", ".join(f"{block_id}x{count}" if count > 1 else block_id
+                              for block_id, count in placements[:4])
+            report.add(ERROR, "first-mention-repeated", name,
+                       f"{introduction} appears {total} times ({where}); it "
+                       f"belongs once, in {owner or placements[0][0]}")
+            continue
+
+        placed_in = placements[0][0]
+        if owner and placed_in != owner:
+            report.add(ERROR, "first-mention-misplaced", name,
+                       f"{introduction} is in {placed_in} but the first mention "
+                       f"of this name is in {owner}")
 
 
 def _check_structure_parity(book: dict[str, Any], report: Report,

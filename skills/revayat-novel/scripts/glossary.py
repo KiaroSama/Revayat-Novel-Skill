@@ -337,6 +337,123 @@ def render_voice_cards(glossary: dict[str, Any], text: str) -> str:
 # Compliance check
 # --------------------------------------------------------------------------- #
 
+# --------------------------------------------------------------------------- #
+# First-mention enforcement
+# --------------------------------------------------------------------------- #
+
+#: A parenthetical of two characters or more: "(Elizabeth Bennet)".
+PARENTHETICAL = re.compile(r"\([^()]{2,}\)")
+
+#: Characters that join a name to what is beside it. Letters and digits are
+#: obvious; U+200C is Persian's zero-width non-joiner, which glues the parts of
+#: one word together, so a name flanked by it is a fragment, not a mention.
+#: U+200C, written as an escape because the character itself is
+#: invisible in source and the next reader would not know it is there.
+ZWNJ = "‌"
+_WORD = re.compile(r"[^\W_]", re.UNICODE)
+
+
+def _joined(text: str, index: int) -> bool:
+    if not 0 <= index < len(text):
+        return False
+    character = text[index]
+    return character == ZWNJ or bool(_WORD.match(character))
+
+
+def standalone_spans(text: str, needle: str) -> list[tuple[int, int]]:
+    """Where ``needle`` stands as its own word in ``text``.
+
+    A plain ``str.replace`` is what makes glossary rewriting dangerous: a short
+    name is a substring of longer words, and "«علی» inside «علیرضا»" is exactly
+    the corruption that a global replace introduces and nobody reviews. The
+    boundary test has to know about the zero-width non-joiner too, or every
+    Persian compound reads as a match.
+    """
+    if not needle:
+        return []
+    spans: list[tuple[int, int]] = []
+    start = text.find(needle)
+    while start != -1:
+        end = start + len(needle)
+        if not _joined(text, start - 1) and not _joined(text, end):
+            spans.append((start, end))
+        start = text.find(needle, start + 1)
+    return spans
+
+
+def enforce_first_mentions(glossary: dict[str, Any],
+                           book: dict[str, Any]) -> dict[str, Any]:
+    """Give each locked name its original spelling once, where it belongs.
+
+    Chunks are translated in parallel by agents that cannot see one another, so
+    "is this the first mention?" is a question none of them can answer. Every
+    one of them answers yes, and the finished book repeats
+    «الیزابت بنت (Elizabeth Bennet)» in thirty places. The worksheet asks the
+    owning chunk to introduce the name, but asking is not a guarantee — this is
+    the pass that makes it true regardless of what came back.
+
+    It is deliberately mechanical and idempotent: flatten every introduction
+    down to the later form, then re-introduce exactly one, at the first
+    standalone occurrence inside the block the glossary scan already chose. Run
+    it twice and the second run changes nothing.
+
+    Aliases are left alone. When a book gives a character a nickname with its
+    own spelling, that is a translation decision, not a drift to normalise —
+    ``policy.keep_aliases_distinct`` says so explicitly.
+    """
+    policy = (glossary.get("policy") or {}).get("original_parenthetical", "first_mention")
+    report: dict[str, Any] = {"policy": policy, "introduced": {}, "flattened": 0,
+                              "unplaceable": [], "skipped": 0}
+    if policy == "never":
+        # Then the introduction is not wanted anywhere, and flattening is the
+        # whole job.
+        pass
+
+    blocks = [b for b in ir.iter_text_blocks(book)]
+    by_id = {b["id"]: b for b in blocks}
+
+    for entry in glossary.get("entries", []):
+        first_form = (entry.get("first_form") or "").strip()
+        later_form = canonical(entry)
+        if not entry.get("locked") or not first_form or not later_form:
+            report["skipped"] += 1
+            continue
+        if first_form == later_form or not PARENTHETICAL.search(first_form):
+            # No parenthetical policy for this name; nothing to place.
+            report["skipped"] += 1
+            continue
+
+        # 1. Flatten. The long form is distinctive enough that a plain replace
+        #    is safe here — it carries the parenthetical with it.
+        for block in blocks:
+            target = block.get("target") or ""
+            if first_form in target:
+                report["flattened"] += target.count(first_form)
+                block["target"] = target.replace(first_form, later_form)
+
+        if policy == "never":
+            continue
+
+        # 2. Re-introduce once, in the block the scan chose. Falling back to the
+        #    first block that actually mentions the name keeps a book usable
+        #    when the owning block was cut or never translated.
+        owner_id = entry.get("first_block_id") or ""
+        owner = by_id.get(owner_id)
+        if owner is None or not standalone_spans(owner.get("target") or "", later_form):
+            owner = next((b for b in blocks
+                          if standalone_spans(b.get("target") or "", later_form)), None)
+        if owner is None:
+            report["unplaceable"].append(entry.get("id") or entry.get("source"))
+            continue
+
+        target = owner["target"]
+        start, end = standalone_spans(target, later_form)[0]
+        owner["target"] = target[:start] + first_form + target[end:]
+        report["introduced"][entry.get("id") or entry.get("source")] = owner["id"]
+
+    return report
+
+
 def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]]:
     """Find places where a translated block ignored a locked name.
 
