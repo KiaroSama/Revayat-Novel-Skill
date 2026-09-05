@@ -441,3 +441,111 @@ def test_skipping_ocr_is_not_recorded_as_having_run(scanned_pdf, tmp_path,
     assert book["source"]["from_ocr"] is False
     # The skip is still reported, so the gap stays visible rather than silent.
     assert "skipped" in report["ocr"]
+
+
+def test_a_figure_lands_between_the_paragraphs_it_sat_between(tmp_path):
+    """Reading order comes from the page, not from the order of arrival.
+
+    When the whole-page scan was already dropped there is nothing to replace,
+    and appending the crops at the end of the page moves a picture that stood
+    between two paragraphs to after both of them. The caption then explains the
+    wrong thing, and the book reads as if the illustration were an afterthought.
+    """
+    book = _scanned_book(1)
+    book["blocks"] = [
+        ir.make_block("paragraph", 1, page=1, bbox=[50, 80, 350, 140],
+                      text="Paragraph A, above the picture."),
+        ir.make_block("paragraph", 2, page=1, bbox=[50, 500, 350, 560],
+                      text="Paragraph B, below the picture."),
+    ]
+    mineru = _mineru_output(tmp_path, [
+        {"page_idx": 0, "bbox": [100, 400, 800, 700], "image_caption": ["میان دو بند"]},
+    ])
+
+    report = merge_mineru_figures(book, mineru, tmp_path / "assets")
+    assert report["figures_added"] == 1
+    assert "placed_at_page_end" not in report, "placement was guessed, not measured"
+
+    order = [(b["type"], ir.plain_text(b.get("text") or b.get("alt") or ""))
+             for b in book["blocks"]]
+    assert order == [("paragraph", "Paragraph A, above the picture."),
+                     ("image", "میان دو بند"),
+                     ("paragraph", "Paragraph B, below the picture.")]
+
+
+def test_several_figures_interleave_with_several_paragraphs(tmp_path):
+    """Block boxes are in points; MinerU's are thousandths of the page.
+
+    The default page is 612pt tall, so a MinerU top of 250 is 153pt and one of
+    900 is 551pt. Mixing the two scales up is an easy way to write a test that
+    asserts the wrong order and then "fixes" correct code.
+    """
+    book = _scanned_book(1)
+    book["blocks"] = [
+        ir.make_block("paragraph", 1, page=1, bbox=[50, 60, 350, 100], text="A"),
+        ir.make_block("paragraph", 2, page=1, bbox=[50, 300, 350, 340], text="B"),
+        ir.make_block("paragraph", 3, page=1, bbox=[50, 500, 350, 540], text="C"),
+    ]
+    mineru = _mineru_output(tmp_path, [
+        {"page_idx": 0, "bbox": [100, 900, 800, 980]},   # 551pt — after C
+        {"page_idx": 0, "bbox": [100, 250, 800, 380]},   # 153pt — between A and B
+    ])
+
+    merge_mineru_figures(book, mineru, tmp_path / "assets")
+    assert [b["type"] for b in book["blocks"]] == [
+        "paragraph", "image", "paragraph", "paragraph", "image"
+    ]
+
+
+def test_a_figure_above_all_the_prose_goes_first(tmp_path):
+    book = _scanned_book(1)
+    book["blocks"] = [
+        ir.make_block("paragraph", 1, page=1, bbox=[50, 400, 350, 460], text="Below."),
+    ]
+    mineru = _mineru_output(tmp_path, [{"page_idx": 0, "bbox": [100, 60, 800, 300]}])
+    merge_mineru_figures(book, mineru, tmp_path / "assets")
+    assert [b["type"] for b in book["blocks"]] == ["image", "paragraph"]
+
+
+def test_a_placement_that_cannot_be_measured_is_reported(tmp_path):
+    """Silence here would look exactly like a correct end-of-page placement."""
+    book = _scanned_book(1)
+    book["blocks"] = [ir.make_block("paragraph", 1, page=1, text="No box at all.")]
+    mineru = _mineru_output(tmp_path, [{"page_idx": 0, "bbox": [100, 400, 800, 700]}])
+
+    report = merge_mineru_figures(book, mineru, tmp_path / "assets")
+    assert report["figures_added"] == 1
+    assert report["placed_at_page_end"], "a guessed placement passed as measured"
+
+
+def test_the_built_document_keeps_the_interleaved_order(tmp_path):
+    """The order has to survive all the way into the file Word opens."""
+    import argparse
+    import zipfile
+
+    from build_docx import Builder, add_arguments
+
+    book = _scanned_book(1)
+    book["blocks"] = [
+        ir.make_block("paragraph", 1, page=1, bbox=[50, 80, 350, 140], text="Above."),
+        ir.make_block("paragraph", 2, page=1, bbox=[50, 500, 350, 560], text="Below."),
+    ]
+    for block in book["blocks"]:
+        block["target"] = "بند فارسی که به اندازهٔ کافی بلند است تا رد شود."
+    mineru = _mineru_output(tmp_path, [{"page_idx": 0, "bbox": [100, 400, 800, 700]}])
+    merge_mineru_figures(book, mineru, tmp_path / "assets")
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    options = parser.parse_args(["--book", "x", "--out", "y", "--font", "Tahoma",
+                                 "--no-toc"])
+    destination = tmp_path / "order.docx"
+    Builder(book, tmp_path / "assets", options).build(destination)
+
+    with zipfile.ZipFile(destination) as archive:
+        document = archive.read("word/document.xml").decode("utf-8")
+    # The drawing must sit between the two paragraphs, not after both.
+    first = document.index("بند فارسی")
+    drawing = document.index("<w:drawing>")
+    last = document.rindex("بند فارسی")
+    assert first < drawing < last
