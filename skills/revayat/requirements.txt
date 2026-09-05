@@ -5,5 +5,5 @@ beautifulsoup4>=4.12     # EPUB (XHTML) parsing
 lxml>=5.0                # OOXML manipulation (also a python-docx dependency)
 
 # Development only.
-pytest>=8.0
+pytest>=9.1.1
 pytest-timeout>=2.3
