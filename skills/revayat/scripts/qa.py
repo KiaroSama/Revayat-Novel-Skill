@@ -17,6 +17,7 @@ import json
 import re
 import sys
 import zipfile
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,16 @@ LENGTH_RATIO_MIN = 0.55
 LENGTH_RATIO_MAX = 2.4
 #: Ratios are meaningless for very short strings ("Yes." -> "بله.").
 RATIO_MIN_CHARS = 120
+#: Two blocks with the same translation this long did not arrive there by
+#: coincidence. A sentence can repeat; a paragraph of 120+ characters matching
+#: another one exactly is a pasted worksheet reply.
+DUPLICATE_MIN_CHARS = 120
+#: A run of source text this long, alive inside the translation, is a clause
+#: that was never translated. The longest run that legitimately survives is the
+#: first-mention parenthetical — "(Elizabeth Bennet)", 18 characters — and
+#: `verbatim` spans are removed before the comparison, so 40 leaves a margin
+#: wide enough that no name or quoted token can reach it.
+COPIED_RUN_CHARS = 40
 
 ERROR = "error"
 WARNING = "warning"
@@ -38,11 +49,20 @@ WARNING = "warning"
 class Report:
     def __init__(self) -> None:
         self.findings: list[dict[str, Any]] = []
+        self.counts: dict[str, int] = {}
 
     def add(self, severity: str, code: str, unit: str, detail: str) -> None:
         self.findings.append(
             {"severity": severity, "code": code, "unit": unit, "detail": detail[:200]}
         )
+
+    def count(self, name: str, value: int) -> None:
+        """Record a total the findings cannot express.
+
+        ``findings`` is capped at ``limit``, so a list of untranslated blocks
+        says nothing about whether one paragraph was missed or a thousand.
+        """
+        self.counts[name] = value
 
     def summary(self, limit: int = 60) -> dict[str, Any]:
         errors = [f for f in self.findings if f["severity"] == ERROR]
@@ -54,6 +74,7 @@ class Report:
             "ok": not errors,
             "errors": len(errors),
             "warnings": len(warnings),
+            "counts": dict(sorted(self.counts.items())),
             "by_code": dict(sorted(by_code.items(), key=lambda kv: -kv[1])),
             "findings": (errors + warnings)[:limit],
             "truncated": max(0, len(self.findings) - limit),
@@ -84,11 +105,15 @@ def check_book(
     _check_coverage(book, report, require_complete)
     _check_structure_parity(book, report, strict)
     _check_lengths(book, report)
+    _check_duplicate_targets(book, report)
+    _check_copied_runs(book, report)
     _check_footnotes(book, report)
     if assets is not None:
         _check_assets(book, assets, report)
     _check_typography(book, report)
+    _check_ocr_confidence(book, report, strict)
     if glossary:
+        _check_first_mentions(book, glossary, report)
         for violation in gl.check(glossary, book):
             report.add(
                 ERROR if strict else WARNING, "glossary-drift", violation["block"],
@@ -99,13 +124,131 @@ def check_book(
 
 
 def _check_coverage(book: dict[str, Any], report: Report, require_complete: bool) -> None:
+    """Every source block must come back with Persian in it.
+
+    The totals matter as much as the findings. ``findings`` is truncated, so on
+    its own it cannot tell "one heading was missed" from "the last four chunks
+    were never translated" — the two look identical at the top of the list.
+    Headings are counted apart from the rest because a book that lost only its
+    headings still reads as 98% complete while its table of contents is empty.
+    """
     severity = ERROR if require_complete else WARNING
+    totals = {"headings": 0, "headings_translated": 0,
+              "paragraphs": 0, "paragraphs_translated": 0}
     for block in ir.iter_text_blocks(book):
         if not (block.get("text") or "").strip():
             continue
-        if not (block.get("target") or "").strip():
+        group = "headings" if block["type"] == "heading" else "paragraphs"
+        totals[group] += 1
+        if (block.get("target") or "").strip():
+            totals[f"{group}_translated"] += 1
+        else:
             report.add(severity, "untranslated-block", block["id"],
                        ir.plain_text(block["text"])[:120])
+    for name, value in totals.items():
+        report.count(name, value)
+
+
+def _prose(text: str) -> str:
+    """Everything a translator was meant to rewrite.
+
+    ``verbatim`` spans come out on both sides: `` `literal_token` `` is
+    *supposed* to survive byte for byte, so leaving it in would report the
+    feature working as a leak.
+    """
+    return "".join(span["text"] for span in ir.parse_markup(text or "")
+                   if not span["verbatim"])
+
+
+def _copied_run(source: str, target: str, window: int = COPIED_RUN_CHARS) -> str:
+    """The first ``window``-character run of ``source`` still verbatim in
+    ``target``, or ``""``.
+
+    Cost is O(len(source) x len(target)) per block, which on a real 300k-character
+    book is a fraction of a second beside the markup parsing QA already does for
+    every block several times over.
+    """
+    if len(source) < window or not target:
+        return ""
+    for start in range(len(source) - window + 1):
+        run = source[start:start + window]
+        # A leader line of dots or a column of figures legitimately survives
+        # translation; only letters make a run prose.
+        if run in target and any(character.isalpha() for character in run):
+            return run
+    return ""
+
+
+def _check_copied_runs(book: dict[str, Any], report: Report) -> None:
+    """A clause of the source that reached the translation unchanged.
+
+    ``untranslated`` fires on a block that is *mostly* the source language. This
+    catches the commoner shape it cannot see: fluent Persian with one English
+    clause left in the middle of it, where the script ratio never trips.
+    """
+    for block in ir.iter_text_blocks(book):
+        target = block.get("target") or ""
+        if not target.strip():
+            continue
+        run = _copied_run(_prose(block.get("text") or ""), _prose(target))
+        if run:
+            report.add(ERROR, "copied-source-run", block["id"],
+                       f"{run!r} was carried over from the source unchanged; "
+                       f"re-run this chunk and translate that clause")
+
+
+def _check_duplicate_targets(book: dict[str, Any], report: Report) -> None:
+    """Two different blocks, one identical translation.
+
+    A worksheet answered by pasting the previous reply lands as a run of blocks
+    all carrying the same Persian, and every existing gate passes it: nothing is
+    missing, the ids all resolve, the length ratios are plausible. Blocks whose
+    *sources* are identical are excluded — a refrain or a running head really
+    should translate the same way twice.
+    """
+    first_seen: dict[str, tuple[str, str]] = {}   # target -> (block id, source)
+    for block in ir.iter_text_blocks(book):
+        target = ir.plain_text(block.get("target") or "").strip()
+        if len(target) <= DUPLICATE_MIN_CHARS:
+            continue
+        source = ir.plain_text(block.get("text") or "").strip()
+        previous = first_seen.get(target)
+        if previous is None:
+            first_seen[target] = (block["id"], source)
+        elif previous[1] != source:
+            report.add(ERROR, "duplicate-translation", block["id"],
+                       f"word for word the translation of {previous[0]}, whose "
+                       f"source is different; re-run this chunk")
+
+
+#: The original spelling a first-mention form carries, e.g. "(Elizabeth Bennet)".
+_PARENTHETICAL = re.compile(r"\([^()]{2,}\)")
+
+
+def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
+                          report: Report) -> None:
+    """The original spelling belongs in exactly one place.
+
+    Chunks are translated in parallel by agents that cannot see each other, so
+    left to their own judgement every one of them answers "yes, this is the
+    first mention" and «الیزابت بنت (Elizabeth Bennet)» is repeated through the
+    whole book. The worksheet already names the chunk that owns the
+    introduction; this is the gate that proves it was obeyed.
+    """
+    targets = [(block["id"], block.get("target") or "")
+               for block in ir.iter_text_blocks(book)]
+    for entry in glossary.get("entries", []):
+        match = _PARENTHETICAL.search(entry.get("first_form") or "")
+        if not match:
+            continue
+        introduction = match.group(0)
+        where = [block_id for block_id, target in targets if introduction in target]
+        if len(where) > 1:
+            owner = entry.get("first_block_id") or where[0]
+            report.add(ERROR, "first-mention-repeated", entry.get("id") or introduction,
+                       f"{introduction} is introduced in {len(where)} blocks "
+                       f"({', '.join(where[:4])}); keep it in {owner} and re-run "
+                       f"the other chunk(s)")
 
 
 def _check_structure_parity(book: dict[str, Any], report: Report,
@@ -192,6 +335,32 @@ def _check_assets(book: dict[str, Any], assets: Path, report: Report) -> None:
                        f"{block['asset']} no longer matches its extraction hash")
 
 
+def _check_ocr_confidence(book: dict[str, Any], report: Report,
+                          strict: bool = False) -> None:
+    """Surface the blocks the OCR engine itself was not sure about.
+
+    Recognition confidence is the one defect class that is invisible after the
+    fact: a misread word is a real Persian word in a fluent sentence, and no
+    length ratio, glossary rule or typography pass can see it. The only thing
+    that can is the number the engine gave at the time — so a block it graded
+    low is reported with its page and the words in question, and accepting it
+    means looking at the page image.
+
+    A warning by default, because a low score is a reason to check rather than
+    proof of an error; ``--strict`` makes it blocking for publication work.
+    """
+    for block in ir.iter_text_blocks(book):
+        evidence = block.get("ocr")
+        if not evidence or evidence.get("grade") != "low":
+            continue
+        words = evidence.get("low_words") or []
+        detail = f"page {block.get('page')}, recognition {evidence.get('confidence')}%"
+        if words:
+            detail += " — check " + ", ".join(repr(w) for w in words[:5])
+        report.add(ERROR if strict else WARNING, "ocr-low-confidence",
+                   block["id"], detail)
+
+
 def _check_typography(book: dict[str, Any], report: Report) -> None:
     severity_by_code = {
         "untranslated": ERROR,
@@ -218,6 +387,101 @@ _ANCHOR = re.compile(r'<w:hyperlink[^>]*w:anchor="([^"]+)"')
 _FOOTNOTE_REF = re.compile(r'<w:footnoteReference[^>]*w:id="(-?\d+)"')
 _FOOTNOTE_BODY = re.compile(r'<w:footnote[^>]*w:id="(-?\d+)"')
 _EXTENT = re.compile(r"<wp:extent[^>]*cx=\"(\d+)\"[^>]*cy=\"(\d+)\"")
+#: One per picture, in the order Word lays them out.
+_BLIP = re.compile(r'<a:blip[^>]*r:embed="([^"]+)"')
+_RELATIONSHIP = re.compile(r"<Relationship\b[^>]*>")
+#: Attributes are pulled by name rather than by position: the order of ``Id``,
+#: ``Type`` and ``Target`` inside a relationship is not fixed by the format.
+_ATTRIBUTE = re.compile(r'(\w+)="([^"]*)"')
+
+
+def _package_image_order(archive: zipfile.ZipFile, document: str) -> list[str]:
+    """The SHA-256 of every picture, in the order the document shows them.
+
+    python-docx stores one media part per *distinct* image, so two identical
+    pictures share a part and ``word/media/`` cannot describe order at all. The
+    ``<a:blip r:embed>`` sequence in ``document.xml`` can, once each
+    relationship is followed back to the bytes it points at.
+    """
+    try:
+        rels = archive.read("word/_rels/document.xml.rels").decode("utf-8", "replace")
+    except KeyError:
+        return []
+
+    target_by_id: dict[str, str] = {}
+    for tag in _RELATIONSHIP.findall(rels):
+        attributes = dict(_ATTRIBUTE.findall(tag))
+        if "Id" in attributes and "Target" in attributes:
+            target_by_id[attributes["Id"]] = attributes["Target"]
+
+    digests: dict[str, str] = {}
+    order: list[str] = []
+    for relationship_id in _BLIP.findall(document):
+        target = target_by_id.get(relationship_id, "")
+        if not target:
+            continue
+        name = target[1:] if target.startswith("/") else f"word/{target}"
+        if name not in digests:
+            try:
+                digests[name] = ir.sha256_bytes(archive.read(name))
+            except KeyError:            # an external or missing part
+                digests[name] = ""
+        if digests[name]:
+            order.append(digests[name])
+    return order
+
+
+def _check_image_order(archive: zipfile.ZipFile, document: str,
+                       book: dict[str, Any], report: Report) -> None:
+    """The pictures must be where the book puts them, not merely present.
+
+    Counting was the only check, and a count cannot see an illustration that
+    moved: the picture is still in the file, the caption underneath it now
+    belongs to a different one.
+    """
+    expected = [block["sha256"] for block in book.get("blocks", [])
+                if block["type"] == "image" and block.get("sha256")]
+    if not expected:
+        return
+    actual = _package_image_order(archive, document)
+    report.count("pictures_placed", len(actual))
+    if not actual:
+        return
+
+    # A picture whose asset went missing is already reported by asset-missing.
+    # Compare only the ones present on both sides, so a single absent file does
+    # not read as a reordering of everything after it.
+    shared = set(expected) & set(actual)
+    in_book = [digest for digest in expected if digest in shared]
+    in_package = [digest for digest in actual if digest in shared]
+    if in_book != in_package:
+        first = next((position for position, pair in enumerate(zip(in_book, in_package))
+                      if pair[0] != pair[1]), min(len(in_book), len(in_package)))
+        report.add(ERROR, "image-order", f"picture {first + 1}",
+                   "the pictures are not in the book's order — a caption now "
+                   "sits under the wrong illustration; rebuild from book.json "
+                   "instead of editing the document")
+
+
+def _check_bookmarks(names: list[str], book: dict[str, Any] | None,
+                     report: Report) -> None:
+    """Bookmarks are what the table of contents and every internal link land on."""
+    report.count("bookmarks", len(names))
+    for name, times in sorted(Counter(names).items()):
+        if times > 1:
+            report.add(ERROR, "bookmark-duplicate", name,
+                       f"opened {times} times; Word sends every link to the "
+                       f"first, so the contents jump to the wrong chapter — "
+                       f"rebuild instead of editing the document")
+
+    if book is None:
+        return
+    headings = sum(1 for block in book.get("blocks", []) if block["type"] == "heading")
+    report.count("headings_in_book", headings)
+    if headings and not names:
+        report.add(ERROR, "bookmarks-missing", "word/document.xml",
+                   f"{headings} headings and no bookmarks; the table of contents "
+                   f"has nothing to link to — rebuild")
 
 
 def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
@@ -237,11 +501,13 @@ def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
         document = archive.read("word/document.xml").decode("utf-8", "replace")
         content_types = archive.read("[Content_Types].xml").decode("utf-8", "replace")
 
-        bookmarks = set(_BOOKMARK.findall(document))
+        bookmark_names = _BOOKMARK.findall(document)
+        bookmarks = set(bookmark_names)
         for anchor in sorted(set(_ANCHOR.findall(document))):
             if anchor not in bookmarks:
                 report.add(ERROR, "dead-link", anchor,
                            "internal link has no matching bookmark")
+        _check_bookmarks(bookmark_names, book, report)
 
         refs = {int(x) for x in _FOOTNOTE_REF.findall(document)}
         if refs:
@@ -278,6 +544,7 @@ def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
             elif not media and expected:
                 report.add(ERROR, "images-lost", str(path),
                            f"{expected} images expected, none in package")
+            _check_image_order(archive, document, book, report)
 
     return report
 

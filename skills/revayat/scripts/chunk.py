@@ -20,6 +20,7 @@ from typing import Any
 
 import bookir as ir
 import glossary as gl
+import runstate
 
 #: Target source characters per chunk. Small enough for one focused context,
 #: large enough that a scene is not shredded across three agents.
@@ -205,15 +206,105 @@ def neighbour_context(book: dict[str, Any], chunks: list[list[str]], index: int)
 # Build
 # --------------------------------------------------------------------------- #
 
+class StaleWorksheets(RuntimeError):
+    """Rebuilding would discard translations that answer a different book."""
+
+
+def source_digest(book: dict[str, Any]) -> str:
+    """Identity of everything a worksheet is cut from.
+
+    The *source* side only. Hashing ``book.json`` itself would be wrong in the
+    one direction that matters: merge writes the translations back into that
+    same file, so every successful merge would report the worksheets it was
+    built from as stale — and the next ``chunk build`` would refuse over a book
+    whose source text never moved. A re-extraction changes this digest; a
+    translation does not.
+    """
+    parts = [
+        f"{block['id']}\x00{block['type']}\x00"
+        f"{block.get('text') or ''}\x00{block.get('alt') or ''}"
+        for block in book.get("blocks", [])
+    ]
+    parts += [f"{note['id']}\x00{note.get('text') or ''}"
+              for note in book.get("footnotes", [])]
+    return ir.sha256_bytes("\n".join(parts).encode("utf-8"))
+
+
+def _chunk_inputs(book_path: Path | None, glossary_path: Path | None,
+                  budget: Any) -> dict[str, str]:
+    """Everything a worksheet's content is decided by.
+
+    The budget belongs beside the two digests because it moves the unit
+    boundaries: the same book cut at a different budget produces different
+    worksheets, and the answers to the old ones no longer line up.
+    """
+    return {
+        "book": _book_digest(book_path),
+        "glossary": runstate.file_hash(glossary_path),
+        "budget": str(budget),
+    }
+
+
+def _book_digest(book_path: Path | None) -> str:
+    """:func:`source_digest` of the book at ``book_path``, or ``""``.
+
+    A book that is missing or unreadable hashes as absent rather than raising:
+    "the book is gone" is an answer about staleness, not a crash.
+    """
+    if book_path is None:
+        return ""
+    try:
+        return source_digest(ir.load_book(book_path))
+    except (OSError, ValueError):
+        return ""
+
+
+def _refuse_if_translations_would_be_orphaned(
+    out_dir: Path, state: runstate.RunState, inputs: dict[str, str]
+) -> None:
+    """Refuse to rebuild worksheets a translator has already answered.
+
+    Only when there is something to lose *and* the record says an input moved.
+    A working directory with no recorded ``chunk`` stage predates this check and
+    has to behave exactly as it always did — a first run must never be blocked
+    by bookkeeping that does not exist yet.
+    """
+    if state.recorded("chunk") is None or not (out_dir / "manifest.json").exists():
+        return
+    stale, reason = state.is_stale("chunk", inputs)
+    if not stale:
+        return
+    progress = status(out_dir)
+    if not progress["translated"]:
+        return
+    raise StaleWorksheets(
+        f"{progress['translated']} of {progress['total']} worksheets in {out_dir} "
+        f"are already translated, but {reason}. Rebuilding would replace them "
+        f"with worksheets those translations no longer answer. Merge what you "
+        f"have first, or pass --force to cut new worksheets anyway — the "
+        f"out_chunk*.md files stay on disk, and merge will reject every id that "
+        f"moved."
+    )
+
+
 def build(
     book_path: Path,
     out_dir: Path,
     *,
     glossary_path: Path | None,
     budget: int = DEFAULT_BUDGET,
+    force: bool = False,
 ) -> dict[str, Any]:
     book = ir.load_book(book_path)
     glossary = gl.load(glossary_path) if glossary_path else gl.new_glossary()
+
+    # The run state lives one level up from the worksheets, beside book.json,
+    # because every other stage shares the same file.
+    state = runstate.RunState(out_dir.parent)
+    inputs = _chunk_inputs(book_path, glossary_path, budget)
+    if not force:
+        _refuse_if_translations_would_be_orphaned(out_dir, state, inputs)
+
     chunks = split_blocks(book, budget)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -221,6 +312,9 @@ def build(
         "schema": "revayat/chunks@1",
         "book": str(book_path),
         "book_sha256": book["source"].get("sha256", ""),
+        # Recorded beside the book because it is the other input that decides
+        # what a worksheet says, and `status` has nothing else to find it by.
+        "glossary": str(glossary_path) if glossary_path else "",
         "budget": budget,
         "chunks": [],
     }
@@ -253,11 +347,65 @@ def build(
 
     ir.write_text(out_dir / "manifest.json",
                   json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
+    state.record("chunk", inputs, {
+        "manifest": ir.sha256_file(out_dir / "manifest.json"),
+        "chunks": len(manifest["chunks"]),
+    })
     return manifest
 
 
+def _beside(work_dir: Path, recorded: str) -> Path | None:
+    """The file the manifest names, found where it was or beside the worksheets.
+
+    ``chunk status`` is routinely run from a different working directory than
+    ``chunk build`` was, and the manifest stores the path exactly as it was
+    typed. Without the fallback a relative path would hash as missing and every
+    resume would report the book as changed.
+    """
+    if not recorded:
+        return None
+    direct = Path(recorded)
+    if direct.exists():
+        return direct
+    fallback = work_dir / direct.name
+    return fallback if fallback.exists() else None
+
+
+def _staleness(out_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Whether these worksheets still answer the book they were cut from.
+
+    ``stale`` is ``null`` when the question cannot be answered — nothing
+    recorded for this working directory, or the book the manifest names is no
+    longer where it was. Answering ``false`` there would be a claim rather than
+    a comparison, which is the exact failure this record exists to prevent.
+    """
+    work_dir = out_dir.parent
+    state = runstate.RunState(work_dir)
+    if state.recorded("chunk") is None:
+        return {"stale": None,
+                "stale_reason": f"nothing recorded in {runstate.STATE_NAME}; "
+                                f"these worksheets predate run-state tracking"}
+
+    book_path = _beside(work_dir, manifest.get("book", ""))
+    if book_path is None:
+        return {"stale": None,
+                "stale_reason": f"{manifest.get('book') or 'the book'} is not "
+                                f"where the manifest says; cannot compare"}
+
+    stale, reason = state.is_stale("chunk", _chunk_inputs(
+        book_path,
+        _beside(work_dir, manifest.get("glossary", "")),
+        manifest.get("budget", DEFAULT_BUDGET),
+    ))
+    return {"stale": stale, "stale_reason": reason}
+
+
 def status(out_dir: Path) -> dict[str, Any]:
-    """Which worksheets still need translating — the resume view."""
+    """Which worksheets still need translating — the resume view.
+
+    ``stale`` answers the other half of resuming: not only what is left to do,
+    but whether what is already done is still worth keeping.
+    """
     manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
     pending, done, empty = [], [], []
     for entry in manifest["chunks"]:
@@ -274,6 +422,7 @@ def status(out_dir: Path) -> dict[str, Any]:
         "pending": pending,
         "empty": empty,
         "next": pending[0] if pending else None,
+        **_staleness(out_dir, manifest),
     }
 
 
@@ -287,6 +436,10 @@ def main(argv: list[str] | None = None) -> int:
     p_build.add_argument("--out", required=True, help="chunks directory")
     p_build.add_argument("--glossary", default=None)
     p_build.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
+    p_build.add_argument("--force", action="store_true",
+                         help="rebuild even when the worksheets already "
+                              "translated were cut from a different book, "
+                              "glossary or budget")
 
     p_status = sub.add_parser("status", help="report which chunks still need work")
     p_status.add_argument("--chunks", required=True)
@@ -294,11 +447,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.action == "build":
-        manifest = build(
-            Path(args.book), Path(args.out),
-            glossary_path=Path(args.glossary) if args.glossary else None,
-            budget=args.budget,
-        )
+        try:
+            manifest = build(
+                Path(args.book), Path(args.out),
+                glossary_path=Path(args.glossary) if args.glossary else None,
+                budget=args.budget,
+                force=args.force,
+            )
+        except StaleWorksheets as refusal:
+            print(json.dumps({"ok": False, "refused": "stale-worksheets",
+                              "detail": str(refusal)}, ensure_ascii=False, indent=1))
+            return 2
         print(json.dumps({
             "chunks": len(manifest["chunks"]),
             "units": sum(c["units"] for c in manifest["chunks"]),
