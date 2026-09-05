@@ -17,6 +17,7 @@ here is required for the unit tier to pass.
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -25,6 +26,25 @@ import pytest
 import bookir as ir
 import qa
 from extract import find_ocrmypdf, ocr_command, run_ocr
+
+#: A tessdata directory inside the project, used when the system one cannot be
+#: written to. It must be the *whole* directory, not just the language file:
+#: Tesseract reads `configs/` from TESSDATA_PREFIX too, and a prefix holding
+#: only `.traineddata` files fails with "read_params_file: Can't open hocr".
+PROJECT_TESSDATA = Path(__file__).resolve().parents[1] / ".sample" / "tessdata"
+if PROJECT_TESSDATA.is_dir() and not os.environ.get("TESSDATA_PREFIX"):
+    os.environ["TESSDATA_PREFIX"] = str(PROJECT_TESSDATA)
+
+
+def language_available(code: str) -> bool:
+    """Is this language pack reachable by the tesseract we would actually run?"""
+    prefix = os.environ.get("TESSDATA_PREFIX")
+    roots = [Path(prefix)] if prefix else []
+    binary = shutil.which("tesseract")
+    if binary:
+        roots.append(Path(binary).resolve().parent / "tessdata")
+    return any((root / f"{code}.traineddata").exists() for root in roots)
+
 
 HAVE_OCRMYPDF = find_ocrmypdf() is not None
 HAVE_TESSERACT = shutil.which("tesseract") is not None
@@ -188,11 +208,10 @@ def test_a_wrong_language_is_visible_rather_than_silent(ocred, tmp_path):
 
     if not shutil.which("tesseract"):
         pytest.skip("tesseract missing")
+    if not language_available("fas"):
+        pytest.skip("the Persian language pack is not reachable from here")
     book = read_pdf(str(ocred), tmp_path / "assets", ocr_text=True)
-    try:
-        sidecar = ocr.build(ocred, language="fas", dpi=300, max_pages=1)
-    except ocr.SidecarError:
-        pytest.skip("the Persian language data is not installed")
+    sidecar = ocr.build(ocred, language="fas", dpi=300, max_pages=1)
 
     summary = ocr.attach(book, sidecar)
     assert summary["disputed"] >= summary["matched"], (
