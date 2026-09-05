@@ -42,6 +42,14 @@ STAGES = ("extract", "glossary", "chunk", "translate", "typography", "build")
 #: own record because the stage-level one answers for the book: "the book was
 #: chunked" says nothing about whether page 214 has been looked at, and a book
 #: is finished one page at a time or not at all.
+#:
+#: The operations walk it: ``pagerun.build`` reaches ``extracted``,
+#: ``pagerun.merge_page`` reaches ``translated`` then ``merged``,
+#: ``renderqa.check`` reaches ``qa_passed`` or ``failed``, and
+#: ``pagerun.accept`` reaches ``accepted`` only once each of those left real
+#: evidence behind. Setting a state here is still a record and not a lock —
+#: the gate that decides whether a page has earned ``accepted`` lives in
+#: ``pagerun.accept``, where the evidence it weighs is.
 PAGE_STATES = ("pending", "extracted", "translated", "merged", "rendered",
                "qa_passed", "accepted", "failed")
 
