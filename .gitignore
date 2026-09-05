@@ -42,3 +42,27 @@ venv/
 # --- OS ---
 .DS_Store
 Thumbs.db
+
+# Hook Maker: local/private files (auto-managed)
+/CLAUDE.md
+/AGENTS.md
+/.env
+/.env.*
+!/.env.example
+!/.env.sample
+!/.env.template
+!/.env.dist
+
+# Deliberate, narrow exception to the two patterns above.
+#
+# In an ordinary project /AGENTS.md and /CLAUDE.md are private assistant
+# configuration and must stay local. This repository is an agent skill: those
+# two files ARE the deliverable's agent-facing documentation, read from the
+# published repo by Codex, Cursor and Claude Code. Both were written as public
+# docs and contain no secrets, no local-only paths and no private tooling
+# references.
+#
+# The patterns above are kept intact, so any other private assistant file added
+# later is still ignored by default. Only these two exact files are published.
+!/AGENTS.md
+!/CLAUDE.md
