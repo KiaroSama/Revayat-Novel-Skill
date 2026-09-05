@@ -6,17 +6,22 @@ misread — grows with the book rather than with the page, so each one needs its
 own ceiling. Without them the "one page at a time" run quietly becomes the
 whole-book context it was built to replace.
 
-The one thing that is never trimmed to fit is the page's own text: a job too
-big for the budget is *reported*, because a silently shortened page is a page
-translated wrong.
+The budget is that ceiling, and a ceiling that is only reported is not one: a
+page too big for it is cut into consecutive sub-jobs that fit, all still owned
+by the same source page. The one thing never trimmed to fit is the prose. A
+page nothing can bring under the ceiling stops the run, because emitting the
+job the budget just rejected is the failure the budget exists to prevent.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import bookir as ir
 import glossary as gl
+import merge as merging
 import pagerun
 import runstate
 
@@ -34,6 +39,26 @@ def _paged_book(pages: int, *, sentences: int = 4) -> dict:
             text=" ".join(f"Page {page} sentence {n} of quite ordinary prose."
                           for n in range(sentences)),
         ))
+    book["blocks"] = blocks
+    return book
+
+
+def _dense_book(pages: int, *, paragraphs: int = 12, sentences: int = 6) -> dict:
+    """A page of real prose: several paragraphs, not one enormous one."""
+    book = ir.new_book()
+    blocks = []
+    index = 0
+    for page in range(1, pages + 1):
+        index += 1
+        blocks.append(ir.make_block("pagebreak", index, page=page, soft=True))
+        for number in range(paragraphs):
+            index += 1
+            blocks.append(ir.make_block(
+                "paragraph", index, page=page,
+                text=" ".join(
+                    f"Page {page} paragraph {number} sentence {n} of prose."
+                    for n in range(sentences)),
+            ))
     book["blocks"] = blocks
     return book
 
@@ -60,35 +85,145 @@ def _section(text: str, heading: str) -> str:
 # The payload budget
 # --------------------------------------------------------------------------- #
 
-def test_a_job_over_the_budget_is_reported_not_truncated(tmp_path):
-    book = _paged_book(3, sentences=60)
-    manifest, pages = _build(book, tmp_path, budget=500)
+def test_no_emitted_payload_is_ever_over_the_budget(tmp_path):
+    manifest, _ = _build(_dense_book(3), tmp_path, budget=2500)
 
-    assert manifest["over_budget"] == [1, 2, 3]
+    assert manifest["split"] == [1, 2, 3]
+    assert max(entry["payload_chars"] for entry in manifest["chunks"]) <= 2500
+    assert len(manifest["chunks"]) > 3, "nothing was actually split"
+
+
+def test_a_page_far_larger_than_the_budget_still_fits_every_job(tmp_path):
+    """The pathological page: a whole chapter's worth of prose on one of them."""
+    book = _dense_book(1, paragraphs=400, sentences=8)
+    manifest, pages = _build(book, tmp_path, budget=3000)
+
+    source_chars = sum(len(block["text"]) for block in ir.iter_text_blocks(book))
+    assert source_chars > 30 * 3000, "the fixture is not far larger than the budget"
+    assert len(manifest["chunks"]) > 30
     for entry in manifest["chunks"]:
-        assert entry["over_budget"] is True
-        assert entry["payload_chars"] > 500
-
-    # Every source character is still on the worksheet. Reporting the overrun
-    # is the whole point: cutting to fit would lose prose nobody would miss
-    # until the book was printed.
-    worksheet = _worksheet(pages, 1)
-    source = next(block["text"] for block in ir.iter_text_blocks(book)
-                  if block["page"] == 1)
-    assert source in worksheet
-    assert len(worksheet) == manifest["chunks"][0]["payload_chars"]
+        worksheet = (pages / entry["file"]).read_text(encoding="utf-8")
+        assert len(worksheet) == entry["payload_chars"] <= 3000
 
 
-def test_an_over_budget_page_is_visible_from_the_resume_view(tmp_path):
-    _, pages = _build(_paged_book(2, sentences=60), tmp_path, budget=500)
+def test_the_sub_jobs_reassemble_to_exactly_the_original_page(tmp_path):
+    """Nothing lost, nothing sent out twice, nothing shortened to fit."""
+    book = _dense_book(1, paragraphs=40)
+    manifest, pages = _build(book, tmp_path, budget=2500)
+    entries = pagerun.jobs_for(manifest, 1)
+    assert len(entries) > 1
+
+    recovered: dict[str, str] = {}
+    for entry in entries:
+        offered = merging.parse_worksheet(
+            (pages / entry["file"]).read_text(encoding="utf-8"))
+        for unit_id, text in offered.items():
+            assert unit_id not in recovered, f"{unit_id} was sent out twice"
+            recovered[unit_id] = text
+
+    assert recovered == {block["id"]: block["text"]
+                         for block in ir.iter_text_blocks(book)}
+    assert [unit for entry in entries for unit in entry["unit_ids"]] \
+        == list(recovered)
+
+
+def test_the_split_is_deterministic(tmp_path):
+    """Two runs of the same book cut it in the same places, or a resume finds
+    worksheets it does not recognise."""
+    book = _dense_book(2, paragraphs=20)
+    first, _ = _build(book, tmp_path / "one", budget=2500)
+    second, _ = _build(book, tmp_path / "two", budget=2500)
+    assert [(e["id"], e["unit_ids"]) for e in first["chunks"]] \
+        == [(e["id"], e["unit_ids"]) for e in second["chunks"]]
+
+
+def test_every_sub_job_still_belongs_to_the_one_source_page(tmp_path):
+    """Splitting is inside a page, never across one: the ownership rule that
+    keeps a block from being translated twice is untouched by it."""
+    manifest, pages = _build(_dense_book(3, paragraphs=20), tmp_path, budget=2500)
+
+    for page in (1, 2, 3):
+        entries = pagerun.jobs_for(manifest, page)
+        assert len(entries) > 1
+        assert {entry["page"] for entry in entries} == {page}
+        assert [entry["part"] for entry in entries] == list(
+            range(1, len(entries) + 1))
+        assert {entry["parts"] for entry in entries} == {len(entries)}
+        # One source hash for the page, shared by its parts: a corrected page
+        # still invalidates as one page.
+        assert len({entry["source_sha256"] for entry in entries}) == 1
+
+    # …and acceptance is still counted in pages, not in jobs.
     progress = pagerun.status(pages)
-    assert progress["over_budget"] == [1, 2]
-    assert all(page["over_budget"] for page in progress["pages"])
+    assert progress["total"] == 3
+    assert [record["jobs"] for record in progress["pages"]] \
+        == [len(pagerun.jobs_for(manifest, p)) for p in (1, 2, 3)]
+
+
+def test_a_split_page_is_offered_one_job_at_a_time(tmp_path):
+    manifest, pages = _build(_dense_book(1, paragraphs=20), tmp_path, budget=2500)
+    entries = pagerun.jobs_for(manifest, 1)
+    assert len(entries) > 1
+
+    first = pagerun.next_page(pages)
+    assert (first["page"], first["job"], first["jobs"]) == (1, 1, len(entries))
+    assert first["id"] == entries[0]["id"]
+
+    ir.write_text(Path(first["output"]), "@@ x para\nمتن\n")
+    second = pagerun.next_page(pages)
+    assert (second["page"], second["job"]) == (1, 2)
+    assert second["id"] == entries[1]["id"]
+
+
+def test_a_split_page_is_visible_from_the_resume_view(tmp_path):
+    _, pages = _build(_dense_book(2, paragraphs=20), tmp_path, budget=2500)
+    progress = pagerun.status(pages)
+    assert progress["split"] == [1, 2]
+    assert progress["orphaned"] == []
+
+
+def test_re_cutting_a_page_names_the_answers_it_orphaned(tmp_path):
+    """A rebuild at another budget cuts elsewhere, so yesterday's answers are
+    on disk under names the new manifest does not use. Naming them is the
+    least that can be done; deleting a translator's work is not."""
+    book = _dense_book(1, paragraphs=20)
+    manifest, pages = _build(book, tmp_path, budget=2500)
+    assert manifest["orphaned"] == []
+    for entry in manifest["chunks"]:
+        ir.write_text(pages / entry["output"], "@@ b00002 para\nمتن آزمون\n")
+
+    rebuilt = pagerun.build(tmp_path / "book.json", pages,
+                            budget=pagerun.DEFAULT_BUDGET)
+    assert len(rebuilt["chunks"]) == 1, "the fixture did not stop splitting"
+    assert rebuilt["orphaned"] == sorted(
+        [entry["file"] for entry in manifest["chunks"]]
+        + [entry["output"] for entry in manifest["chunks"]]
+    )
+    for entry in manifest["chunks"]:
+        assert (pages / entry["output"]).read_text(encoding="utf-8").strip()
+
+
+def test_a_page_nothing_can_shrink_stops_the_run_instead_of_going_out(tmp_path):
+    """One paragraph bigger than the whole budget cannot be split without
+    cutting prose, so the run refuses — it never emits the job the budget just
+    rejected."""
+    book = _paged_book(2, sentences=60)
+    path = tmp_path / "book.json"
+    ir.save_book(book, path)
+
+    with pytest.raises(pagerun.OverBudget) as refusal:
+        pagerun.build(path, tmp_path / "pages", budget=500)
+    message = str(refusal.value)
+    assert "page 1" in message and "--budget" in message
+    assert not (tmp_path / "pages").exists(), "an oversized worksheet was written"
+
+    # Raising the ceiling is the operator's call, and it works.
+    assert pagerun.build(path, tmp_path / "pages", budget=6000)["chunks"]
 
 
 def test_an_ordinary_page_sits_well_inside_the_default_budget(tmp_path):
     manifest, _ = _build(_paged_book(20), tmp_path)
-    assert manifest["over_budget"] == []
+    assert manifest["split"] == []
     assert max(entry["payload_chars"] for entry in manifest["chunks"]) \
         < pagerun.DEFAULT_BUDGET / 2
 
