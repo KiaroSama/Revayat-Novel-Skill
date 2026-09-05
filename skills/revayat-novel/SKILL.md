@@ -162,6 +162,18 @@ fields:
 "locked":      true
 ```
 
+When an entry has `aliases` — a surname or a given name the book uses on its
+own — put their Persian in `alias_targets`:
+
+```json
+"aliases":       ["Ashcroft", "Margaret"],
+"alias_targets": ["اشکرافت", "مارگارت"]
+```
+
+Where the source says only «Ashcroft», the Persian should say only «اشکرافت».
+Leaving this empty makes the drift check demand the full name every time, which
+is both worse Persian and a false alarm.
+
 Leave `first_block_id` exactly as it is — the pipeline uses it to decide which
 single chunk introduces the name. Do not edit it, and do not decide first
 mentions yourself.
