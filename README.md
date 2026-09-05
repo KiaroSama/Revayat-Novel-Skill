@@ -8,8 +8,8 @@ actually hard: scanned pages, illustrations that must keep their size and place,
 names that must not drift across forty chapters, and Persian typography that has
 to be right rather than approximately right.
 
-[MIT licensed](LICENSE)<br>
-[فارسی](README.fa.md)
+<div align="left"><a href="LICENSE">MIT licensed</a></div>
+<div align="right"><a href="README.fa.md">فارسی</a></div>
 
 ---
 

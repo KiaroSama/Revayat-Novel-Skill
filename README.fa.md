@@ -6,8 +6,8 @@
 
 یک Agent Skill برای Claude Code، Kiro، Codex، Cursor، Cline و هر ایجنت کدنویسی دیگری که بتواند یک `SKILL.md` را بخواند. کارهایی را انجام می‌دهد که ترجمهٔ کتاب را واقعاً سخت می‌کنند: صفحه‌های اسکن‌شده، تصویرهایی که باید اندازه و جایشان حفظ شود، نام‌هایی که نباید در طول چهل فصل تغییر کنند، و تایپوگرافی فارسی‌ای که باید درست باشد، نه تقریباً درست.
 
-[مجوز MIT](LICENSE)<br>
-[English](README.md)
+<div align="right"><a href="LICENSE">مجوز MIT</a></div>
+<div align="left"><a href="README.md">English</a></div>
 
 ---
 
