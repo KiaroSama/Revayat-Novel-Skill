@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import bookir as ir
+import glossary as gl
 from chunk import HEADER, TRANSLATOR_NOTE
 
 
@@ -139,6 +140,7 @@ def merge(
     *,
     only: list[str] | None = None,
     strict: bool = True,
+    glossary_path: Path | None = None,
 ) -> dict[str, Any]:
     book = ir.load_book(book_path)
     manifest = json.loads((chunks_dir / "manifest.json").read_text(encoding="utf-8"))
@@ -179,6 +181,15 @@ def merge(
         if outcome["blank"]:
             report["blank_units"][entry["id"]] = outcome["blank"]
 
+    # Asking each chunk to introduce a name only where the worksheet says so is
+    # a request, and parallel agents that cannot see each other all answer the
+    # same way. This is the pass that settles it from the outside, once every
+    # chunk is back, so the result does not depend on any of them complying.
+    if glossary_path is not None and Path(glossary_path).exists():
+        report["first_mentions"] = gl.enforce_first_mentions(
+            gl.load(Path(glossary_path)), book
+        )
+
     ir.save_book(book, book_path)
     report["stats"] = book["stats"]
 
@@ -204,12 +215,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--chunks", required=True)
     parser.add_argument("--only", nargs="*", default=None,
                         help="merge just these chunk ids")
+    parser.add_argument("--glossary", default=None,
+                        help="enforce one first mention per locked name")
     parser.add_argument("--lenient", action="store_true",
                         help="exit 0 even when units are missing")
     args = parser.parse_args(argv)
 
     report = merge(Path(args.book), Path(args.chunks),
-                   only=args.only, strict=not args.lenient)
+                   only=args.only, strict=not args.lenient,
+                   glossary_path=Path(args.glossary) if args.glossary else None)
     print(json.dumps(report, ensure_ascii=False, indent=1))
     return 0 if (report["ok"] or args.lenient) else 1
 
