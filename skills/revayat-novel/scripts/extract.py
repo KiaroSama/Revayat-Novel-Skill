@@ -487,25 +487,68 @@ def _place_figures(book: dict[str, Any],
                 continue
         rebuilt.append(block)
 
-    # Pages whose scan was already dropped get their figures appended in
-    # reading order at the end of that page's blocks.
+    # Pages whose whole-page scan was already dropped have nothing to replace,
+    # so each figure has to be slotted back into reading order by where it sat
+    # on the page. Appending them all at the end of the page — which is what
+    # this used to do — moves a picture that belonged between two paragraphs to
+    # after both of them, and the caption then explains the wrong thing.
+    unplaced: list[str] = []
     for page, items in figures.items():
         if page in handled:
             continue
-        index = _last_index_on_page(rebuilt, page)
-        insert_at = index + 1 if index >= 0 else len(rebuilt)
-        for figure in sorted(items, key=lambda f: f["top"], reverse=True):
+        for figure in sorted(items, key=lambda f: f["top"]):
             counter += 1
-            rebuilt.insert(insert_at, _figure_block(counter, page, figure))
+            block = _figure_block(counter, page, figure)
+            position, derived = _reading_order_slot(rebuilt, page, figure["top"])
+            rebuilt.insert(position, block)
             added += 1
+            if not derived:
+                unplaced.append(f"{block['id']} (page {page})")
 
     book["blocks"] = rebuilt
-    return {
+    report = {
         "pages": len(figures),
         "figures_added": added,
         "page_scans_replaced": replaced,
         "furniture_dropped": furniture_dropped,
     }
+    if unplaced:
+        # Said out loud rather than absorbed: a figure at the end of a page
+        # because nothing could be measured looks identical to one that
+        # genuinely belongs there.
+        report["placed_at_page_end"] = unplaced
+    return report
+
+
+def _reading_order_slot(blocks: list[dict[str, Any]], page: int,
+                        top: float) -> tuple[int, bool]:
+    """Where a figure sitting at ``top`` belongs among ``page``'s blocks.
+
+    Returns ``(index, derived_from_geometry)``. The flag matters: a figure put
+    at the end of a page because its neighbours had no boxes to compare against
+    is a guess, and the caller reports it rather than letting it pass as a
+    measured placement.
+    """
+    first = last = -1
+    for index, block in enumerate(blocks):
+        if int(block.get("page") or 0) != page:
+            continue
+        if first < 0:
+            first = index
+        last = index
+        box = block.get("bbox")
+        # The first block that starts below the figure is the one it goes
+        # before. `>=` keeps a tie deterministic: the figure wins the position.
+        if box and float(box[1]) >= top:
+            return index, True
+
+    if last >= 0:
+        # Every block on the page sits above it — the end of the page is the
+        # measured answer, not a fallback, as long as something was measurable.
+        measured = any(b.get("bbox") for b in blocks[first:last + 1]
+                       if int(b.get("page") or 0) == page)
+        return last + 1, measured
+    return len(blocks), False
 
 
 def _figure_block(index: int, page: int, figure: dict[str, Any]) -> dict[str, Any]:
@@ -515,13 +558,6 @@ def _figure_block(index: int, page: int, figure: dict[str, Any]) -> dict[str, An
         height_pt=figure["height_pt"], pixel_width=None, pixel_height=None,
         alt=figure["caption"], target_alt=None, source="mineru",
     )
-
-
-def _last_index_on_page(blocks: list[dict[str, Any]], page: int) -> int:
-    for index in range(len(blocks) - 1, -1, -1):
-        if int(blocks[index].get("page") or 0) == page:
-            return index
-    return -1
 
 
 def _copy_asset(src: Path, asset_dir: Path, seen: dict[str, str], page: int) -> str | None:
