@@ -65,8 +65,17 @@ python skills/revayat/scripts/revayat.py doctor
 Optional, and only for scanned or mixed PDFs:
 
 ```bash
-pip install ocrmypdf          # plus Tesseract and Ghostscript
-winget install tesseract-ocr.tesseract ArtifexSoftware.GhostScript   # Windows
+pip install ocrmypdf
+
+# Tesseract (the OCR engine):
+winget install tesseract-ocr.tesseract     # Windows
+brew install tesseract                     # macOS
+sudo apt install tesseract-ocr             # Debian/Ubuntu
+
+# Ghostscript — not carried by winget; download the installer:
+#   https://ghostscript.com/releases/gsdnld.html
+brew install ghostscript                   # macOS
+sudo apt install ghostscript               # Debian/Ubuntu
 ```
 
 ## Use

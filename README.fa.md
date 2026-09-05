@@ -79,8 +79,17 @@ python skills/revayat/scripts/revayat.py doctor
 <div dir="ltr">
 
 ```bash
-pip install ocrmypdf          # به‌همراه Tesseract و Ghostscript
-winget install tesseract-ocr.tesseract ArtifexSoftware.GhostScript   # ویندوز
+pip install ocrmypdf
+
+# Tesseract (موتور OCR):
+winget install tesseract-ocr.tesseract     # Windows
+brew install tesseract                     # macOS
+sudo apt install tesseract-ocr             # Debian/Ubuntu
+
+# Ghostscript — در winget نیست؛ نصب‌کننده را از اینجا بگیرید:
+#   https://ghostscript.com/releases/gsdnld.html
+brew install ghostscript                   # macOS
+sudo apt install ghostscript               # Debian/Ubuntu
 ```
 
 </div>
