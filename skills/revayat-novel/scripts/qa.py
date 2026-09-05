@@ -112,6 +112,7 @@ def check_book(
         _check_assets(book, assets, report)
     _check_typography(book, report)
     _check_ocr_confidence(book, report, strict)
+    _check_page_geometry(book, report)
     if glossary:
         _check_first_mentions(book, glossary, report)
         for violation in gl.check(glossary, book):
@@ -462,6 +463,36 @@ def _check_ocr_confidence(book: dict[str, Any], report: Report,
             detail += " — check " + ", ".join(repr(w) for w in words[:5])
         report.add(ERROR if strict else WARNING, "ocr-low-confidence",
                    block["id"], detail)
+
+
+def _check_page_geometry(book: dict[str, Any], report: Report) -> None:
+    """Say when the source was not one shape all the way through.
+
+    The builder sets one page size for the whole document, which is right for
+    the overwhelming majority of books and wrong for the ones with a landscape
+    plate or differently trimmed front matter. Those pages will be reflowed onto
+    the dominant size. That is a defensible choice, but it is not something to
+    make silently while the report implies the original geometry was preserved.
+    """
+    geometry = (book.get("source") or {}).get("page_geometry") or {}
+    if not geometry or geometry.get("uniform", True):
+        return
+
+    variants = geometry.get("variants") or []
+    shapes = ", ".join(
+        f"{v['width_pt']:.0f}x{v['height_pt']:.0f}pt on {v['page_count']} page(s)"
+        for v in variants[:4]
+    )
+    report.add(WARNING, "page-geometry-mixed", "source",
+               f"the source is not one page size: {shapes}. The document is "
+               f"built at {book['page']['width_pt']:.0f}x"
+               f"{book['page']['height_pt']:.0f}pt and the rest is reflowed")
+
+    rotated = geometry.get("rotated_pages") or []
+    if rotated:
+        report.add(WARNING, "page-rotated", "source",
+                   f"page(s) {rotated[:8]} are rotated in the source; the "
+                   f"translation is built upright")
 
 
 def _check_typography(book: dict[str, Any], report: Report) -> None:
