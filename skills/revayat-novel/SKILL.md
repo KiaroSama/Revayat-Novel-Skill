@@ -182,6 +182,38 @@ this refuses with `"refused": "stale-worksheets"` rather than quietly handing
 you worksheets that no longer match the book. Re-read the reason it gives; add
 `--force` only once you have decided the existing translations are still good.
 
+### For a long PDF, cut by page instead
+
+A whole novel must never reach one model context, and a worksheet cut by
+character budget alone breaks wherever the budget happens to run out. A page is
+a boundary the book already has — stable between runs, the unit a reviewer
+looks at, and the only unit a *rendered* page can be compared against.
+
+```bash
+$PY $SKILL_DIR/scripts/revayat-novel.py pages build \
+  --book $WORK/book.json --out $WORK/chunks --glossary $WORK/glossary.json
+```
+
+This writes one worksheet per source page, in the same format step 5 expects,
+so the rest of the pipeline is unchanged. Each page job carries only what it
+needs: the glossary rows that apply on that page, the voices that speak there,
+the words OCR was unsure of there, and a **bounded** slice of the neighbouring
+pages marked *do not translate*.
+
+A paragraph the page break cut in half belongs to the page it *started* on and
+is translated exactly once; the page it runs onto sees it as context only.
+Never translate a block that appears under the neighbour-context heading — it
+already belongs to another page's worksheet.
+
+```bash
+$PY $SKILL_DIR/scripts/revayat-novel.py pages status --chunks $WORK/chunks
+$PY $SKILL_DIR/scripts/revayat-novel.py pages next   --chunks $WORK/chunks
+```
+
+`status` reports every page's state; `next` names the first page still to do,
+so an interrupted run resumes on the page it stopped at rather than from the
+beginning.
+
 ## Step 5 — Translate
 
 For each `$WORK/chunks/chunkNNNN.md`, produce `$WORK/chunks/out_chunkNNNN.md`.
@@ -221,8 +253,17 @@ $PY $SKILL_DIR/scripts/revayat-novel.py chunk status --chunks $WORK/chunks
 ## Step 6 — Merge
 
 ```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py merge --book $WORK/book.json --chunks $WORK/chunks
+$PY $SKILL_DIR/scripts/revayat-novel.py merge \
+  --book $WORK/book.json --chunks $WORK/chunks --glossary $WORK/glossary.json
 ```
+
+**`--glossary` is not optional.** Merge is where each locked name's single
+introduction is settled. The worksheets *ask* the owning chunk to introduce the
+name, but chunks are translated by agents that cannot see one another, so every
+one of them answers "yes, this is the first mention" — and without this pass the
+finished book either repeats «الیزابت بنت (Elizabeth Bennet)» in thirty places
+or never introduces her at all. Merge flattens every introduction and puts back
+exactly one. `first_mentions.introduced` in the report says where each landed.
 
 | Field | Meaning | Action |
 | --- | --- | --- |
@@ -230,8 +271,10 @@ $PY $SKILL_DIR/scripts/revayat-novel.py merge --book $WORK/book.json --chunks $W
 | `missing_outputs` | those chunks were never translated | translate them |
 | `missing_units` | headers were dropped | re-run those chunks |
 | `unknown_units` | headers were invented | re-run those chunks |
+| `first_mentions.unplaceable` | a locked name appears nowhere in the Persian | check that name's translation |
 
-Re-running merge after a fix is always safe.
+Re-running merge after a fix is always safe; the first-mention pass is
+idempotent.
 
 ## Step 7 — Persian typography
 
@@ -248,6 +291,32 @@ keep Latin numerals.
 $PY $SKILL_DIR/scripts/revayat-novel.py qa check \
   --book $WORK/book.json --assets $WORK/assets --glossary $WORK/glossary.json
 ```
+
+### If you took the page route, look at each page before accepting it
+
+Every other gate here reads the IR, and a page can be right in the IR and wrong
+on the page: a picture that slid to the far side of a break, a paragraph Word
+set left-to-right because a style lost its `w:bidi`, a caption clipped off the
+trim, a page that came out blank because the build failed halfway.
+
+```bash
+$PY $SKILL_DIR/scripts/revayat-novel.py render-qa \
+  --book $WORK/book.json --work $WORK --page 12 --source-pdf $WORK/ocr.pdf
+```
+
+It writes `renders/source/page-0012.png`, `renders/target/page-0012.png` and
+`qa/pages/page-0012.json`, then compares them **structurally**. Do not expect
+the two images to match: Persian is a different language set in the other
+direction, so the line breaks, the line count and often the page count differ.
+What must hold is that every block is present once, nothing is clipped or
+outside the margins, the illustrations are the same ones in the same order at
+the same aspect ratio, and the paragraphs are right-to-left.
+
+A page that fails is re-translated and re-rendered on its own — `--max-attempts`
+bounds the retries so a page that cannot be fixed stops rather than looping.
+Accept a page only when its report is clean, and run the whole-document check
+again after assembly, because a page that passed alone can still regress when
+the book is put together.
 
 **Do not build while `"ok"` is false.** Fix by error code:
 
