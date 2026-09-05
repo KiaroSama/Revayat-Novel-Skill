@@ -17,6 +17,7 @@ import pytest
 import bookir as ir
 import renderqa
 import runstate
+from tests_support import png_bytes
 
 #: Long enough to have wrapped, and unambiguously Persian.
 PERSIAN = "صبح به آرامی از فراز تپه‌ها بالا آمد و الیزابت کنار پنجره ایستاده بود."
@@ -395,3 +396,85 @@ def test_the_cli_reports_the_page_and_exits_on_the_outcome(tmp_path, capsys):
     assert renderqa.main(arguments + ["--target-pdf", str(bad),
                                       "--max-attempts", "1"]) == 2
     assert json.loads(capsys.readouterr().out)["refused"] == "retry-exhausted"
+
+
+# --------------------------------------------------------------------------- #
+# Laying the document out, rather than making the caller do it
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def sample_book_and_docx(tmp_path):
+    """A saved book and the document built from it — what a caller really has."""
+    import argparse
+
+    from build_docx import Builder, add_arguments
+
+    book = ir.new_book(lang_source="en", lang_target="fa-IR")
+    block = ir.make_block("paragraph", 1, page=1, bbox=[72, 90, 320, 140],
+                          text="A paragraph on the only page of this book.")
+    block["target"] = "بندی فارسی که به اندازهٔ کافی بلند است تا از گیت‌ها رد شود."
+    book["blocks"] = [block]
+
+    book_path = tmp_path / "book.json"
+    ir.save_book(book, book_path)
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    options = parser.parse_args(["--book", "x", "--out", "y", "--font", "Tahoma",
+                                 "--no-toc"])
+    docx_path = tmp_path / "book.fa.docx"
+    Builder(book, tmp_path, options).build(docx_path)
+    return book_path, docx_path
+
+
+def test_a_missing_converter_says_what_to_install(monkeypatch, tmp_path):
+    """The message has to name the fix, not just the symptom."""
+    monkeypatch.setattr(renderqa, "find_converter", lambda: None)
+    with pytest.raises(renderqa.RenderError) as raised:
+        renderqa.render_docx(tmp_path / "book.docx", tmp_path / "renders")
+    message = str(raised.value)
+    assert "LibreOffice" in message and "--target-pdf" in message
+
+
+def test_a_conversion_failure_leaves_the_page_unverified_not_passed(
+        monkeypatch, tmp_path, sample_book_and_docx):
+    """"We could not look" must never be recorded as "we looked and it was fine".
+
+    This is the failure mode worth a test of its own: a converter that is not
+    installed is the *normal* state on a fresh machine, and a check that quietly
+    passes there would be worse than no check.
+    """
+    book_path, docx_path = sample_book_and_docx
+    monkeypatch.setattr(renderqa, "find_converter", lambda: None)
+
+    report = renderqa.check(tmp_path, book_path, 1, docx=docx_path)
+    assert report["ok"] is False, report
+    assert "LibreOffice" in report["unverified"]
+    assert report.get("findings") in (None, []), (
+        "an unverified page invented findings it could not have seen"
+    )
+
+
+def test_an_explicit_target_wins_over_conversion(monkeypatch, tmp_path,
+                                                 sample_book_and_docx):
+    """A caller who rendered the page themselves is not second-guessed."""
+    book_path, docx_path = sample_book_and_docx
+    called = []
+    monkeypatch.setattr(renderqa, "render_docx",
+                        lambda *a, **k: called.append(1))
+
+    supplied = tmp_path / "supplied.png"
+    supplied.write_bytes(png_bytes(40, 30))
+
+    renderqa.check(tmp_path, book_path, 1, docx=docx_path, target_image=supplied)
+    assert not called, "the converter ran even though a target was supplied"
+
+
+def test_a_target_image_that_is_not_there_is_reported_not_raised(
+        tmp_path, sample_book_and_docx):
+    """A wrong path is a mistake to report, not a traceback to hand back."""
+    book_path, _ = sample_book_and_docx
+    report = renderqa.check(tmp_path, book_path, 1,
+                            target_image=tmp_path / "missing.png")
+    assert report["ok"] is False
+    assert "missing.png" in report["unverified"]

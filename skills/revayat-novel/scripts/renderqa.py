@@ -19,8 +19,13 @@ Expectations come from ``book.json`` rather than from re-reading the source
 PDF, because the IR *is* what the source page became and ownership by page is
 already decided there — but the source page is still rendered beside the
 translated one, because the reviewer this produces evidence for wants to see
-both. Nothing here shells out to Word or LibreOffice: the caller renders the
-translated page however it likes and hands over a PDF page or an image.
+both.
+
+Give it ``--docx`` and it lays the document out with LibreOffice itself; give
+it ``--target-pdf`` or ``--target-image`` and it uses what you hand over. The
+first exists because a check nobody can run without a manual detour is a check
+nobody runs. LibreOffice is not Word and will not always break lines where Word
+does, which does not matter here: none of these checks ask where a line broke.
 
 Artifacts, all under the working directory::
 
@@ -35,6 +40,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,6 +49,11 @@ import bookir as ir
 import pagerun
 import qa
 import runstate
+
+
+class RenderError(RuntimeError):
+    """The page could not be laid out — the message names what to install."""
+
 
 SCHEMA = "revayat-novel/renderqa@1"
 
@@ -467,6 +478,7 @@ def check(
     *,
     target_pdf: Path | None = None,
     target_image: Path | None = None,
+    docx: Path | None = None,
     source_pdf: Path | None = None,
     dpi: int = DEFAULT_DPI,
     max_attempts: int = MAX_ATTEMPTS,
@@ -478,6 +490,17 @@ def check(
     third must never read as the first.
     """
     work_dir, book_path = Path(work_dir), Path(book_path)
+
+    # Laying the document out is the caller's job only when they want it to be.
+    # A converter failure is reported as unverified rather than raised: "we
+    # could not look" must not be able to masquerade as "we looked and it was
+    # fine", and it must not stop the report being written either.
+    conversion_failure = ""
+    if docx is not None and target_pdf is None and target_image is None:
+        try:
+            target_pdf = render_docx(Path(docx), work_dir / "renders")
+        except RenderError as error:
+            conversion_failure = str(error)
     state = runstate.RunState(work_dir)
     record = state.page(page) or {}
     attempts = int(record.get("attempts", 0))
@@ -505,6 +528,13 @@ def check(
             renders["source"] = str(rendered.relative_to(work_dir).as_posix())
 
     target_png = work_dir / "renders" / "target" / f"page-{page:04d}.png"
+    if target_image is not None and not Path(target_image).exists():
+        # Same rule as everywhere else here: failing to produce evidence must
+        # not stop the page being reported on, and must never be mistaken for
+        # a page that was looked at and found sound.
+        conversion_failure = f"{target_image} is not there"
+        target_image = None
+
     if target_image is not None:
         target_png.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(Path(target_image), target_png)
@@ -515,7 +545,7 @@ def check(
             renders["target"] = str(target_png.relative_to(work_dir).as_posix())
 
     try:
-        unverified = _why_unverified(target_pdf)
+        unverified = _why_unverified(target_pdf, conversion_failure)
         view = None if unverified else page_view(Path(target_pdf), page - 1)
     except Exception as failure:  # a damaged PDF is "we could not look", not a pass
         unverified, view = f"{target_pdf} could not be read back: {failure}", None
@@ -552,7 +582,56 @@ def check(
     return written
 
 
-def _why_unverified(target_pdf: Path | None) -> str:
+def find_converter() -> list[str] | None:
+    """How to turn a DOCX into a PDF on this machine, or ``None``."""
+    for name in ("soffice", "libreoffice"):
+        found = shutil.which(name)
+        if found:
+            return [found, "--headless", "--convert-to", "pdf", "--outdir"]
+    return None
+
+
+def render_docx(docx: Path, out_dir: Path, *, timeout: float = 300.0) -> Path:
+    """Lay the built document out as pages, so there is something to look at.
+
+    Render QA compares a *rendered* page, and until now the caller had to
+    produce that PDF by hand — which meant the check that exists to be run
+    routinely was the one step nobody could run without a manual detour.
+
+    LibreOffice is not Word, and its pagination will not always match Word's.
+    That is acceptable here and worth being explicit about: this check is
+    structural, not typographic. It asks whether a block went missing, whether
+    a picture moved, whether a paragraph came out left-to-right — none of which
+    depend on the two renderers agreeing about where a line breaks.
+    """
+    launcher = find_converter()
+    if not launcher:
+        raise RenderError(
+            "no converter found: install LibreOffice so the built document can "
+            "be laid out as pages (macOS: brew install --cask libreoffice · "
+            "Debian: apt install libreoffice-writer · Windows: winget install "
+            "TheDocumentFoundation.LibreOffice). Or render it yourself and pass "
+            "--target-pdf."
+        )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        finished = subprocess.run([*launcher, str(out_dir), str(docx)],
+                                  capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        raise RenderError(
+            f"the converter did not finish within {timeout:.0f}s"
+        ) from error
+
+    produced = out_dir / (Path(docx).stem + ".pdf")
+    if finished.returncode != 0 or not produced.exists():
+        detail = finished.stderr.decode("utf-8", "replace").strip()[:300]
+        raise RenderError(f"the converter produced no PDF: {detail}")
+    return produced
+
+
+def _why_unverified(target_pdf: Path | None, conversion_failure: str = "") -> str:
+    if conversion_failure:
+        return conversion_failure
     if _pymupdf() is None:
         return "PyMuPDF is not installed, so no page could be read back"
     if target_pdf is None:
@@ -591,6 +670,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--target-image", default=None,
                         help="a pre-rendered page image to file as evidence "
                              "instead of rasterising --target-pdf")
+    parser.add_argument("--docx", default=None,
+                        help="the built document; laid out with LibreOffice")
     parser.add_argument("--source-pdf", default=None,
                         help="rendered beside the translation for the reviewer")
     parser.add_argument("--dpi", type=int, default=DEFAULT_DPI)
