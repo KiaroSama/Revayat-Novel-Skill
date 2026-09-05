@@ -22,6 +22,7 @@ import pytest
 import bookir as ir
 import pagerun
 import renderqa
+import review
 import runstate
 from read_pdf import _merge_split_paragraphs
 
@@ -634,6 +635,18 @@ def _rendered(path: Path, text: str) -> Path:
     return path
 
 
+def _reviewed(work_dir, page: int = 1) -> dict:
+    """File a clean reviewer verdict, the way a reviewer with eyes would.
+
+    Every question answered explicitly: `review.record` refuses a partial
+    answer sheet, so a test cannot accidentally pass a page by leaving one out.
+    """
+    filed = review.record(work_dir, page,
+                          dict.fromkeys(review.QUESTIONS, True))
+    assert filed["ok"], filed
+    return filed
+
+
 def test_a_page_walks_from_pending_to_accepted_through_the_operations(tmp_path):
     """Every step here is a production entry point; nothing writes the record.
 
@@ -667,6 +680,11 @@ def test_a_page_walks_from_pending_to_accepted_through_the_operations(tmp_path):
     assert written["ok"] is True, written
     assert pagerun.status(pages)["pages"][0]["state"] == "qa_passed"
 
+    # Still not accepted: the checks are geometric, and nobody has looked yet.
+    unseen = pagerun.accept(book_path, pages, 1)
+    assert unseen["ok"] is False and unseen["refused"] == "not-reviewed"
+
+    _reviewed(tmp_path)
     accepted = pagerun.accept(book_path, pages, 1)
     assert accepted["ok"] is True and accepted["state"] == "accepted"
 
@@ -762,6 +780,7 @@ def test_re_translating_an_accepted_page_takes_its_acceptance_away(tmp_path):
     pagerun.merge_page(book_path, pages, 1)
     renderqa.check(tmp_path, book_path, 1,
                    target_pdf=_rendered(tmp_path / "target.pdf", TARGET))
+    _reviewed(tmp_path)
     assert pagerun.accept(book_path, pages, 1)["ok"]
 
     corrected = "A second attempt at the very same line of prose entirely."
@@ -793,6 +812,15 @@ def test_the_cli_merges_and_accepts_one_page(tmp_path, capsys):
 
     renderqa.check(tmp_path, book_path, 1,
                    target_pdf=_rendered(tmp_path / "target.pdf", TARGET))
+
+    assert pagerun.main(["accept", *arguments]) == 2
+    assert json.loads(capsys.readouterr().out)["refused"] == "not-reviewed"
+
+    assert pagerun.main(["review", "--pages", str(pages), "--page", "1",
+                         *[f"--answer={name}=yes" for name in review.QUESTIONS],
+                         "--note", "looked at both renders"]) == 0
+    assert json.loads(capsys.readouterr().out)["ok"] is True
+
     assert pagerun.main(["accept", *arguments]) == 0
     assert json.loads(capsys.readouterr().out)["state"] == "accepted"
 

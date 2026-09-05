@@ -50,6 +50,7 @@ import bookir as ir
 import chunk as chunking
 import glossary as gl
 import merge as merging
+import review as page_review
 import runstate
 
 SCHEMA = "revayat-novel/pagerun@1"
@@ -747,12 +748,13 @@ def _merge_problem(report: dict[str, Any]) -> str:
 def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
     """Finish one page — only once every gate it has to clear actually has.
 
-    Three separate pieces of evidence, because a page can look finished in any
+    Four separate pieces of evidence, because a page can look finished in any
     one of them and not be: the book has to hold Persian for every unit the
-    page sent out, the run record has to say render QA passed, and the report
-    render QA wrote has to still say so itself. A gate nobody ran must never
-    read as a gate that passed, so a missing report refuses rather than
-    defaults — and because the record goes *backwards* when a page is merged
+    page sent out, the run record has to say render QA passed, the report
+    render QA wrote has to still say so itself, and somebody has to have
+    actually looked at the page - geometry cannot see a plate three pages from
+    the paragraph it belongs to. A gate nobody ran must never read as a gate
+    that passed, so a missing report or review refuses rather than defaults — and because the record goes *backwards* when a page is merged
     again, a page re-translated after it passed cannot keep the old pass.
     """
     state = runstate.RunState(out_dir.parent)
@@ -786,9 +788,15 @@ def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
                 "detail": report.get("detail")
                           or f"{report_file} does not report a page that passed"}
 
+    seen = page_review.verdict(out_dir.parent, page)
+    if not seen["ok"]:
+        return {"ok": False, "page": page, "refused": seen["refused"],
+                "detail": seen["detail"]}
+
     state.set_page(page, "accepted")
     return {"ok": True, "page": page, "state": "accepted",
-            "units": len(unit_ids), "jobs": len(entries)}
+            "units": len(unit_ids), "jobs": len(entries),
+            "reviewed": seen.get("render_sha256", "")[:12]}
 
 
 # --------------------------------------------------------------------------- #
@@ -820,6 +828,16 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     p_merge.add_argument("--pages", required=True)
     p_merge.add_argument("--page", type=int, required=True)
     p_merge.add_argument("--glossary", default=None)
+
+    p_review = sub.add_parser(
+        "review", help="file what a reviewer saw on the rendered page")
+    p_review.add_argument("--pages", required=True)
+    p_review.add_argument("--page", type=int, required=True)
+    p_review.add_argument(
+        "--answer", action="append", default=[], metavar="ID=yes|no",
+        help="one per question: " + ", ".join(sorted(page_review.QUESTIONS)))
+    p_review.add_argument("--note", default="",
+                          help="what was wrong, in the reviewer's own words")
 
     p_accept = sub.add_parser(
         "accept", help="finish a page whose gates have all actually passed")
@@ -877,6 +895,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(report, ensure_ascii=False, indent=1))
         return 0 if report["ok"] else 1
+
+    if args.action == "review":
+        try:
+            answers = dict(page_review.parse_answer(item) for item in args.answer)
+        except ValueError as wrong:
+            print(json.dumps({"ok": False, "refused": "bad-answer",
+                              "detail": str(wrong),
+                              "questions": page_review.QUESTIONS},
+                             ensure_ascii=False, indent=1))
+            return 2
+        filed = page_review.record(Path(args.pages).parent, args.page, answers,
+                                   note=args.note)
+        print(json.dumps(filed, ensure_ascii=False, indent=1))
+        return 0 if filed["ok"] else 2
 
     if args.action == "accept":
         outcome = accept(Path(args.book), Path(args.pages), args.page)
