@@ -314,8 +314,13 @@ class Builder:
         stray = [c for c in cells if c not in placed]
 
         if placed:
-            rows = max(int(c["row"]) for c in placed)
-            columns = max(int(c["cell"]) for c in placed)
+            # Sized by the grid the cells *cover*, not by the highest
+            # coordinate: a cell at row 2 spanning two rows needs a third row
+            # to exist before it can be merged into.
+            rows = max(int(c["row"]) + int(c.get("row_span", 1)) - 1
+                       for c in placed)
+            columns = max(int(c["cell"]) + int(c.get("col_span", 1)) - 1
+                          for c in placed)
             table = self.document.add_table(rows=rows, cols=columns)
             if _has_style(self.document, "Table Grid"):
                 table.style = "Table Grid"
@@ -325,7 +330,19 @@ class Builder:
                 ooxml.set_table_rtl(table)
 
             for block in placed:
-                cell = table.cell(int(block["row"]) - 1, int(block["cell"]) - 1)
+                top = int(block["row"]) - 1
+                left = int(block["cell"]) - 1
+                cell = table.cell(top, left)
+
+                # Put a merge back before writing into it: merging afterwards
+                # concatenates the paragraphs of every cell involved, so the
+                # text would appear once per grid position it covers.
+                bottom = top + int(block.get("row_span", 1)) - 1
+                right = left + int(block.get("col_span", 1)) - 1
+                if (bottom, right) != (top, left):
+                    cell = cell.merge(table.cell(min(bottom, rows - 1),
+                                                 min(right, columns - 1)))
+
                 paragraph = cell.paragraphs[0]
                 ooxml.set_paragraph_rtl(paragraph, self.options.rtl)
                 self.write_markup(paragraph, self._text_of(block))

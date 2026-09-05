@@ -17,6 +17,7 @@ import pytest
 import bookir as ir
 import renderqa
 import runstate
+import wordrender
 from tests_support import png_bytes
 
 #: Long enough to have wrapped, and unambiguously Persian.
@@ -444,23 +445,53 @@ def sample_book_and_docx(tmp_path):
     return book_path, docx_path
 
 
-def test_no_word_says_what_to_do_instead(monkeypatch, tmp_path):
-    """The message has to name the fix, not just the symptom."""
-    monkeypatch.setattr(renderqa, "word_available", lambda: "Word is not here")
+def test_a_machine_with_neither_renderer_says_what_to_install(monkeypatch,
+                                                              tmp_path):
+    """The message has to name the fix for *this* platform, not a generic one."""
+    docx = tmp_path / "book.docx"
+    docx.write_bytes(b"a document that exists, so the missing renderer is the "
+                     b"only thing left to report")
+    monkeypatch.setattr(wordrender, "word_available", lambda: False)
+    monkeypatch.setattr(wordrender, "find_libreoffice", lambda: None)
     with pytest.raises(renderqa.RenderError) as raised:
-        renderqa.render_docx(tmp_path / "book.docx", tmp_path / "renders")
-    assert "--target-pdf" in str(raised.value)
+        renderqa.render_docx(docx, tmp_path / "renders")
+    assert "LibreOffice" in str(raised.value)
 
 
-def test_a_platform_without_word_is_named_rather_than_guessed(monkeypatch):
-    """Off Windows this path cannot run, and saying so is the whole point.
+def test_windows_reaches_for_word_and_everywhere_else_for_libreoffice(monkeypatch):
+    """The deliverable is a .docx, so Word's pagination is the real one.
 
-    Substituting a different renderer would be worse than refusing: the
-    document is a .docx, so a report about where things sit on the page is only
-    true of Word's pagination.
+    Off Windows a structural check against LibreOffice's layout is still worth
+    far more than no check: nothing asked here depends on where a line broke.
     """
-    monkeypatch.setattr(renderqa.sys, "platform", "linux")
-    assert "Windows" in renderqa.word_available()
+    monkeypatch.setattr(wordrender.sys, "platform", "win32")
+    monkeypatch.setattr(wordrender, "word_available", lambda: True)
+    monkeypatch.setattr(wordrender, "find_libreoffice", lambda: "/usr/bin/soffice")
+    assert wordrender.backend() == "word"
+
+    monkeypatch.setattr(wordrender, "word_available", lambda: False)
+    assert wordrender.backend() == "libreoffice"
+
+
+def test_word_runs_in_a_child_process_so_the_timeout_is_real(monkeypatch, tmp_path):
+    """COM cannot be cancelled, so a timeout on an in-process call is a lie.
+
+    The guard is that the parent runs Word as a subprocess and kills it. This
+    proves the wall clock is enforced without needing Word installed.
+    """
+    import subprocess
+
+    docx = tmp_path / "book.docx"
+    docx.write_bytes(b"not really a document")
+    monkeypatch.setattr(wordrender, "word_available", lambda: True)
+
+    def wedged(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd="word", timeout=kwargs.get("timeout", 1))
+
+    monkeypatch.setattr(wordrender.subprocess, "run", wedged)
+    with pytest.raises(wordrender.RenderError) as raised:
+        wordrender.render(docx, tmp_path / "renders", timeout=1)
+    assert "terminated" in str(raised.value)
 
 
 def test_a_conversion_failure_leaves_the_page_unverified_not_passed(
@@ -472,11 +503,12 @@ def test_a_conversion_failure_leaves_the_page_unverified_not_passed(
     passes there would be worse than no check.
     """
     book_path, docx_path = sample_book_and_docx
-    monkeypatch.setattr(renderqa, "word_available", lambda: "Word is not here")
+    monkeypatch.setattr(wordrender, "word_available", lambda: False)
+    monkeypatch.setattr(wordrender, "find_libreoffice", lambda: None)
 
     report = renderqa.check(tmp_path, book_path, 1, docx=docx_path)
     assert report["ok"] is False, report
-    assert "Word is not here" in report["unverified"]
+    assert "LibreOffice" in report["unverified"]
     assert report.get("findings") in (None, []), (
         "an unverified page invented findings it could not have seen"
     )
