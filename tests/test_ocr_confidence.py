@@ -104,14 +104,10 @@ def test_boxes_are_converted_from_pixels_to_points():
     page = ocr.build_page(
         tsv((1, 1, 1, 300, 600, 300, 150, 95.0, "word")), 1, dpi=300
     )
-    word = page["blocks"][0]["lines"][0]["low_words"]
-    left, top, right, bottom = ocr.build_page(
-        tsv((1, 1, 1, 300, 600, 300, 150, 10.0, "word")), 1, dpi=300
-    )["blocks"][0]["lines"][0]["low_words"][0]["bbox"]
+    left, top, right, bottom = page["blocks"][0]["lines"][0]["words"][0]["bbox"]
     assert (right - left) == pytest.approx(72.0)
     assert (bottom - top) == pytest.approx(36.0)
     assert (left, top) == pytest.approx((72.0, 144.0))
-    assert word == []  # the confident run keeps no per-word detail
 
 
 def test_words_fold_into_lines_and_lines_into_blocks():
@@ -135,14 +131,22 @@ def test_words_fold_into_lines_and_lines_into_blocks():
     assert page["grade"] == "medium"
 
 
-def test_only_the_words_a_reviewer_must_check_are_kept():
-    """Storing every word makes a sidecar nobody opens."""
+def test_every_word_keeps_its_own_confidence_and_box():
+    """The confident words are evidence too.
+
+    A reviewer judging a doubtful word reads it in the line around it, and a
+    later pass that wants a stricter threshold cannot recover words that were
+    discarded at write time. So the record is per word, and the file is written
+    compactly instead of being made smaller by throwing data away.
+    """
     page = ocr.build_page(tsv(
         (1, 1, 1, 100, 100, 90, 30, 97.0, "certain"),
         (1, 1, 2, 200, 100, 90, 30, 12.0, "guess"),
     ), 1, low=60)
     line = page["blocks"][0]["lines"][0]
-    assert [w["text"] for w in line["low_words"]] == ["guess"]
+    assert [w["text"] for w in line["words"]] == ["certain", "guess"]
+    assert [w["conf"] for w in line["words"]] == [97.0, 12.0]
+    assert all(len(w["bbox"]) == 4 for w in line["words"])
     assert line["text"] == "certain guess"
 
 
@@ -154,7 +158,8 @@ def test_a_page_of_pure_noise_is_graded_low_not_dropped():
     ), 7)
     assert page["grade"] == "low"
     assert page["blocks"], "the noise was discarded instead of flagged"
-    assert len(page["blocks"][0]["lines"][0]["low_words"]) == 2
+    words = page["blocks"][0]["lines"][0]["words"]
+    assert len(words) == 2 and all(w["conf"] < 60 for w in words)
 
 
 def test_an_empty_page_yields_no_blocks_and_no_confidence():
@@ -185,8 +190,8 @@ def _page(number, blocks):
                 {"id": f"o{number:04d}-{i:03d}", "type": "text", "reading_order": i,
                  "bbox": box, "confidence": conf, "grade": ocr.grade(conf),
                  "lines": [{"bbox": box, "confidence": conf, "grade": ocr.grade(conf),
-                            "text": text, "low_words": low_words}]}
-                for i, (box, conf, text, low_words) in enumerate(blocks)
+                            "text": text, "words": words}]}
+                for i, (box, conf, text, words) in enumerate(blocks)
             ]}
 
 
@@ -197,8 +202,12 @@ def test_confidence_reaches_the_block_it_belongs_to():
         ir.make_block("paragraph", 2, page=1, bbox=[50, 400, 350, 460], text="Bottom."),
     ]
     sidecar = _sidecar([_page(1, [
-        ([52, 102, 348, 158], 95.0, "Top.", []),
-        ([52, 402, 348, 458], 41.0, "Bottom.", [{"text": "Bottorn"}]),
+        ([52, 102, 348, 158], 95.0, "Top.",
+         [{"text": "Top.", "conf": 95.0, "bbox": [52, 102, 348, 158]}]),
+        # The second pass misread one letter: near enough to be the same
+        # region, doubtful enough to be worth a look.
+        ([52, 402, 348, 458], 41.0, "Bottorn.",
+         [{"text": "Bottorn.", "conf": 41.0, "bbox": [52, 402, 348, 458]}]),
     ])])
 
     summary = ocr.attach(book, sidecar)
@@ -208,7 +217,7 @@ def test_confidence_reaches_the_block_it_belongs_to():
     top, bottom = book["blocks"]
     assert top["ocr"]["grade"] == "high"
     assert bottom["ocr"]["grade"] == "low"
-    assert bottom["ocr"]["low_words"] == ["Bottorn"]
+    assert bottom["ocr"]["low_words"] == ["Bottorn."]
     assert bottom["ocr"]["source_block"] == "o0001-001"
     assert book["source"]["ocr"]["sidecar"] == "source.ocr.json"
 
@@ -307,7 +316,8 @@ def test_qa_reports_a_low_confidence_block_for_review():
         block["target"] = "ترجمهٔ این بند که به اندازهٔ کافی بلند است."
     ocr.attach(book, _sidecar([_page(4, [
         ([50, 100, 350, 160], 95.0, "Source.", []),
-        ([50, 400, 350, 460], 22.0, "Also source.", [{"text": "Alsa"}]),
+        ([50, 400, 350, 460], 22.0, "Also source.",
+         [{"text": "Alsa", "conf": 22.0, "bbox": [50, 400, 350, 460]}]),
     ])]))
 
     summary = qa.check_book(book).summary()
@@ -329,4 +339,84 @@ def test_strict_makes_an_unsure_block_blocking():
     book["blocks"][0]["target"] = "ترجمهٔ این بند که به اندازهٔ کافی بلند است."
     ocr.attach(book, _sidecar([_page(1, [([50, 100, 350, 160], 20.0, "Source.", [])])]))
 
+    assert qa.check_book(book, strict=True).summary()["ok"] is False
+
+
+# --------------------------------------------------------------------------- #
+# Provenance: this is a second recognition, not a readout of the embedded layer
+# --------------------------------------------------------------------------- #
+
+def test_a_score_for_different_text_is_refused_not_attached():
+    """Overlapping boxes are not enough to bind a confidence to a block.
+
+    The sidecar re-recognises the page; on a hard scan the two passes can read
+    the same region as different words. Attaching the second pass's confident
+    score to the first pass's text would silence the warning instead of raising
+    it -- the block would look verified when nobody has read it.
+    """
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, page=1,
+                                    bbox=[50, 100, 350, 160],
+                                    text="The morning came slowly over the ridge.")]
+    summary = ocr.attach(book, _sidecar([_page(1, [
+        ([50, 100, 350, 160], 96.0, "Registered trademarks apply herein.",
+         [{"text": "Registered", "conf": 96.0, "bbox": [50, 100, 150, 160]}]),
+    ])]))
+
+    assert summary["disputed"] == 1 and summary["matched"] == 0
+    evidence = book["blocks"][0]["ocr"]
+    assert evidence["grade"] == "review-required"
+    assert evidence["confidence"] is None, "a score was reported for other text"
+    assert "Registered" in evidence["second_pass_text"]
+
+
+def test_ordinary_ocr_disagreement_still_attaches():
+    """Spacing, case and punctuation are what two passes differ about harmlessly."""
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, page=1,
+                                    bbox=[50, 100, 350, 160],
+                                    text="The morning came slowly over the ridge.")]
+    summary = ocr.attach(book, _sidecar([_page(1, [
+        ([50, 100, 350, 160], 91.0, "The morning came slowly over the ridge",
+         [{"text": "morning", "conf": 91.0, "bbox": [50, 100, 150, 160]}]),
+    ])]))
+    assert summary["matched"] == 1 and summary["disputed"] == 0
+    assert book["blocks"][0]["ocr"]["grade"] == "high"
+
+
+def test_text_agreement_ignores_case_spacing_and_punctuation():
+    assert ocr.text_agreement("The Ridge.", "the  ridge") == pytest.approx(1.0)
+    assert ocr.text_agreement("", "") == pytest.approx(1.0)
+    assert ocr.text_agreement("something", "") == 0.0
+    assert ocr.text_agreement("morning", "evening") < 0.6
+
+
+def test_the_sidecar_says_where_its_confidence_came_from():
+    """A second-pass score must never be presented as the embedded layer's."""
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, page=1,
+                                    bbox=[50, 100, 350, 160], text="Prose here.")]
+    ocr.attach(book, _sidecar([_page(1, [
+        ([50, 100, 350, 160], 90.0, "Prose here.",
+         [{"text": "Prose", "conf": 90.0, "bbox": [50, 100, 150, 160]}]),
+    ])]))
+    assert "second independent recognition" in book["source"]["ocr"]["provenance"]
+
+
+def test_qa_reports_a_disputed_region_for_review():
+    import qa
+
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, page=3,
+                                    bbox=[50, 100, 350, 160],
+                                    text="The morning came slowly over the ridge.")]
+    book["blocks"][0]["target"] = "ترجمهٔ این بند که به اندازهٔ کافی بلند است."
+    ocr.attach(book, _sidecar([_page(3, [
+        ([50, 100, 350, 160], 96.0, "Registered trademarks apply herein.",
+         [{"text": "Registered", "conf": 96.0, "bbox": [50, 100, 150, 160]}]),
+    ])]))
+
+    findings = qa.check_book(book).summary()["findings"]
+    disputed = [f for f in findings if f["code"] == "ocr-disputed-text"]
+    assert len(disputed) == 1 and disputed[0]["unit"] == "b00001"
     assert qa.check_book(book, strict=True).summary()["ok"] is False

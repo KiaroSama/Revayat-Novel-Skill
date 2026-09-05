@@ -351,7 +351,23 @@ def _check_ocr_confidence(book: dict[str, Any], report: Report,
     """
     for block in ir.iter_text_blocks(book):
         evidence = block.get("ocr")
-        if not evidence or evidence.get("grade") != "low":
+        if not evidence:
+            continue
+
+        # The confidence sidecar is a second recognition of the same page. When
+        # its reading of a region disagrees with the text actually in the book,
+        # there is no honest score to report — and that disagreement is itself
+        # the finding: one of the two passes misread the page, and only the page
+        # image says which.
+        if evidence.get("grade") == "review-required":
+            report.add(ERROR if strict else WARNING, "ocr-disputed-text",
+                       block["id"],
+                       f"page {block.get('page')}: the confidence pass read this "
+                       f"region as {evidence.get('second_pass_text', '')[:60]!r} "
+                       f"(agreement {evidence.get('agreement')})")
+            continue
+
+        if evidence.get("grade") != "low":
             continue
         words = evidence.get("low_words") or []
         detail = f"page {block.get('page')}, recognition {evidence.get('confidence')}%"
