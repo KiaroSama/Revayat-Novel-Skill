@@ -17,6 +17,7 @@ jobs:
         uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: moderate
-          # This project is MIT and vendors nothing; a copyleft dependency
-          # would change what downstream users may do with it.
-          deny-licenses: GPL-3.0, AGPL-3.0
+          # This project is GPL-3.0-or-later, so a copyleft dependency is no
+          # longer a problem — the denial that used to sit here was written for
+          # an MIT project and would now reject licences this one is compatible
+          # with. Vulnerability severity remains the gate.
