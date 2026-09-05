@@ -1,243 +1,240 @@
 ---
 name: revayat
-description: Translate a whole book from English (or another language) into publication-quality Persian and produce a professional Word document. Handles scanned, digital and mixed PDFs with OCR, keeps every illustration at its original size, and builds real Word footnotes, a clickable table of contents, RTL typography and a locked name glossary. Use for translating novels, non-fiction, PDFs, EPUBs or DOCX files into Persian (فارسی).
+description: Translate a whole book from English (or another language) into publication-quality Persian and produce a professional Word document. Handles scanned, digital and mixed PDFs with OCR, removes colour watermarks, keeps every illustration at its original size, and builds real Word footnotes, a clickable table of contents, RTL typography and a locked name glossary. Use for translating novels, non-fiction, PDFs, EPUBs or DOCX files into Persian (فارسی).
 license: MIT
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent, AskUserQuestion
-metadata: {"homepage":"https://github.com/KiaroSama/Revayat-Skill","requires":{"bins":["python3"],"pip":["pymupdf","python-docx","beautifulsoup4"],"optional":["ocrmypdf","tesseract","mineru"]}}
+metadata: {"homepage":"https://github.com/KiaroSama/Revayat-Skill","requires":{"bins":["python3"],"pip":["pymupdf","python-docx","beautifulsoup4","pillow"],"optional":["ocrmypdf","tesseract","ghostscript","mineru"]}}
 ---
 
 # Revayat — English → Persian book translation
 
-You translate an entire book into Persian and deliver a Word file a publisher
-could work from. You are the orchestrator: deterministic work happens in the
-bundled scripts, translation happens in sub-agents, and you own the decisions
-in between.
+Run the nine steps below **in order**. Each one is a command plus a rule for
+what to do with its output. Do not improvise a different order, and do not skip
+a step because the previous one looked fine.
 
-**`{SKILL_DIR}`** below is the directory containing this `SKILL.md`. Resolve it
-once at the start and use it for every command. In a Claude Code plugin it is
-`${CLAUDE_PLUGIN_ROOT}/skills/revayat`.
+Set two variables once, then use them everywhere:
 
-## Non-negotiables
+- `SKILL_DIR` — the folder holding this file. In a Claude Code plugin it is
+  `${CLAUDE_PLUGIN_ROOT}/skills/revayat`.
+- `WORK` — a working folder for this book, e.g. `work/`.
 
-1. **Never reverse a string to fake right-to-left.** Persian is stored in
-   logical order; direction is a property of the paragraph and the run. The
-   builder sets `w:bidi` and `w:rtl`. Reversing text produces a file that looks
-   passable in one viewer and is broken everywhere else, and is unsearchable.
-2. **Never invent an id.** `@@ b00042 para` headers come from the worksheet.
-   Return every one exactly once, in order. Do not add, drop, merge, split or
-   renumber them.
-3. **Never drop a `[[fn:...]]` marker or an emphasis marker.** They are checked
-   by counting; a mismatch fails QA and costs a re-translation.
-4. **Never edit `book.json` by hand** to "fix" a problem. Fix the worksheet and
-   re-merge, so the source of truth stays reproducible.
-5. **Translate completely.** Do not summarise, abridge, or soften the source.
-   The author's register, tone, humour, irony and intent are part of the text;
-   a translation that smooths them out is a defective translation.
+Every command is `python3 $SKILL_DIR/scripts/revayat.py <stage> …`.
 
-## Step 0 — Check the environment
+---
 
-```bash
-python3 {SKILL_DIR}/scripts/revayat.py doctor
-```
+## The five rules that must never be broken
 
-If `ready` is false, install with `pip install -r {SKILL_DIR}/requirements.txt`.
-`ocrmypdf` is only needed for scanned or mixed PDFs — report it as missing when
-the probe in step 1 asks for it, rather than up front.
+1. **Never reverse Persian text** to make it read right-to-left. Direction is
+   set by the builder. Reversing produces a file that is broken everywhere but
+   one viewer.
+2. **Never invent, drop, merge, split or reorder a `@@ id` header.** Return
+   exactly the ones you were given.
+3. **Never drop a `[[fn:…]]`, `**bold**`, `*italic*` or `` `verbatim` ``
+   marker.** They are counted; a mismatch fails QA.
+4. **Never hand-edit `book.json` to fix a translation.** Fix the worksheet and
+   re-run merge.
+5. **Never shorten the book.** No summarising, no skipping a hard sentence, no
+   softening. If a step reports missing content, re-run that chunk.
 
-## Step 1 — Extract
+---
 
-Ask for the input file if the user has not given one. Then:
+## Step 1 — Check the tools
 
 ```bash
-python3 {SKILL_DIR}/scripts/revayat.py extract "<input>" --out work/
+python3 $SKILL_DIR/scripts/revayat.py doctor
 ```
 
-This writes `work/book.json` (the Book IR) and `work/assets/` (original image
-bytes). Read the JSON report it prints:
+- `"ready": true` → continue.
+- `"ready": false` → run `pip install -r $SKILL_DIR/requirements.txt`, then run
+  `doctor` again.
+- `optional_tools` showing `not found` is fine for now. Step 2 will tell you if
+  OCR is actually needed.
 
-- **`probe.kind`** — `digital`, `scanned` or `mixed`. For the latter two the
-  script runs OCRmyPDF automatically: `--skip-text` on mixed books so pages
-  that already have a good text layer are left untouched, `--force-ocr` only
-  when the whole book is a scan. It never re-encodes the illustrations.
-- If OCRmyPDF is missing, the error names the install command. Offer the user
-  the choice: install it, or re-run with `--ocr off` and accept that pages
-  without a text layer will be empty.
-- If extraction quality is poor on a difficult scan (dense layout, illustrations
-  that are not separate PDF image objects), fall back to a stronger extractor
-  and import its output:
-
-  ```bash
-  mineru -p book.pdf -o work/mineru
-  python3 {SKILL_DIR}/scripts/revayat.py extract --from-mineru work/mineru --out work/
-  ```
-
-  `--from-markdown work/book.md` imports Marker or Docling output the same way.
-
-**Sanity-check the result before translating.** Look at `stats`, then read a few
-blocks. Wrong heading levels or a body paragraph classified as a heading are
-much cheaper to notice now than after 40 chunks are translated. See
-`references/extraction.md` when something looks wrong.
-
-## Step 2 — Build the glossary
-
-Consistency across chapters is the single most visible quality signal in a
-translated novel. A sub-agent translating chapter 12 has never seen chapter 3.
+## Step 2 — Extract
 
 ```bash
-python3 {SKILL_DIR}/scripts/revayat.py glossary scan --book work/book.json --out work/glossary.json
+python3 $SKILL_DIR/scripts/revayat.py extract "<input file>" --out $WORK
 ```
 
-This proposes candidate names with frequencies and folds short forms into
-aliases (`Elizabeth` becomes an alias of `Elizabeth Bennet`, not a rival
-entity). **You then fill in the Persian.** For each entry that matters — the
-report lists them under `needs_persian`, highest frequency first — set:
+For a Persian-language source, add `--ocr-lang fas`. For other languages use the
+Tesseract code (`deu`, `fra`, `ara`, …).
 
-- `target` and `later_form` — the canonical Persian name, e.g. `الیزابت بنت`
-- `first_form` — how it appears on first mention, e.g. `الیزابت بنت (Elizabeth Bennet)`
-- `category`, `gender` — help the translator choose pronouns and verb forms
-- `locked: true` — for anything that must never drift
-- `aliases` — keep nicknames distinct. `Lizzy` is a deliberate choice by the
-  author; flattening it to the full name loses characterisation.
+Read the JSON it prints and follow the table:
 
-Only bother with names, places and recurring terms. Skip vocabulary any
-translator would render the same way.
+| What you see | What to do |
+| --- | --- |
+| `"kind": "digital"` | nothing; no OCR was needed |
+| `"kind": "scanned"` or `"mixed"` | OCR ran automatically; check `ocr.probe_after.text_share` is above `0.7` |
+| an error naming OCRmyPDF | install it as the message says, then re-run this step |
+| `clean_scan.cleaned` above 0 | a colour watermark was removed from that many pages |
+| `ocr.warning` is not null | read it; the file was still usable, so continue |
 
-Optionally add `voices` entries for characters with a distinctive register, so
-a sardonic character does not turn polite in chapter 9. See
-`references/glossary-and-voice.md`.
-
-## Step 3 — Cut into worksheets
+**Then look at the result before going further:**
 
 ```bash
-python3 {SKILL_DIR}/scripts/revayat.py chunk build \
-  --book work/book.json --out work/chunks --glossary work/glossary.json
+python3 $SKILL_DIR/scripts/revayat.py qa check --book $WORK/book.json --allow-incomplete
 ```
 
-Chunks break on chapter headings first and a character budget second, so a
-translator usually sees a whole scene. Each `work/chunks/chunkNNNN.md` already
-contains the term table, the character voices and read-only neighbouring text.
+Ignore `untranslated-block` here — nothing is translated yet. You are looking
+for `asset-missing`. If `stats.text_blocks` is under 20 for a real book,
+extraction failed: see `references/extraction.md`.
 
-## Step 4 — Translate, in parallel
+## Step 3 — Glossary
 
-**One worksheet per sub-agent, one fresh context each.** Launch them in batches
-(8 at a time is a reasonable default; lower it if you hit rate limits) using
-whatever sub-agent mechanism your runtime provides. Wait for a batch before
-starting the next.
+```bash
+python3 $SKILL_DIR/scripts/revayat.py glossary scan \
+  --book $WORK/book.json --out $WORK/glossary.json
+```
 
-Give each sub-agent this task, with `NNNN` filled in:
+The report lists `needs_persian`, most frequent first. Open
+`$WORK/glossary.json` and for **each of the first 20 entries** fill in four
+fields:
 
-> Read `work/chunks/chunkNNNN.md`. Translate it into Persian following the
-> rules in `{SKILL_DIR}/references/translation-policy.md` and
-> `{SKILL_DIR}/references/persian-typography.md`. Write the result to
-> `work/chunks/out_chunkNNNN.md`.
+```json
+"target":      "الیزابت بنت",
+"later_form":  "الیزابت بنت",
+"first_form":  "الیزابت بنت (Elizabeth Bennet)",
+"locked":      true
+```
+
+Leave `first_block_id` exactly as it is — the pipeline uses it to decide which
+single chunk introduces the name. Do not edit it, and do not decide first
+mentions yourself.
+
+Delete entries that are not real names. Then continue.
+
+## Step 4 — Chunk
+
+```bash
+python3 $SKILL_DIR/scripts/revayat.py chunk build \
+  --book $WORK/book.json --out $WORK/chunks --glossary $WORK/glossary.json
+```
+
+Note the number of chunks. Each becomes one translation task.
+
+## Step 5 — Translate
+
+For each `$WORK/chunks/chunkNNNN.md`, produce `$WORK/chunks/out_chunkNNNN.md`.
+Use a separate sub-agent per chunk when your runtime has them, 8 at a time. If
+it does not, do them one at a time — the result is the same, only slower.
+
+**Give the sub-agent exactly this:**
+
+> Read `$WORK/chunks/chunkNNNN.md` and write `$WORK/chunks/out_chunkNNNN.md`.
 >
-> Output format: reproduce every `@@ <id> <kind>` header exactly, once, in the
-> same order, with the Persian text on the lines beneath it. Nothing else — no
-> preamble, no commentary, no restating the English.
+> Translate into Persian. Read
+> `$SKILL_DIR/references/translation-policy.md` first and follow it.
 >
-> The "Names" table is binding: use those exact Persian forms. The
-> "Surrounding text" section is context for resolving pronouns and references;
-> never translate it or copy it into your output.
+> Output format — this is mechanical, get it exactly right:
+> - Copy each `@@ <id> <kind>` line **unchanged**, in the same order.
+> - Put the Persian translation on the lines under it.
+> - Output nothing else: no preamble, no English, no commentary, no summary.
 >
-> Keep `**bold**`, `*italic*`, `` `verbatim` `` and `[[fn:...]]` markers exactly
-> where they belong in the Persian sentence. Do not add or remove them.
+> Rules:
+> - The "Names" table is binding. Where a row says "first mention, introduce it
+>   here", use that longer form. Everywhere else use the short form. Do not
+>   decide this yourself — the table already did.
+> - "Surrounding text" is context only. Never translate it or copy it out.
+> - Keep `**bold**`, `*italic*`, `` `verbatim` `` and `[[fn:…]]` exactly, around
+>   the equivalent Persian words. Do not add or remove any.
+> - Translate every unit fully. Never summarise or skip.
+> - To add your own footnote: write `[[fn:tr-01]]` in the sentence and add a
+>   `@@ tr-01 footnote` block at the end with its text. Only for a genuine
+>   cultural reference or wordplay.
 
-Track progress and resume with:
-
-```bash
-python3 {SKILL_DIR}/scripts/revayat.py chunk status --chunks work/chunks
-```
-
-## Step 5 — Merge
-
-```bash
-python3 {SKILL_DIR}/scripts/revayat.py merge --book work/book.json --chunks work/chunks
-```
-
-`ok: false` means a worksheet came back malformed. `missing_units` lists the ids
-that never arrived; `unknown_units` lists ids that were invented. Re-run those
-specific chunks — do not patch `book.json`. Merge is idempotent, so re-running
-after a fix is safe.
-
-## Step 6 — Persian typography
+Check what is left at any time:
 
 ```bash
-python3 {SKILL_DIR}/scripts/revayat.py falint fix --book work/book.json
+python3 $SKILL_DIR/scripts/revayat.py chunk status --chunks $WORK/chunks
 ```
 
-Mechanical corrections only: Arabic yeh/kaf to Persian, Latin punctuation to
-`، ؛ ؟`, straight quotes to `«»`, zero-width non-joiners for the `می`/`نمی`
-prefixes and `ها`/`تر`/`ترین` suffixes, Persian digits. URLs, identifiers,
-verbatim spans, footnote markers and Latin words are protected and untouched.
-
-Add `--digits keep` if the book needs Latin numerals; `--no-quotes` if the
-source's quotation style must be preserved.
-
-## Step 7 — Gate before building
+## Step 6 — Merge
 
 ```bash
-python3 {SKILL_DIR}/scripts/revayat.py qa check \
-  --book work/book.json --assets work/assets --glossary work/glossary.json
+python3 $SKILL_DIR/scripts/revayat.py merge --book $WORK/book.json --chunks $WORK/chunks
 ```
 
-Errors block; warnings are for your judgement. The gates worth knowing:
-
-| Code | Means | Do |
+| Field | Meaning | Action |
 | --- | --- | --- |
-| `untranslated-block` | a block has no Persian | re-run that chunk |
-| `footnote-marker-lost` | `[[fn:…]]` dropped in translation | re-run that chunk |
-| `possible-omission` | target is far shorter than source | read it; usually a dropped clause |
-| `emphasis-parity` | bold/italic count changed | check whether it was deliberate |
-| `glossary-drift` | a locked name was translated differently | re-run, or update the glossary if the new form is better |
-| `asset-modified` | an image no longer matches its extraction hash | restore it; the picture has been altered |
-| `untranslated` | English prose left in the Persian | re-run that chunk |
+| `"ok": true` | everything landed | continue to step 7 |
+| `missing_outputs` | those chunks were never translated | translate them |
+| `missing_units` | headers were dropped | re-run those chunks |
+| `unknown_units` | headers were invented | re-run those chunks |
 
-Translate the title and author too, into `meta.title_target` and
-`meta.author_target`, before building.
+Re-running merge after a fix is always safe.
 
-## Step 8 — Build the Word file
+## Step 7 — Persian typography
 
 ```bash
-python3 {SKILL_DIR}/scripts/revayat.py build \
-  --book work/book.json --assets work/assets --out out/book.fa.docx \
+python3 $SKILL_DIR/scripts/revayat.py falint fix --book $WORK/book.json
+```
+
+Mechanical only, and safe to run twice. Add `--digits keep` if the book must
+keep Latin numerals.
+
+## Step 8 — Gate, then build
+
+```bash
+python3 $SKILL_DIR/scripts/revayat.py qa check \
+  --book $WORK/book.json --assets $WORK/assets --glossary $WORK/glossary.json
+```
+
+**Do not build while `"ok"` is false.** Fix by error code:
+
+| Code | Meaning | Action |
+| --- | --- | --- |
+| `untranslated-block` | a block has no Persian | translate that chunk |
+| `footnote-marker-lost` | a `[[fn:…]]` was dropped | re-run that chunk |
+| `footnote-marker-invented` | a marker points at nothing | re-run that chunk |
+| `possible-omission` | target far shorter than source | read it; usually a dropped clause |
+| `untranslated` | English left in the Persian | re-run that chunk |
+| `asset-missing` / `asset-modified` | a picture is gone or altered | re-extract |
+| `emphasis-parity` (warning) | bold/italic count changed | check one; often fine |
+| `glossary-drift` (warning) | a locked name was rendered differently | re-run that chunk |
+
+Add `--strict` to make the last two blocking as well, for publication work.
+
+Translate the book's title and author into `meta.title_target` and
+`meta.author_target` in `book.json` — that is the one hand-edit that *is*
+expected, because there is no worksheet for them.
+
+Then build:
+
+```bash
+python3 $SKILL_DIR/scripts/revayat.py build \
+  --book $WORK/book.json --assets $WORK/assets --out out/book.fa.docx \
   --font "Vazirmatn" --size 11.5
 ```
 
-Use `--font "B Nazanin"` for a classic Persian book face, or `--font Tahoma`
-when the file must render correctly on a machine with no Persian fonts
-installed. `--template ref.docx` inherits styles and page setup from an existing
-Word file. Full option list in `references/docx-and-ooxml.md`.
+Useful flags: `--font Tahoma` when the file must render on a machine with no
+Persian fonts; `--heading-size source` to reproduce the original heading point
+sizes; `--template ref.docx` to inherit styles from an existing Word file. Full
+list in `references/docx-and-ooxml.md`.
 
-Then verify the package itself:
+## Step 9 — Verify and report
 
 ```bash
-python3 {SKILL_DIR}/scripts/revayat.py qa docx --file out/book.fa.docx --book work/book.json
+python3 $SKILL_DIR/scripts/revayat.py qa docx --file out/book.fa.docx --book $WORK/book.json
 ```
 
-## Step 9 — Report
+If `"ok": false`, fix it before telling the user the file is ready.
 
-Tell the user, plainly:
+Then report: where the file is, how many chapters, images and footnotes it has,
+anything QA flagged that you chose not to act on, and this limitation —
 
-- where the file is, and its size
-- chapters, images, footnotes and glossary entries in the finished book
-- anything QA flagged that you chose not to act on, and why
-- **the honest limitation**: Word reflows. A Persian paragraph is rarely the
-  same length as its English original, so an editable document cannot be
-  page-for-page identical to the source PDF. Everything else — image bytes and
-  physical size, heading structure, emphasis, footnotes, chapter links — is
-  exact.
+> Word reflows text, so an editable Persian document cannot be page-for-page
+> identical to the source PDF. Image bytes and physical size, chapter
+> structure, emphasis, footnotes and chapter links are exact.
+
+---
 
 ## References
 
-Read these when the step calls for them, not up front:
+Read these only when the step points at them:
 
-- `references/translation-policy.md` — what a faithful literary translation
-  requires; the text to give sub-agents
-- `references/persian-typography.md` — RTL, ZWNJ, punctuation, mixed
-  Persian/Latin, and why nothing is ever reversed
-- `references/extraction.md` — OCR routing, scanned vs mixed books, fixing bad
-  extraction
+- `references/translation-policy.md` — what to give the translating sub-agent
+- `references/persian-typography.md` — RTL, ZWNJ, punctuation, mixed scripts
+- `references/extraction.md` — OCR routing, watermarks, difficult books
 - `references/glossary-and-voice.md` — naming policy, aliases, character voice
-- `references/docx-and-ooxml.md` — every build option, what Word structures are
-  produced, and how to verify them
+- `references/docx-and-ooxml.md` — every build option and what it produces
 - `references/troubleshooting.md` — the failures you are most likely to hit

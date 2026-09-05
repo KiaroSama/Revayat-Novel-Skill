@@ -11,6 +11,8 @@ updates:
       interval: weekly
     open-pull-requests-limit: 0
 
+  # Actions are pinned by major tag, so these updates are real and worth having:
+  # a deprecated runner action breaks CI silently otherwise.
   - package-ecosystem: github-actions
     directory: /
     schedule:

@@ -156,6 +156,30 @@ def ocr_command(
     return command + [str(source), str(destination)]
 
 
+def _usable_ocr_output(destination: Path) -> tuple[bool, str]:
+    """Can this OCR result actually be read, and did it gain any text?"""
+    if not destination.exists() or destination.stat().st_size == 0:
+        return False, "no output file was written"
+    try:
+        import pymupdf
+    except ImportError:  # pragma: no cover
+        import fitz as pymupdf  # type: ignore
+    try:
+        doc = pymupdf.open(destination)
+    except Exception as error:
+        return False, f"the output PDF cannot be opened: {error}"
+    try:
+        pages = len(doc)
+        if pages == 0:
+            return False, "the output PDF has no pages"
+        characters = sum(len(page.get_text("text").strip()) for page in doc)
+    finally:
+        doc.close()
+    if characters == 0:
+        return False, "the output PDF has no text layer at all"
+    return True, f"{characters} characters across {pages} pages"
+
+
 def run_ocr(
     source: Path,
     destination: Path,
@@ -195,14 +219,27 @@ def run_ocr(
             f"ocrmypdf exceeded {timeout}s. Split the PDF, or raise --ocr-timeout."
         ) from None
 
-    # Exit 2 = "already has text and --skip-text applied to everything"; the
-    # output file is still written and valid, so that is a success for us.
-    if completed.returncode not in (0, 2) or not destination.exists():
+    # Judge the artefact, not the exit code. OCRmyPDF reports non-zero for
+    # conditions that still leave a perfectly usable file — exit 4 means qpdf
+    # disliked the structure, which a book exported by some tools inherits from
+    # its own source. What matters is whether the PDF opens and gained text.
+    usable, detail = _usable_ocr_output(destination)
+    if not usable:
         tail = (completed.stderr or completed.stdout or "").strip().splitlines()[-8:]
         raise ExtractError(
-            "ocrmypdf failed (exit %s):\n  %s" % (completed.returncode, "\n  ".join(tail))
+            "ocrmypdf failed (exit %s): %s\n  %s"
+            % (completed.returncode, detail, "\n  ".join(tail))
         )
+
+    warning = None
+    if completed.returncode not in (0, 2):
+        warning = (
+            f"ocrmypdf exited {completed.returncode} but produced a readable PDF "
+            f"({detail}); continuing. Inspect the output if the text looks wrong."
+        )
+
     return {
+        "warning": warning,
         "launcher": " ".join(launcher),
         "mode": "force-ocr" if kind == "scanned" else "skip-text",
         "exit": completed.returncode,
@@ -271,9 +308,11 @@ def from_mineru(
             if rel:
                 asset_name = _copy_asset(base / rel, asset_dir, seen, page)
                 if asset_name:
+                    box = _mineru_bbox(item.get("bbox"), book["page"])
                     add("image", page=page, asset=asset_name,
-                        sha256=seen[asset_name], bbox=None,
-                        width_pt=None, height_pt=None,
+                        sha256=seen[asset_name], bbox=box,
+                        width_pt=round(box[2] - box[0], 2) if box else None,
+                        height_pt=round(box[3] - box[1], 2) if box else None,
                         pixel_width=None, pixel_height=None,
                         alt="", target_alt=None, mineru_type=kind)
             for caption in item.get(f"{kind}_caption", []) or []:
@@ -283,6 +322,24 @@ def from_mineru(
     book["blocks"] = blocks
     book["source"]["pages"] = last_page or 0
     return book
+
+
+def _mineru_bbox(bbox: Any, page: dict[str, Any]) -> list[float] | None:
+    """MinerU reports boxes normalised to 0-1000; convert them to points.
+
+    Discarding this was throwing away the one thing the MinerU path exists to
+    provide — an illustration's real size and position on a scanned page.
+    """
+    if not bbox or len(bbox) != 4:
+        return None
+    try:
+        left, top, right, bottom = (float(v) for v in bbox)
+    except (TypeError, ValueError):
+        return None
+    width = float(page.get("width_pt") or 0) or 595.3
+    height = float(page.get("height_pt") or 0) or 841.9
+    return [round(left / 1000 * width, 2), round(top / 1000 * height, 2),
+            round(right / 1000 * width, 2), round(bottom / 1000 * height, 2)]
 
 
 def _copy_asset(src: Path, asset_dir: Path, seen: dict[str, str], page: int) -> str | None:
@@ -452,13 +509,33 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
     report["probe"] = probe
     read_from = source
 
+    # Strip a colour watermark before OCR: a stamp across a line of text costs
+    # recognition accuracy, and the cleaned raster is what OCR should read.
+    if args.clean_scan != "off" and probe["kind"] != "digital":
+        import scan_clean
+        try:
+            cleaned_pdf = out_dir / "cleaned.pdf"
+            if cleaned_pdf.exists() and not args.force_ocr:
+                report["clean_scan"] = {"reused": str(cleaned_pdf)}
+            else:
+                report["clean_scan"] = scan_clean.clean_pdf(
+                    read_from, cleaned_pdf,
+                    force=args.clean_scan == "force",
+                    ghost_threshold=args.ghost_threshold,
+                )
+            if (report["clean_scan"].get("cleaned")
+                    or report["clean_scan"].get("reused")):
+                read_from = cleaned_pdf
+        except scan_clean.Unavailable as error:
+            report["clean_scan"] = {"skipped": str(error)}
+
     if probe["kind"] != "digital" and args.ocr != "off":
         ocr_pdf = out_dir / "ocr.pdf"
         if ocr_pdf.exists() and not args.force_ocr:
             report["ocr"] = {"reused": str(ocr_pdf)}
         else:
             report["ocr"] = run_ocr(
-                source, ocr_pdf, kind=probe["kind"], language=args.ocr_lang,
+                read_from, ocr_pdf, kind=probe["kind"], language=args.ocr_lang,
                 deskew=args.deskew, timeout=args.ocr_timeout,
             )
             report["ocr"]["probe_after"] = probe_pdf(ocr_pdf)
@@ -470,7 +547,8 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
     from read_pdf import read_pdf
     book = read_pdf(str(read_from), asset_dir,
                     lang_source=args.source_lang, lang_target=args.target_lang,
-                    max_pages=args.max_pages)
+                    max_pages=args.max_pages,
+                    ocr_text=bool(report.get("ocr")))
     book["source"]["original_path"] = str(source)
     book["source"]["probe"] = probe
     return book
@@ -490,6 +568,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--deskew", action=argparse.BooleanOptionalAction, default=None,
                         help="override deskew (default: on for fully scanned books only)")
     parser.add_argument("--max-pages", type=int, default=None, help="stop after N pages")
+    parser.add_argument("--clean-scan", choices=["auto", "off", "force"], default="auto",
+                        help="remove a colour watermark from scanned pages before OCR")
+    parser.add_argument("--ghost-threshold", type=int, default=None, metavar="N",
+                        help="also whiten grey pixels lighter than N (0-255). Clears the "
+                             "grey remnant a translucent watermark leaves, but damages "
+                             "glyphs it overlapped. Off by default.")
     parser.add_argument("--from-mineru", metavar="DIR",
                         help="import a MinerU output directory instead of parsing")
     parser.add_argument("--from-markdown", metavar="FILE",

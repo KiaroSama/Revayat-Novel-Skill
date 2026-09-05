@@ -1,0 +1,22 @@
+name: Dependency review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: review dependency changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Flag vulnerable or incompatibly-licensed dependencies
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          # This project is MIT and vendors nothing; a copyleft dependency
+          # would change what downstream users may do with it.
+          deny-licenses: GPL-3.0, AGPL-3.0

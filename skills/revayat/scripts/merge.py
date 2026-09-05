@@ -15,7 +15,65 @@ from pathlib import Path
 from typing import Any
 
 import bookir as ir
-from chunk import HEADER
+from chunk import HEADER, TRANSLATOR_NOTE
+
+
+def adopt_translator_notes(
+    book: dict[str, Any],
+    units: dict[str, str],
+    expected: set[str],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Turn the translator's own ``tr-NN`` notes into real book footnotes.
+
+    The translation policy invites a translator to add a note for a cultural
+    reference or a pun that cannot survive. Those ids cannot exist in the
+    worksheet manifest — the translator invents them while translating — so
+    they are allocated a book-wide id here and the inline token is rewritten to
+    match. Numbering is per chunk, so this must be applied one chunk at a time.
+
+    Returns ``(units_without_notes, tr_id -> fn_id)``.
+    """
+    existing = {note["id"] for note in book.setdefault("footnotes", [])}
+    next_index = 1 + max(
+        (int(note_id[2:]) for note_id in existing if note_id.startswith("fn")),
+        default=0,
+    )
+
+    remaining: dict[str, str] = {}
+    mapping: dict[str, str] = {}
+    for unit_id, text in units.items():
+        if unit_id in expected or not TRANSLATOR_NOTE.match(unit_id):
+            remaining[unit_id] = text
+            continue
+        body = text.strip()
+        if not body:
+            continue
+        note = ir.make_footnote(next_index, anchor_block="", text=body,
+                                origin="translator")
+        note["target"] = body
+        book["footnotes"].append(note)
+        mapping[unit_id] = note["id"]
+        next_index += 1
+    return remaining, mapping
+
+
+def _rewrite_tokens(book: dict[str, Any], block_ids: list[str],
+                    mapping: dict[str, str]) -> None:
+    """Point the translator's inline tokens at their allocated footnote ids."""
+    if not mapping:
+        return
+    blocks = ir.blocks_by_id(book)
+    for block_id in block_ids:
+        block = blocks.get(block_id)
+        if block is None or not (block.get("target") or ""):
+            continue
+        block["target"] = ir.ANY_FOOTNOTE_TOKEN.sub(
+            lambda match: f"[[fn:{mapping.get(match.group(1), match.group(1))}]]",
+            block["target"],
+        )
+        for note in book.get("footnotes", []):
+            if not note["anchor_block"] and note["id"] in ir.footnote_refs(block["target"]):
+                note["anchor_block"] = block_id
 
 
 def parse_worksheet(text: str) -> dict[str, str]:
@@ -104,12 +162,16 @@ def merge(
 
         units = parse_worksheet(output.read_text(encoding="utf-8"))
         expected = set(entry["unit_ids"])
+        units, note_ids = adopt_translator_notes(book, units, expected)
         missing = [u for u in entry["unit_ids"] if u not in units or not units[u].strip()]
         extra = sorted(set(units) - expected)
 
         outcome = apply_units(book, {k: v for k, v in units.items() if k in expected})
+        _rewrite_tokens(book, entry["block_ids"], note_ids)
         report["chunks_merged"] += 1
         report["units_applied"] += len(outcome["applied"])
+        if note_ids:
+            report.setdefault("translator_notes", {})[entry["id"]] = note_ids
         if missing:
             report["missing_units"][entry["id"]] = missing
         if extra:

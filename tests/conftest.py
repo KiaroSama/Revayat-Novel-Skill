@@ -6,31 +6,17 @@ repository stays small, and no third-party book text is vendored in.
 
 from __future__ import annotations
 
-import struct
 import sys
-import zlib
 from pathlib import Path
 
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "skills" / "revayat" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
-def png_bytes(width: int, height: int, rgb: tuple[int, int, int] = (200, 60, 60)) -> bytes:
-    """A minimal valid PNG, so image handling is exercised without a fixture file."""
-
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        body = tag + data
-        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
-
-    raw = b"".join(b"\x00" + bytes(rgb) * width for _ in range(height))
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-        + chunk(b"IDAT", zlib.compress(raw))
-        + chunk(b"IEND", b"")
-    )
+from tests_support import png_bytes  # noqa: E402  (path set above)
 
 
 @pytest.fixture(scope="session")

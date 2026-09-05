@@ -41,6 +41,7 @@ REQUIRED = {
     "docx": "DOCX reading and writing (package: python-docx)",
     "bs4": "EPUB parsing (package: beautifulsoup4)",
     "lxml": "OOXML manipulation (installed with python-docx)",
+    "PIL": "removing a colour watermark from a scan (package: pillow)",
 }
 
 #: Optional binaries, each as the list of names it may go by. Ghostscript is
@@ -74,7 +75,8 @@ def doctor() -> dict[str, object]:
                 try:
                     from importlib.metadata import version as pkg_version
                     version = pkg_version(
-                        {"docx": "python-docx", "bs4": "beautifulsoup4"}.get(name, name)
+                        {"docx": "python-docx", "bs4": "beautifulsoup4",
+                         "PIL": "pillow"}.get(name, name)
                     )
                 except Exception:
                     version = "installed"
