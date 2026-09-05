@@ -21,11 +21,16 @@ already decided there — but the source page is still rendered beside the
 translated one, because the reviewer this produces evidence for wants to see
 both.
 
-Give it ``--docx`` and it lays the document out with LibreOffice itself; give
-it ``--target-pdf`` or ``--target-image`` and it uses what you hand over. The
+Give it ``--docx`` and it drives **Word** to lay the document out; give it
+``--target-pdf`` or ``--target-image`` and it uses what you hand over. The
 first exists because a check nobody can run without a manual detour is a check
-nobody runs. LibreOffice is not Word and will not always break lines where Word
-does, which does not matter here: none of these checks ask where a line broke.
+nobody runs.
+
+Word and not a substitute renderer: the deliverable is a .docx, so Word's
+pagination is the real one. A check that reports where things fall on the page
+is worth nothing if the pages are not the ones the reader will see. That ties
+this path to Windows, and elsewhere a page is reported *unverified* — which is
+the honest answer, and not the same as passing.
 
 Artifacts, all under the working directory::
 
@@ -40,7 +45,6 @@ import argparse
 import json
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -582,50 +586,83 @@ def check(
     return written
 
 
-def find_converter() -> list[str] | None:
-    """How to turn a DOCX into a PDF on this machine, or ``None``."""
-    for name in ("soffice", "libreoffice"):
-        found = shutil.which(name)
-        if found:
-            return [found, "--headless", "--convert-to", "pdf", "--outdir"]
-    return None
+#: Word's own "save as PDF" format code.
+WORD_PDF_FORMAT = 17
+
+
+def word_available() -> str:
+    """Why Word cannot be driven here, or ``""`` when it can.
+
+    Deliberately Word and not LibreOffice. The two paginate differently, and a
+    check that reports where things fall on the page is worth nothing if the
+    pages are not the ones the reader will see — the document is a .docx, so
+    Word's layout is the real one and anything else is an approximation being
+    passed off as the answer.
+    """
+    if sys.platform != "win32":
+        return ("Word can only be driven on Windows; on this platform a page "
+                "cannot be laid out, so it is reported unverified rather than "
+                "measured against a different renderer's pagination")
+    try:
+        import win32com.client  # noqa: F401,PLC0415
+    except ImportError:
+        return ("pywin32 is not installed, so Word cannot be driven "
+                "(pip install pywin32)")
+    return ""
 
 
 def render_docx(docx: Path, out_dir: Path, *, timeout: float = 300.0) -> Path:
-    """Lay the built document out as pages, so there is something to look at.
+    """Lay the built document out with Word, so there is something to look at.
 
     Render QA compares a *rendered* page, and until now the caller had to
     produce that PDF by hand — which meant the check that exists to be run
-    routinely was the one step nobody could run without a manual detour.
+    routinely was the one nobody could run without a manual detour.
 
-    LibreOffice is not Word, and its pagination will not always match Word's.
-    That is acceptable here and worth being explicit about: this check is
-    structural, not typographic. It asks whether a block went missing, whether
-    a picture moved, whether a paragraph came out left-to-right — none of which
-    depend on the two renderers agreeing about where a line breaks.
+    ``timeout`` is accepted for interface symmetry and not enforced: COM is a
+    blocking call with no cancellation, so promising a bound that cannot be
+    kept would be worse than saying plainly that this waits for Word.
     """
-    launcher = find_converter()
-    if not launcher:
-        raise RenderError(
-            "no converter found: install LibreOffice so the built document can "
-            "be laid out as pages (macOS: brew install --cask libreoffice · "
-            "Debian: apt install libreoffice-writer · Windows: winget install "
-            "TheDocumentFoundation.LibreOffice). Or render it yourself and pass "
-            "--target-pdf."
-        )
-    out_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        finished = subprocess.run([*launcher, str(out_dir), str(docx)],
-                                  capture_output=True, timeout=timeout)
-    except subprocess.TimeoutExpired as error:
-        raise RenderError(
-            f"the converter did not finish within {timeout:.0f}s"
-        ) from error
+    reason = word_available()
+    if reason:
+        raise RenderError(reason + ". Or render it yourself and pass --target-pdf.")
 
-    produced = out_dir / (Path(docx).stem + ".pdf")
-    if finished.returncode != 0 or not produced.exists():
-        detail = finished.stderr.decode("utf-8", "replace").strip()[:300]
-        raise RenderError(f"the converter produced no PDF: {detail}")
+    import pythoncom  # noqa: PLC0415
+    import win32com.client  # noqa: PLC0415
+
+    docx = Path(docx).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    produced = (out_dir / (docx.stem + ".pdf")).resolve()
+
+    pythoncom.CoInitialize()
+    word = None
+    document = None
+    try:
+        word = win32com.client.DispatchEx("Word.Application")
+        word.Visible = False
+        word.DisplayAlerts = False
+        document = word.Documents.Open(str(docx), ReadOnly=True,
+                                       AddToRecentFiles=False)
+        # Repaginate before exporting: a document built by python-docx carries
+        # no layout, and the field results (the TOC, the page numbers) are
+        # whatever was cached at build time until Word works them out.
+        document.Fields.Update()
+        document.Repaginate()
+        document.SaveAs2(str(produced), FileFormat=WORD_PDF_FORMAT)
+    except Exception as error:  # pywin32 raises com_error, not an OSError
+        raise RenderError(f"Word could not lay out {docx.name}: {error}") from error
+    finally:
+        # Order matters and so does the guard: leaving a hidden WINWORD.EXE
+        # running is how a test run ends with a process nobody can see.
+        try:
+            if document is not None:
+                document.Close(SaveChanges=False)
+        finally:
+            if word is not None:
+                word.Quit()
+            pythoncom.CoUninitialize()
+
+    if not produced.exists():
+        raise RenderError(f"Word reported success but wrote no PDF to {produced}")
     return produced
 
 
@@ -671,7 +708,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
                         help="a pre-rendered page image to file as evidence "
                              "instead of rasterising --target-pdf")
     parser.add_argument("--docx", default=None,
-                        help="the built document; laid out with LibreOffice")
+                        help="the built document; laid out by Word")
     parser.add_argument("--source-pdf", default=None,
                         help="rendered beside the translation for the reviewer")
     parser.add_argument("--dpi", type=int, default=DEFAULT_DPI)

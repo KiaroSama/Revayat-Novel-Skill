@@ -7,17 +7,24 @@ Persian translation of it that a Persian reader can actually judge.
 
 The passage is written for this repository rather than taken from a book. That
 is deliberate and not only about copyright — it lets one short piece carry every
-shape the pipeline has to survive: a chapter heading, dialogue with guillemets,
-a name that must be introduced once and then shortened, emphasis that has to
-count the same on both sides, a footnote the translator adds, a Latin term left
-verbatim, and a sentence long enough for the length-ratio gate to mean
-something.
+shape the pipeline has to survive: a chapter heading, dialogue, a name that must
+be introduced once and then shortened, emphasis that has to count the same on
+both sides, a footnote the translator adds, and a sentence long enough for the
+length-ratio gate to mean something.
 
-WHAT IS BEING CLAIMED, precisely: this is a faithful literary translation, not
-a gloss. Sentence order follows the Persian, not the English; «او» is not
-repeated where Persian drops the subject; the register stays even. What is *not*
-claimed is that a machine produced it unaided — the point of the fixture is to
-give a reviewer something concrete to disagree with.
+REGISTER. The first version of this was rejected by the reader it was written
+for, in one word: stilted. It had «بدترینشان», «پیمانه‌ای دیگر برای خود ریخت»,
+«بی‌آنکه از آن بنوشد» — constructions that belong to a translated 1950s text,
+not to a novel someone would read now. The lesson is worth keeping next to the
+data: **fidelity is not the same as literalness, and a sentence that maps
+word-for-word onto the English is usually the wrong sentence.** Persian drops
+subjects English must state, prefers a verb where English takes a noun, and
+will not carry an English relative clause without breaking it in two.
+
+So this version reads first and matches second. Where the English says "found
+that it frightened her more than being left nothing would have done", the
+Persian says the same thing the way a Persian writer would say it, in two
+clauses instead of one.
 """
 
 from __future__ import annotations
@@ -29,78 +36,73 @@ PASSAGE: list[tuple[str, int, str, str]] = [
     (
         "heading", 1,
         "The House on the Ridge",
-        "خانهٔ سرِ تپه",
+        "خانهٔ بالای تپه",
     ),
     (
         "paragraph", 0,
-        "The road up to the house had not been mended in forty years, and "
-        "Margaret Ashcroft climbed it slowly, one hand on the wall, "
-        "counting the stones she had counted as a child.",
-        "جاده‌ای که به خانه می‌رسید چهل سال بود مرمت نشده بود، و مارگارت "
-        "اشکرافت (Margaret Ashcroft) آهسته از آن بالا می‌رفت، یک دست بر "
-        "دیوار، و سنگ‌هایی را می‌شمرد که در کودکی شمرده بود.",
+        "Nobody had mended the road up to the house in forty years. Margaret "
+        "Ashcroft climbed it slowly, one hand on the wall, counting the same "
+        "stones she had counted as a child.",
+        "چهل سال بود کسی جادهٔ بالای تپه را درست نکرده بود. مارگارت اشکرافت "
+        "(Margaret Ashcroft) آرام از آن بالا می‌رفت، یک دستش روی دیوار، و همان "
+        "سنگ‌هایی را می‌شمرد که بچه که بود شمرده بود.",
     ),
     (
         "paragraph", 0,
-        "Nothing had changed. That was the first thing, and the worst of "
-        "them: the gate still hung from one hinge, the window on the "
-        "landing was still cracked in the same corner, and the smell of "
-        "wet stone was exactly as she had left it.",
-        "هیچ‌چیز عوض نشده بود. این نخستین چیزی بود که به چشمش آمد، و بدترینشان: "
-        "دروازه هنوز از یک لولا آویزان بود، شیشهٔ پاگرد هنوز از همان گوشه ترک "
-        "داشت، و بوی سنگِ خیس درست همان بود که رهایش کرده بود.",
+        "Nothing had changed, and that was the worst of it. The gate still "
+        "hung from one hinge. The window on the landing was cracked in the "
+        "same corner. Even the smell of wet stone was the one she had left "
+        "behind.",
+        "هیچ‌چیز عوض نشده بود، و بدتر از همه همین بود. در حیاط هنوز به یک لولا "
+        "بند بود. شیشهٔ پاگرد از همان گوشه ترک داشت. حتی بوی سنگ خیس همان بویی "
+        "بود که پشت سرش جا گذاشته بود.",
     ),
     (
         "paragraph", 0,
-        "«You came, then,» said her brother, from the doorway. He did not "
-        "get up.",
-        "برادرش از چارچوب در گفت: «پس آمدی.» از جا بلند نشد.",
+        "«So you came,» her brother said from the doorway. He did not get up.",
+        "برادرش از دم در گفت: «پس آمدی.» بلند نشد.",
     ),
     (
         "paragraph", 0,
         "«I said I would.»",
-        "«گفته بودم می‌آیم.»",
+        "«گفتم که می‌آیم.»",
     ),
     (
         "paragraph", 0,
-        "«People say a great many things.» He turned the glass in his hand "
-        "without drinking from it. «Mother said she would live to see the "
-        "roof finished. The roof is *still* not finished.»",
-        "«مردم خیلی چیزها می‌گویند.» گیلاس را در دست چرخاند بی‌آنکه از آن "
-        "بنوشد. «مادر می‌گفت آن‌قدر زنده می‌ماند که تمام‌شدن سقف را ببیند. "
-        "سقف *هنوز* تمام نشده است.»",
+        "«People say all sorts of things.» He turned the glass in his hand "
+        "but did not drink. «Mother said she would live to see the roof "
+        "finished. The roof is *still* not finished.»",
+        "«مردم هرچیزی می‌گویند.» لیوان را در دستش چرخاند ولی نخورد. «مادر "
+        "می‌گفت می‌ماند تا سقف را تمام‌شده ببیند. سقف *هنوز* تمام نشده.»",
     ),
     (
         "paragraph", 0,
-        "Margaret said nothing. There was a particular silence that this "
-        "house produced, thick and a little cold, and she had forgotten "
-        "until now how easily she fell back into it.",
-        "مارگارت چیزی نگفت. این خانه سکوت خاصی می‌ساخت، غلیظ و کمی سرد، و تا "
-        "این لحظه از یاد برده بود که چه آسان دوباره در آن فرو می‌رود.",
+        "Margaret did not answer. This house had a silence of its own, heavy "
+        "and cold, and she had forgotten how quickly she slipped back into it.",
+        "مارگارت جوابی نداد. این خانه سکوت خودش را داشت، سنگین و سرد، و یادش "
+        "رفته بود چه زود دوباره توی آن فرو می‌رود.",
     ),
     (
         "paragraph", 0,
-        "The solicitor's letter had called it a **fee simple absolute**, "
-        "which meant, once she had looked it up, that the house was hers "
-        "entirely and that no one alive could take it from "
-        "her.[[fn:fn0001]]",
-        "نامهٔ وکیل آن را **مالکیت مطلق** خوانده بود؛ که وقتی معنایش را "
-        "پیدا کرد، یعنی خانه تمام و کمال از آنِ اوست و هیچ‌کس در قید حیات "
-        "نمی‌تواند از او بگیردش.[[fn:fn0001]]",
+        "The solicitor's letter called it a **fee simple absolute**. When she "
+        "looked the words up, they meant the house was hers, completely, and "
+        "that nobody living could take it away.[[fn:fn0001]]",
+        "نامهٔ وکیل اسمش را **مالکیت مطلق** گذاشته بود. وقتی معنی‌اش را پیدا "
+        "کرد، یعنی خانه کامل مال خودش است و هیچ‌کس تا زنده است نمی‌تواند از او "
+        "بگیرد.[[fn:fn0001]]",
     ),
     (
         "paragraph", 0,
-        "She thought about that for a while, standing in the hall with her "
-        "coat still on, and found that it frightened her more than being "
-        "left nothing would have done.",
-        "مدتی به این فکر کرد، همان‌طور که با پالتوی پوشیده در راهرو ایستاده "
-        "بود، و دید که این بیشتر می‌ترساندش تا آنکه هیچ به او نرسیده باشد.",
+        "She stood in the hall with her coat still on and thought about it. "
+        "It frightened her. Being left nothing would have frightened her less.",
+        "با پالتو توی راهرو ایستاد و به این فکر کرد. می‌ترساندش. اگر هیچ به او "
+        "نمی‌رسید، کمتر می‌ترسید.",
     ),
     (
         "paragraph", 0,
-        "Ashcroft poured himself another measure and said, without looking "
-        "up, that the surveyor was coming on Thursday.",
-        "اشکرافت پیمانه‌ای دیگر برای خود ریخت و بی‌آنکه سر بلند کند گفت که "
+        "Ashcroft poured himself another and said, without looking up, that "
+        "the surveyor was coming on Thursday.",
+        "اشکرافت یکی دیگر برای خودش ریخت و بدون اینکه سرش را بلند کند گفت "
         "نقشه‌بردار پنج‌شنبه می‌آید.",
     ),
 ]
@@ -110,9 +112,9 @@ PASSAGE: list[tuple[str, int, str, str]] = [
 #: marker were dropped.
 FOOTNOTE = {
     "source": "",
-    "target": "«fee simple absolute» در حقوق انگلیس کامل‌ترین شکل مالکیت زمین "
-              "است؛ معادل دقیقی در حقوق ایران ندارد و اینجا به «مالکیت مطلق» "
-              "برگردانده شده است. — م.",
+    "target": "«fee simple absolute» کامل‌ترین شکل مالکیت زمین در حقوق انگلیس "
+              "است. معادل دقیقی در حقوق ایران ندارد و اینجا «مالکیت مطلق» "
+              "ترجمه شده. — م.",
     "origin": "translator",
 }
 
