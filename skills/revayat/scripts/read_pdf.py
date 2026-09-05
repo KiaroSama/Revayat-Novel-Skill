@@ -40,6 +40,12 @@ MARGIN_BAND = 0.08
 #: A page with fewer than this many characters is treated as image-only.
 SCANNED_CHAR_THRESHOLD = 60
 
+#: An image covering at least this share of the page area is page-sized.
+PAGE_IMAGE_AREA_SHARE = 0.85
+#: …and if that page also yielded at least this much text, the image is the
+#: scanned page itself rather than an illustration on it.
+PAGE_IMAGE_TEXT_THRESHOLD = 200
+
 
 def _style_of(span: dict[str, Any]) -> tuple[bool, bool]:
     """Bold/italic for a span, from render flags and the font name.
@@ -248,6 +254,28 @@ def _union(a: list[float], b: list[float]) -> list[float]:
     return [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
 
 
+def _is_the_page_itself(image: dict[str, Any], page_area: float,
+                        page_chars: int) -> bool:
+    """Is this image the scanned page, rather than a picture printed on it?
+
+    In a scanned book every page is one full-page raster. Emitting those as
+    illustrations puts the entire book into the output twice — once as the
+    recognised text and again as photographs of the same pages. Measured on a
+    real 70-page scan: 70 of 70 "images" were the pages themselves, and the
+    resulting DOCX was roughly double the size it should have been.
+
+    The distinction that matters is whether the page also produced text. A
+    page-sized raster on a page full of recognised words is the scan; the same
+    raster on a page with no words is a genuine full-page plate — a cover, a
+    frontispiece, an illustration — and must be kept.
+    """
+    width, height = image.get("width_pt"), image.get("height_pt")
+    if not width or not height or page_area <= 0:
+        return False
+    covers_page = (width * height) / page_area >= PAGE_IMAGE_AREA_SHARE
+    return covers_page and page_chars >= PAGE_IMAGE_TEXT_THRESHOLD
+
+
 def _extract_images(
     doc: "pymupdf.Document",
     page: "pymupdf.Page",
@@ -355,6 +383,7 @@ def _read_open_pdf(
     blocks: list[dict[str, Any]] = []
     seen_assets: dict[str, str] = {}
     scanned_pages: list[int] = []
+    dropped_page_scans: list[int] = []
     counter = 0
 
     def add(block_type: str, **fields: Any) -> dict[str, Any]:
@@ -383,7 +412,11 @@ def _read_open_pdf(
         if page_chars < SCANNED_CHAR_THRESHOLD and images:
             scanned_pages.append(page_no)
 
+        page_area = float(page.rect.width) * float(page.rect.height)
         for image in images:
+            if _is_the_page_itself(image, page_area, page_chars):
+                dropped_page_scans.append(page_no)
+                continue
             text_items.append((image["top"], "image", image))
 
         text_items.sort(key=lambda item: item[0])
@@ -424,6 +457,7 @@ def _read_open_pdf(
     book["source"]["body_font_pt"] = body_size
     book["source"]["running_heads_dropped"] = sorted(drop)[:20]
     book["source"]["from_ocr"] = ocr_text
+    book["source"]["page_scans_dropped"] = len(dropped_page_scans)
     return book
 
 
