@@ -231,8 +231,25 @@ class Builder:
 
     def body(self) -> None:
         first_heading = True
-        for block in self.book.get("blocks", []):
+        blocks = self.book.get("blocks", [])
+        index = 0
+        while index < len(blocks):
+            block = blocks[index]
             kind = block["type"]
+
+            # A table arrives as a run of consecutive blocks carrying the same
+            # `table` id, each tagged with its row and cell. Keeping them as
+            # ordinary blocks is what lets every cell be translated as its own
+            # worksheet unit; putting the grid back is this builder's job.
+            table_id = block.get("table")
+            if table_id:
+                run = []
+                while index < len(blocks) and blocks[index].get("table") == table_id:
+                    run.append(blocks[index])
+                    index += 1
+                self._table(run)
+                continue
+            index += 1
 
             if kind == "heading":
                 self._heading(block, first_heading)
@@ -279,6 +296,41 @@ class Builder:
             return
         for run in paragraph.runs:
             run.font.size = Pt(float(size))
+
+    def _table(self, cells: list[dict[str, Any]]) -> None:
+        """Rebuild one table from the blocks its cells were flattened into.
+
+        The cells were kept as ordinary text blocks all the way through the
+        pipeline on purpose: one block is one worksheet unit, so every cell gets
+        translated, counted and gated exactly like a paragraph. Only the grid is
+        missing by then, and only here is there anything to put it back into.
+
+        A cell that lost its coordinates is written under the table rather than
+        dropped — losing a sentence to a malformed row would be a far worse
+        outcome than an untidy table.
+        """
+        placed = [c for c in cells if c.get("row") and c.get("cell")]
+        stray = [c for c in cells if c not in placed]
+
+        if placed:
+            rows = max(int(c["row"]) for c in placed)
+            columns = max(int(c["cell"]) for c in placed)
+            table = self.document.add_table(rows=rows, cols=columns)
+            if _has_style(self.document, "Table Grid"):
+                table.style = "Table Grid"
+            if self.options.rtl:
+                # Word mirrors the column order for a right-to-left table; a
+                # Persian table read left-to-right has its first column last.
+                ooxml.set_table_rtl(table)
+
+            for block in placed:
+                cell = table.cell(int(block["row"]) - 1, int(block["cell"]) - 1)
+                paragraph = cell.paragraphs[0]
+                ooxml.set_paragraph_rtl(paragraph, self.options.rtl)
+                self.write_markup(paragraph, self._text_of(block))
+
+        for block in stray:
+            self._text_block(block)
 
     def _text_block(self, block: dict[str, Any]) -> None:
         text = self._text_of(block)
