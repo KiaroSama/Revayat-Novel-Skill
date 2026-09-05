@@ -1,6 +1,6 @@
 # Core — required for every run.
 pymupdf>=1.24            # PDF text, geometry and original image bytes
-python-docx>=1.1         # DOCX reading and writing
+python-docx>=1.2.0         # DOCX reading and writing
 beautifulsoup4>=4.12     # EPUB (XHTML) parsing
 lxml>=5.0                # OOXML manipulation (also a python-docx dependency)
 
