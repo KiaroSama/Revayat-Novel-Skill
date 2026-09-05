@@ -122,3 +122,102 @@ def test_every_documented_stage_is_a_real_stage(commands):
     known = set(module.STAGES) | {"doctor"}
     documented = {stage for stage, _ in commands}
     assert documented <= known, f"documented but missing: {sorted(documented - known)}"
+
+
+class _Parsed(BaseException):
+    """Raised once a stage's parser has accepted a command line.
+
+    A ``BaseException`` on purpose: several stages wrap their work in
+    ``except Exception``, and an ordinary exception would be swallowed there and
+    reported as the stage failing rather than as the parse succeeding.
+    """
+
+
+def parse_only(stage: str, tokens: list[str]) -> None:
+    """Put ``tokens`` through the stage's real parser, then stop before it acts.
+
+    Checking the stage name alone is what let the page route's documentation
+    drift: `pages` is a real stage, so `pages status --chunks …` looked correct
+    for as long as nobody ran it — while the flag is `--pages` and argparse
+    would have rejected it on the first try. Handing the command line to the
+    parser that will actually receive it catches an unknown subcommand, an
+    unknown flag, a missing required flag and a renamed one, all four, without
+    this file having to keep its own copy of the CLI to compare against.
+    """
+    import importlib
+    import importlib.util
+    import argparse as ap
+
+    dispatcher = SKILL.parent / "scripts" / "revayat-novel.py"
+    spec = importlib.util.spec_from_file_location("dispatcher", dispatcher)
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+
+    module = importlib.import_module(cli.STAGES[stage])
+    real = ap.ArgumentParser.parse_args
+
+    def stop(self, args=None, namespace=None):
+        real(self, args, namespace)
+        raise _Parsed
+
+    ap.ArgumentParser.parse_args = stop
+    try:
+        module.main(tokens)
+    except _Parsed:
+        return
+    finally:
+        ap.ArgumentParser.parse_args = real
+
+
+def test_every_documented_command_parses(commands, capsys):
+    """Every flag in SKILL.md is one the stage receiving it actually accepts."""
+    import shlex
+
+    failures = []
+    for stage, rest in commands:
+        if stage == "doctor":
+            continue
+        try:
+            parse_only(stage, shlex.split(rest))
+        except SystemExit:
+            usage = capsys.readouterr().err.strip().splitlines()
+            failures.append(f"{stage}{rest}\n    {usage[-1] if usage else 'rejected'}")
+    assert not failures, (
+        "SKILL.md documents command lines the CLI rejects:\n  "
+        + "\n  ".join(failures)
+    )
+
+
+def test_the_page_route_is_documented_with_its_own_directory_flag(skill_text):
+    """`pages` reads `--pages`; `--chunks` belongs to the other route.
+
+    Both routes cut a book into worksheets and their flags read almost alike,
+    which is exactly why this one is pinned: the wrong one is not a typo an
+    agent notices, it is a stage that refuses to start.
+    """
+    for line in skill_text.splitlines():
+        if "revayat-novel.py pages" in line:
+            assert "--chunks" not in line, f"the page route takes --pages: {line.strip()}"
+
+
+def test_the_page_route_names_the_files_it_writes(skill_text):
+    """`pages build` writes `pageNNNN.md`; step 5 must send agents to those."""
+    assert "out_page0001.md" in skill_text or "out_pageNNNN.md" in skill_text, (
+        "step 5 never names the page route's output files, so an agent "
+        "following it writes out_chunkNNNN.md that nothing reads"
+    )
+
+
+def test_no_documented_command_hard_codes_the_ocr_copy_as_the_source(skill_text):
+    """The source PDF is the original for a digital book, the OCR copy for a scan.
+
+    `render-qa` renders the source page beside the translated one. Naming
+    `ocr.pdf` in the command works only for a scan; for a born-digital PDF that
+    file does not exist and the comparison silently has nothing to compare.
+    """
+    offenders = [line.strip() for line in skill_text.splitlines()
+                 if "--source-pdf" in line and "ocr.pdf" in line]
+    assert not offenders, (
+        "take the source PDF from the manifest's reference_pdf:\n  "
+        + "\n  ".join(offenders)
+    )
