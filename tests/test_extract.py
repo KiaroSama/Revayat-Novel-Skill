@@ -725,3 +725,52 @@ def test_qa_warns_that_the_odd_pages_will_be_reflowed(tmp_path):
     assert "612x396pt on 1 page" in mixed[0]["detail"]
     # A warning, not a block: the book is still buildable.
     assert summary["ok"] is True
+
+
+# --------------------------------------------------------------------------- #
+# Emphasis on a scan: absent, and said to be absent
+# --------------------------------------------------------------------------- #
+
+def test_an_ocr_text_layer_is_not_evidence_of_typography():
+    """OCRmyPDF writes one invisible glyphless face; it knows no italics.
+
+    Worse than useless as evidence: a font name that happens to contain a style
+    word would make the whole scanned book bold.
+    """
+    from read_pdf import _style_of
+
+    ocr_span = {"font": "GlyphLessFont", "flags": 0}
+    assert _style_of(ocr_span) == (False, False)
+    # Even a span that claims a style is refused on the OCR path.
+    assert _style_of({"font": "SomeBoldItalic", "flags": 0}, ocr=True) == (False, False)
+    # A born-digital span is still read normally.
+    assert _style_of({"font": "AGaramondPro-BoldItalic", "flags": 0}) == (True, True)
+
+
+def test_a_scanned_book_says_its_emphasis_could_not_be_read(scanned_pdf, tmp_path):
+    """Otherwise "no italics anywhere" reads as a fact about the book."""
+    from read_pdf import read_pdf
+
+    book = read_pdf(str(scanned_pdf), tmp_path / "assets", ocr_text=True)
+    emphasis = book["source"]["emphasis"]
+    assert emphasis["recovered"] is False and emphasis["reason"]
+
+
+def test_a_digital_book_makes_no_such_claim(sample_pdf, tmp_path):
+    from read_pdf import read_pdf
+
+    book = read_pdf(str(sample_pdf), tmp_path / "assets")
+    assert "emphasis" not in book["source"]
+
+
+def test_qa_passes_the_limitation_on_to_the_reader(scanned_pdf, tmp_path):
+    import qa
+    from read_pdf import read_pdf
+
+    book = read_pdf(str(scanned_pdf), tmp_path / "assets", ocr_text=True)
+    for block in ir.iter_text_blocks(book):
+        block["target"] = "ترجمهٔ این بند که به اندازهٔ کافی بلند است تا رد شود."
+
+    summary = qa.check_book(book).summary()
+    flagged = [f for f in summary["findings"] if f["code"] == "emphasis-unrecoverable"]
+    assert len(flagged) == 1 and flagged[0]["severity"] == qa.WARNING
