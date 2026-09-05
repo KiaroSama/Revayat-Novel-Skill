@@ -347,3 +347,41 @@ def test_mineru_bbox_is_converted_to_points_not_discarded():
     assert _mineru_bbox([100, 250, 500, 750], page) == [60.0, 200.0, 300.0, 600.0]
     assert _mineru_bbox(None, page) is None
     assert _mineru_bbox([1, 2, 3], page) is None
+
+
+# --------------------------------------------------------------------------- #
+# Scanned pages are not illustrations
+# --------------------------------------------------------------------------- #
+
+def test_a_scanned_text_page_is_not_emitted_as_an_illustration():
+    """In a scanned book every page is one full-page raster.
+
+    Emitting those as pictures puts the whole book into the output twice — once
+    as recognised text, once as photographs of the same pages. Measured on a
+    real 70-page scan: 70 of 70 "images" were the pages themselves, and the
+    DOCX came out at 13.8 MB instead of 2.6 MB.
+    """
+    from read_pdf import _is_the_page_itself
+
+    page_area = 595.0 * 842.0
+    full_page = {"width_pt": 595.0, "height_pt": 842.0}
+    plate = {"width_pt": 300.0, "height_pt": 200.0}
+
+    # A page-sized raster on a page full of words is the scan of that page.
+    assert _is_the_page_itself(full_page, page_area, page_chars=1130) is True
+    # The same raster on a page with no words is a real full-page plate.
+    assert _is_the_page_itself(full_page, page_area, page_chars=0) is False
+    assert _is_the_page_itself(full_page, page_area, page_chars=40) is False
+    # A picture that only covers part of the page is always content.
+    assert _is_the_page_itself(plate, page_area, page_chars=1130) is False
+    # Missing geometry must never cause a silent drop.
+    assert _is_the_page_itself({"width_pt": None, "height_pt": None},
+                               page_area, page_chars=1130) is False
+
+
+def test_page_scan_dropping_is_reported_not_silent(scanned_pdf, tmp_path):
+    """Dropping content needs to be visible in the extract report."""
+    from read_pdf import read_pdf
+
+    book = read_pdf(str(scanned_pdf), tmp_path / "assets", ocr_text=True)
+    assert "page_scans_dropped" in book["source"]
