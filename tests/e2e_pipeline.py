@@ -203,11 +203,16 @@ def main() -> int:
         for entry in manifest["chunks"]:
             worksheet = (chunks / entry["file"]).read_text(encoding="utf-8")
             ir.write_text(chunks / entry["output"], translate(worksheet))
-        report = merging.merge(book_path, chunks)
+        # The glossary is not optional here: merge is where the one first
+        # mention is settled, and without it the introduction is never placed.
+        report = merging.merge(book_path, chunks, glossary_path=glossary_path)
         check(report["ok"], f"merge failed: {json.dumps(report)[:400]}")
         check(report.get("translator_notes"), "the translator's footnote was dropped")
+        placed = report.get("first_mentions", {}).get("introduced", {})
+        check(bool(placed), "merge did not place any first mention")
         print(f"  4 merge       : {report['units_applied']} units, "
-              f"{sum(len(v) for v in report['translator_notes'].values())} translator notes")
+              f"{sum(len(v) for v in report['translator_notes'].values())} translator "
+              f"notes, {len(placed)} name(s) introduced")
 
         # 5. typography ----------------------------------------------------- #
         translated = ir.load_book(book_path)
