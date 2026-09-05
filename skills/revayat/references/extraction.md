@@ -98,6 +98,29 @@ default therefore removes colour only. For this pipeline that is usually moot:
 the deliverable is built from OCR'd *text*, so the watermark never reaches the
 Word file either way — what matters is which version Tesseract reads better.
 
+## A scanned page is not an illustration
+
+In a scanned book every page *is* one full-page raster. Emitting those as
+pictures would put the whole book into the output twice — once as the recognised
+text, once as photographs of the same pages. Measured on a real 70-page scan,
+that produced a 13.8 MB DOCX instead of 2.6 MB, showing every page a second time.
+
+So a page-sized image is dropped when the page also yielded real text: its
+content is now the text. A page-sized image on a page with little or no text is
+kept, because that is a genuine full-page plate — a cover, a frontispiece, an
+illustration. On the same book this dropped 56 pages and kept 14.
+
+`source.page_scans_dropped` in the extract report says how many went.
+
+What this cannot do is separate a picture that sits *inside* a page of text: the
+whole page is one flat raster, so the illustration and the words around it are
+the same pixels. Such a page is kept whole, and its captions are also recognised
+as text — so they can be translated — which means those few pages show their
+original wording inside the picture as well. **This is what MinerU is for**: its
+layout model crops the figure out, so the Word file gets the picture and the
+translated caption instead of a flat page image with the source language baked
+into it. `--from-mineru` imports that.
+
 ## Languages other than English
 
 Pass the Tesseract language code: `--ocr-lang fas` for Persian, `ara`, `deu`,
