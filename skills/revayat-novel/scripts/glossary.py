@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import bookir as ir
+import runstate
 
 SCHEMA = "revayat-novel/glossary@1"
 
@@ -548,6 +549,13 @@ def main(argv: list[str] | None = None) -> int:
         glossary["entries"].extend(proposals)
         count_frequencies(glossary, book)
         save(glossary, out)
+        # Keyed on the source side of the book, not the file: merge rewrites
+        # book.json in place, and a file hash would report the glossary stale
+        # against a translation rather than against a re-extraction.
+        runstate.RunState(out.parent).record("glossary", {
+            "book": runstate.source_digest(book),
+            "min_count": str(args.min_count),
+        }, {"glossary": runstate.file_hash(out)})
         print(json.dumps({
             "glossary": str(out),
             "existing": len(known),
