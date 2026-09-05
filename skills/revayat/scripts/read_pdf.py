@@ -126,8 +126,65 @@ _CHAPTER_WORD = re.compile(
 )
 
 
+#: A line narrower than this share of the text column, sitting with equal
+#: margins either side, is centred rather than merely justified.
+CENTRED_MAX_WIDTH_SHARE = 0.75
+#: Margins within this many points of each other read as equal.
+CENTRED_TOLERANCE_PT = 12.0
+#: Vertical space above a line, relative to the body size, that a designer only
+#: leaves before something that starts a new section.
+SECTION_GAP_RATIO = 1.6
+
+
+def _alignment(bbox: list[float], page_width: float, text_left: float,
+               text_right: float) -> str:
+    """``centre``, ``start`` or ``end``, judged from the two side margins.
+
+    A full-width justified paragraph also has equal margins, so a line only
+    counts as centred when it is short enough to have been placed there.
+    """
+    left, right = bbox[0], bbox[2]
+    column = max(text_right - text_left, 1.0)
+    if (right - left) / column <= CENTRED_MAX_WIDTH_SHARE and abs(
+        (left - text_left) - (text_right - right)
+    ) <= CENTRED_TOLERANCE_PT:
+        return "centre"
+    return "start" if (left - text_left) <= (text_right - right) else "end"
+
+
+def _style_evidence(group: dict[str, Any], *, body_size: float, page_width: float,
+                    text_left: float, text_right: float,
+                    gap_before: float | None, starts_page: bool,
+                    ocr: bool) -> dict[str, Any]:
+    """Everything the source actually told us about how this line was set.
+
+    Recorded whether or not it changes the classification, because the DOCX
+    styles are chosen from it and a reader auditing a heading level deserves to
+    see the evidence rather than a bare number. Nothing here is inferred: if
+    the source did not say, the field is ``None``.
+    """
+    text = ir.plain_text(group["markup"])
+    letters = [c for c in text if c.isalpha()]
+    return {
+        # Where the evidence came from decides how far it can be trusted: on a
+        # scan the size is a per-line estimate, not a typesetter's choice.
+        "source": "ocr-layout" if ocr else "pdf-text",
+        "font_size_pt": round(group["size"], 2),
+        "relative_size": round(group["size"] / body_size, 3) if body_size else None,
+        "bold": bool(group.get("bold")),
+        "italic": bool(group.get("italic")),
+        "all_caps": bool(letters) and all(c.isupper() for c in letters),
+        "alignment": _alignment(group["bbox"], page_width, text_left, text_right),
+        "space_before_pt": round(gap_before, 1) if gap_before is not None else None,
+        "starts_page": starts_page,
+        "lines": group.get("line_count", 1),
+        "bbox": group["bbox"],
+    }
+
+
 def _heading_level(size: float, body_size: float, text: str, bold: bool,
-                   *, ocr: bool = False) -> int | None:
+                   *, ocr: bool = False,
+                   evidence: dict[str, Any] | None = None) -> int | None:
     """Classify a short line as a heading, or ``None`` for body text.
 
     On an OCR layer the size is a per-line *estimate* that jitters, so only an
@@ -139,12 +196,30 @@ def _heading_level(size: float, body_size: float, text: str, bold: bool,
         return None
     ratio = size / body_size if body_size else 1.0
 
+    # Corroboration, used only where size alone is not decisive. A short,
+    # centred line with clear air above it and no closing punctuation is a
+    # heading in every book ever set, whatever its point size — and on a scan,
+    # where the size is a guess, it is the *stronger* signal of the two.
+    evidence = evidence or {}
+    centred = evidence.get("alignment") == "centre"
+    airy = (evidence.get("space_before_pt") or 0) >= body_size * SECTION_GAP_RATIO
+    unpunctuated = not text.rstrip().endswith((".", "!", "?", "،", "؛"))
+    display = (
+        centred and unpunctuated and len(text) <= 80
+        and evidence.get("lines", 1) <= 3
+    )
+
     if ocr:
         if ratio >= 1.9:
             return 1
         if ratio >= 1.55:
             return 2
-        return 2 if _CHAPTER_WORD.match(text) else None
+        if _CHAPTER_WORD.match(text):
+            return 2
+        # Size is unreliable here, so placement carries the decision instead.
+        if display and (airy or evidence.get("starts_page")):
+            return 2
+        return None
 
     if ratio >= 1.8:
         return 1
@@ -158,6 +233,10 @@ def _heading_level(size: float, body_size: float, text: str, bold: bool,
     # "CHAPTER SEVEN" style small-caps headings keep the body size.
     if _CHAPTER_WORD.match(text):
         return 2
+    if display and (airy or evidence.get("starts_page")):
+        return 2 if evidence.get("starts_page") else 3
+    if evidence.get("all_caps") and unpunctuated and len(text) <= 60 and airy:
+        return 3
     return None
 
 
@@ -208,13 +287,14 @@ def _block_groups(block: dict[str, Any], drop: set[str],
             continue
         spans: list[tuple[str, bool, bool]] = []
         size = 0.0
-        bold_line = False
+        bold_line = italic_line = False
         for span in line.get("spans", []):
             text = span.get("text", "")
             if not text:
                 continue
             bold, italic = _style_of(span)
             bold_line = bold_line or bold
+            italic_line = italic_line or italic
             size = max(size, float(span.get("size", 0)))
             spans.append((text, bold, italic))
         if not spans:
@@ -231,9 +311,11 @@ def _block_groups(block: dict[str, Any], drop: set[str],
             current["lines"].append(markup)
             current["size"] = max(current["size"], size)
             current["bold"] = current["bold"] or bold_line
+            current["italic"] = current["italic"] or italic_line
             current["bbox"] = _union(current["bbox"], bbox)
         else:
-            current = {"lines": [markup], "size": size, "bold": bold_line, "bbox": bbox}
+            current = {"lines": [markup], "size": size, "bold": bold_line,
+                       "italic": italic_line, "bbox": bbox}
             groups.append(current)
 
     # Joining happens on already-marked-up strings, which is safe because a
@@ -243,6 +325,8 @@ def _block_groups(block: dict[str, Any], drop: set[str],
             "markup": _join_lines(group["lines"]),
             "size": group["size"],
             "bold": group["bold"],
+            "italic": group["italic"],
+            "line_count": len(group["lines"]),
             "bbox": [round(v, 2) for v in group["bbox"]],
         }
         for group in groups
@@ -421,9 +505,17 @@ def _read_open_pdf(
 
         text_items.sort(key=lambda item: item[0])
 
+        # The text column, measured rather than assumed: a book's real margins
+        # are whatever its own lines occupy, not the page box.
+        boxes = [p["bbox"] for _, k, p in text_items if k == "text" and p.get("bbox")]
+        text_left = min((b[0] for b in boxes), default=0.0)
+        text_right = max((b[2] for b in boxes), default=float(page.rect.width))
+
         if index > 0:
             add("pagebreak", page=page_no, soft=True)
 
+        previous_bottom: float | None = None
+        seen_text_on_page = False
         for _, kind, payload in text_items:
             if kind == "image":
                 add(
@@ -442,15 +534,25 @@ def _read_open_pdf(
                 continue
 
             markup = payload["markup"]
-            level = _heading_level(
-                payload["size"], body_size, ir.plain_text(markup), payload["bold"],
+            box = payload["bbox"]
+            gap_before = (box[1] - previous_bottom) if previous_bottom is not None else None
+            evidence = _style_evidence(
+                payload, body_size=body_size, page_width=float(page.rect.width),
+                text_left=text_left, text_right=text_right,
+                gap_before=gap_before, starts_page=not seen_text_on_page,
                 ocr=ocr_text,
             )
+            previous_bottom, seen_text_on_page = box[3], True
+
+            level = _heading_level(
+                payload["size"], body_size, ir.plain_text(markup), payload["bold"],
+                ocr=ocr_text, evidence=evidence,
+            )
             if level is not None:
-                add("heading", page=page_no, level=level, bbox=payload["bbox"],
-                    text=markup, font_size_pt=round(payload["size"], 2))
+                add("heading", page=page_no, level=level, bbox=box, text=markup,
+                    font_size_pt=round(payload["size"], 2), style_evidence=evidence)
             else:
-                add("paragraph", page=page_no, bbox=payload["bbox"], text=markup)
+                add("paragraph", page=page_no, bbox=box, text=markup)
 
     book["blocks"] = _merge_split_paragraphs(blocks)
     book["source"]["scanned_pages"] = scanned_pages
