@@ -69,3 +69,6 @@ Thumbs.db
 # later is still ignored by default. Only these two exact files are published.
 !/AGENTS.md
 !/CLAUDE.md
+
+# Local-only quality runs over the user's own books; never committed.
+/.sample/
