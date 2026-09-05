@@ -31,6 +31,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.shared import Pt
 
 import bookir as ir
+import layout
 import ooxml
 
 #: EPUB and other reflowable sources give no physical size; assume screen DPI.
@@ -116,6 +117,13 @@ class Builder:
             for name in ("Normal", "Quote", "Caption", "List Bullet", "List Number",
                          *(f"Heading {n}" for n in range(1, 7))):
                 ooxml.style_rtl(self.document, name, persian_font=self.options.font)
+
+        # Book layout goes into the styles, not onto each paragraph, so the
+        # whole document can be restyled from one place afterwards.
+        self.layout = layout.apply(
+            self.document, section, layout.Profile.from_options(self.options),
+            rtl=self.options.rtl,
+        )
         ooxml.request_field_update(self.document)
 
     @property
@@ -375,6 +383,7 @@ class Builder:
         self.document.save(str(destination))
         return {
             "output": str(destination),
+            "layout": getattr(self, "layout", {}),
             "headings": len(self.toc_entries),
             "bookmarks": len(self.bookmarks.names),
             "footnotes": len(self.footnotes),
@@ -411,6 +420,20 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--rtl", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--page-breaks", choices=["chapter", "source", "none"],
                         default="chapter")
+    parser.add_argument("--line-spacing", type=float, default=1.5,
+                        help="body line spacing as a multiple (1.0 = single)")
+    parser.add_argument("--first-line-indent", type=float, default=18.0, metavar="PT",
+                        help="first-line indent for body paragraphs; 0 disables it")
+    parser.add_argument("--mirror-margins", action=argparse.BooleanOptionalAction,
+                        default=False,
+                        help="mirrored inner/outer margins, for a printed book")
+    parser.add_argument("--gutter", type=float, default=0.0, metavar="PT",
+                        help="extra binding margin")
+    parser.add_argument("--page-numbers", action=argparse.BooleanOptionalAction,
+                        default=True, help="centred page number in the footer")
+    parser.add_argument("--widow-control", action=argparse.BooleanOptionalAction,
+                        default=True,
+                        help="stop a single line of a paragraph stranded on a page")
     parser.add_argument("--heading-size", choices=["style", "source"], default="style",
                         help="'style' uses Word's Heading N sizes; 'source' reproduces "
                              "the point size measured in the original book")
