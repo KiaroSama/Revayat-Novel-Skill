@@ -129,7 +129,7 @@ def test_a_verbatim_span_is_meant_to_survive():
     what makes this a test rather than a coincidence: without that exclusion the
     very same block is flagged.
     """
-    command = "python revayat.py qa check --book work/book.json"
+    command = "python revayat-novel.py qa check --book work/book.json"
     assert len(command) >= qa.COPIED_RUN_CHARS
     source = f"Run the command `{command}` before you build the document, please."
     target = f"پیش از ساخت سند، فرمان `{command}` را اجرا کنید، لطفاً."

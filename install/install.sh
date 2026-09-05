@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Install the Revayat skill into one or more coding agents.
+# Install the Revayat Novel skill into one or more coding agents.
 #
-# Copies skills/revayat/ into each agent's real skill directory. Copies, never
+# Copies skills/revayat-novel/ into each agent's real skill directory. Copies, never
 # links: several agents do not follow symlinks when discovering skills, so a
 # real directory is the only reliable form.
 #
@@ -43,7 +43,7 @@ esac
 # Resolve relative to this script, so the installer works from any directory.
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname -- "$SCRIPT_DIR")"
-SKILL_NAME="revayat"
+SKILL_NAME="revayat-novel"
 SOURCE="$REPO_ROOT/skills/$SKILL_NAME"
 
 if [ ! -f "$SOURCE/SKILL.md" ]; then
@@ -74,8 +74,8 @@ agent_folder() {
 # OpenCode and Antigravity discover instructions through AGENTS.md rather than a
 # skills directory, so they also get a short pointer section there. The markers
 # make the section replaceable without disturbing anything else in the file.
-BEGIN_MARK='<!-- BEGIN revayat -->'
-END_MARK='<!-- END revayat -->'
+BEGIN_MARK='<!-- BEGIN revayat-novel -->'
+END_MARK='<!-- END revayat-novel -->'
 
 write_agents_pointer() {
     target_file="$1"
@@ -83,8 +83,8 @@ write_agents_pointer() {
     mkdir -p -- "$(dirname -- "$target_file")"
     [ -f "$target_file" ] || : > "$target_file"
 
-    # Drop any previous Revayat section, keep everything else the user wrote.
-    tmp="$target_file.revayat.tmp"
+    # Drop any previous Revayat Novel section, keep everything else the user wrote.
+    tmp="$target_file.revayat-novel.tmp"
     awk -v b="$BEGIN_MARK" -v e="$END_MARK" '
         $0 == b { skip = 1 } !skip { print } $0 == e { skip = 0 }
     ' "$target_file" > "$tmp"
@@ -94,7 +94,7 @@ write_agents_pointer() {
         cat <<EOF
 
 $BEGIN_MARK
-## Revayat — Persian book translation
+## Revayat Novel — Persian book translation
 
 To translate a book into Persian and produce a Word file, follow
 \`$skill_dir/SKILL.md\`. Wherever it says \`{SKILL_DIR}\`, read that as
@@ -111,7 +111,7 @@ else
     TARGETS="$AGENT"
 fi
 
-printf '\nRevayat installer\n'
+printf '\nRevayat Novel installer\n'
 printf '  source : %s\n' "$SOURCE"
 printf '  scope  : %s' "$SCOPE"
 [ "$SCOPE" = "project" ] && printf ' (%s)' "$PROJECT_PATH"
@@ -175,8 +175,8 @@ fi
 [ -n "$skipped" ] && printf 'Skipped:%s\n' "$skipped"
 
 printf '\nPython dependencies:\n  pip install -r "%s/requirements.txt"\n' "$SOURCE"
-printf '\nThen check the install with:\n  python3 "%s/scripts/revayat.py" doctor\n' "$SOURCE"
-printf '\nActivate the skill by its name, which is "revayat" — the value of\n'
+printf '\nThen check the install with:\n  python3 "%s/scripts/revayat-novel.py" doctor\n' "$SOURCE"
+printf '\nActivate the skill by its name, which is "revayat-novel" — the value of\n'
 printf 'name: in SKILL.md, not the folder name.\n\n'
 
 [ -n "$installed" ] || exit 1

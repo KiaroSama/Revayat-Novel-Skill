@@ -36,7 +36,7 @@ from typing import Any, Iterable
 
 import bookir as ir
 
-SCHEMA = "revayat/ocr@1"
+SCHEMA = "revayat-novel/ocr@1"
 
 #: At or above this, recognition is taken at face value.
 DEFAULT_HIGH = 85.0
@@ -245,7 +245,7 @@ def build(
     try:
         count = len(document) if max_pages is None else min(len(document), max_pages)
         pages: list[dict[str, Any]] = []
-        with tempfile.TemporaryDirectory(prefix="revayat-ocr-") as scratch:
+        with tempfile.TemporaryDirectory(prefix="revayat-novel-ocr-") as scratch:
             for index in range(count):
                 image = Path(scratch) / f"p{index + 1:05d}.png"
                 document[index].get_pixmap(dpi=dpi).save(image)
