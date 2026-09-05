@@ -23,7 +23,10 @@ from tests_support import png_bytes
 PERSIAN = "صبح به آرامی از فراز تپه‌ها بالا آمد و الیزابت کنار پنجره ایستاده بود."
 PERSIAN_OTHER = "دارسی هیچ نگفت و او رویش را از پنجره برگرداند و به راه افتاد."
 
-SETUP = ir.default_page_setup()          # 396 × 612pt, body 54..351 × 54..558
+#: Whatever the project's default trim is. Derived, never repeated as a
+#: literal: these tests are about geometry *relative* to the body box, and a
+#: change of paper size must not read as a rendering defect.
+SETUP = ir.default_page_setup()
 BODY_RIGHT = SETUP["width_pt"] - SETUP["margin_outer_pt"]
 
 
@@ -134,7 +137,14 @@ def test_an_illustration_at_the_wrong_shape_is_rejected():
 
 
 def test_text_clipped_off_the_trim_is_rejected():
-    view = _view(blocks=[_text(PERSIAN, [60, 560, 470, 640])])
+    """Off the paper, not merely outside the body — a line that got cut.
+
+    Stated relative to the trim rather than in absolute points: on a wider
+    paper the same literal box sits comfortably inside the sheet, and the test
+    would pass while proving nothing.
+    """
+    beyond = SETUP["width_pt"] + 40
+    view = _view(blocks=[_text(PERSIAN, [60, 100, beyond, 140])])
     assert "text-clipped" in _codes(
         renderqa.check_page(view, _expected(texts=[PERSIAN])))
 
@@ -155,8 +165,14 @@ def test_a_page_at_the_wrong_size_is_rejected():
 
 
 def test_a_paragraph_that_is_not_right_to_left_is_rejected():
-    """Flush left, well short of the right margin: the bidi property was lost."""
-    view = _view(blocks=[_text(PERSIAN, [54, 100, 250, 140])])
+    """Flush left, well short of the right margin: the bidi property was lost.
+
+    The box has to sit *inside* the body, or overflow is reported too and the
+    finding under test is no longer the only one — which is the point of
+    asserting an exact set here.
+    """
+    left = SETUP["margin_inner_pt"] + 2
+    view = _view(blocks=[_text(PERSIAN, [left, 100, left + 150, 140])])
     assert _codes(renderqa.check_page(view, _expected(texts=[PERSIAN]))) == {
         "paragraph-not-rtl"}
 
@@ -257,7 +273,8 @@ def test_a_page_the_book_does_not_have_expects_nothing(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def _pdf_page(path: Path, lines: list[tuple[str, float, float]], *,
-              width: float = 396, height: float = 612) -> Path:
+              width: float = SETUP["width_pt"],
+              height: float = SETUP["height_pt"]) -> Path:
     pymupdf = pytest.importorskip("pymupdf")
     doc = pymupdf.open()
     page = doc.new_page(width=width, height=height)
@@ -427,13 +444,23 @@ def sample_book_and_docx(tmp_path):
     return book_path, docx_path
 
 
-def test_a_missing_converter_says_what_to_install(monkeypatch, tmp_path):
+def test_no_word_says_what_to_do_instead(monkeypatch, tmp_path):
     """The message has to name the fix, not just the symptom."""
-    monkeypatch.setattr(renderqa, "find_converter", lambda: None)
+    monkeypatch.setattr(renderqa, "word_available", lambda: "Word is not here")
     with pytest.raises(renderqa.RenderError) as raised:
         renderqa.render_docx(tmp_path / "book.docx", tmp_path / "renders")
-    message = str(raised.value)
-    assert "LibreOffice" in message and "--target-pdf" in message
+    assert "--target-pdf" in str(raised.value)
+
+
+def test_a_platform_without_word_is_named_rather_than_guessed(monkeypatch):
+    """Off Windows this path cannot run, and saying so is the whole point.
+
+    Substituting a different renderer would be worse than refusing: the
+    document is a .docx, so a report about where things sit on the page is only
+    true of Word's pagination.
+    """
+    monkeypatch.setattr(renderqa.sys, "platform", "linux")
+    assert "Windows" in renderqa.word_available()
 
 
 def test_a_conversion_failure_leaves_the_page_unverified_not_passed(
@@ -445,11 +472,11 @@ def test_a_conversion_failure_leaves_the_page_unverified_not_passed(
     passes there would be worse than no check.
     """
     book_path, docx_path = sample_book_and_docx
-    monkeypatch.setattr(renderqa, "find_converter", lambda: None)
+    monkeypatch.setattr(renderqa, "word_available", lambda: "Word is not here")
 
     report = renderqa.check(tmp_path, book_path, 1, docx=docx_path)
     assert report["ok"] is False, report
-    assert "LibreOffice" in report["unverified"]
+    assert "Word is not here" in report["unverified"]
     assert report.get("findings") in (None, []), (
         "an unverified page invented findings it could not have seen"
     )
