@@ -103,6 +103,11 @@ def make_entry(index: int, source: str, *, category: str = "unknown",
         "later_form": "",      # e.g. "الیزابت بنت"
         "category": category,  # person | place | organisation | thing | term
         "aliases": sorted(set(aliases)),
+        # The aliases' own Persian, when the book uses a short form and the
+        # translation should too. Without it the drift check demands the full
+        # canonical name wherever the source says only "Ashcroft", which is
+        # worse Persian and rejects a faithful translation.
+        "alias_targets": [],
         "gender": "unknown",
         "locked": False,
         "frequency": frequency,
