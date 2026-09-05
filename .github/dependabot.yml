@@ -1,14 +1,15 @@
 version: 2
 updates:
+  # Version updates are disabled here on purpose. requirements.txt states the
+  # *minimum* version each dependency is known to work with, so raising those
+  # floors weekly would narrow the range of environments the skill installs on
+  # without fixing anything. Security updates ignore this limit and still open
+  # pull requests.
   - package-ecosystem: pip
     directory: /skills/revayat
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      python-dependencies:
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 0
 
   - package-ecosystem: github-actions
     directory: /
