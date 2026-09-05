@@ -268,3 +268,98 @@ def test_a_docx_goes_through_the_whole_pipeline(imported, tmp_path):
     with zipfile.ZipFile(destination) as archive:
         document = archive.read("word/document.xml").decode("utf-8")
     assert "<w:bidi" in document, "the Persian document is not right-to-left"
+
+
+# --------------------------------------------------------------------------- #
+# And the grid comes back
+# --------------------------------------------------------------------------- #
+
+def test_the_table_is_rebuilt_as_a_table_not_as_loose_paragraphs(imported,
+                                                                 tmp_path):
+    """The cells travel as blocks so each one is translated; the grid returns here.
+
+    Keeping them as ordinary text blocks through the pipeline is what makes
+    every cell its own worksheet unit — translated, counted and gated like a
+    paragraph. Only the builder has anything to put the grid back into.
+    """
+    from docx import Document
+
+    from build_docx import Builder, add_arguments
+
+    book, assets = imported
+    for block in ir.iter_text_blocks(book):
+        if (block.get("text") or "").strip():
+            markers = "".join(f"[[fn:{n}]]" for n in ir.footnote_refs(block["text"]))
+            block["target"] = f"ترجمهٔ بند {block['id']} با طول کافی{markers}."
+    for note in book["footnotes"]:
+        note["target"] = "یادداشت."
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    options = parser.parse_args(["--book", "x", "--out", "y", "--font", "Tahoma",
+                                 "--no-toc"])
+    destination = tmp_path / "with-table.docx"
+    Builder(book, assets, options).build(destination)
+
+    document = Document(destination)
+    assert len(document.tables) == 1, "the grid was not rebuilt"
+    table = document.tables[0]
+    assert (len(table.rows), len(table.columns)) == (2, 2)
+
+    # All four cells of the fixture carry text, and each one landed in its own
+    # cell rather than being concatenated into a neighbour.
+    filled = [table.cell(r, c).text.strip()
+              for r in range(2) for c in range(2)]
+    assert all(filled), filled
+    assert len(set(filled)) == 4, f"cells were merged or duplicated: {filled}"
+
+
+def test_a_persian_table_reads_right_to_left(imported, tmp_path):
+    """Cell paragraphs alone do not do this — the column order is separate."""
+    import zipfile
+
+    from build_docx import Builder, add_arguments
+
+    book, assets = imported
+    for block in ir.iter_text_blocks(book):
+        if (block.get("text") or "").strip():
+            markers = "".join(f"[[fn:{n}]]" for n in ir.footnote_refs(block["text"]))
+            block["target"] = f"ترجمهٔ بند {block['id']} با طول کافی{markers}."
+    for note in book["footnotes"]:
+        note["target"] = "یادداشت."
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    options = parser.parse_args(["--book", "x", "--out", "y", "--font", "Tahoma",
+                                 "--no-toc"])
+    destination = tmp_path / "rtl-table.docx"
+    Builder(book, assets, options).build(destination)
+
+    with zipfile.ZipFile(destination) as archive:
+        document = archive.read("word/document.xml").decode("utf-8")
+    assert "<w:bidiVisual" in document, (
+        "the table keeps left-to-right column order in a Persian document"
+    )
+
+
+def test_a_cell_with_no_coordinates_is_written_rather_than_dropped(tmp_path):
+    """Losing a sentence to a malformed row is worse than an untidy table."""
+    from build_docx import Builder, add_arguments
+
+    book = ir.new_book()
+    stray = ir.make_block("paragraph", 1, page=0, text="Orphaned cell text.",
+                          table="t0001")
+    stray["target"] = "متن سلولی که مختصاتش را از دست داده و باید بماند."
+    book["blocks"] = [stray]
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    options = parser.parse_args(["--book", "x", "--out", "y", "--font", "Tahoma",
+                                 "--no-toc"])
+    destination = tmp_path / "stray.docx"
+    Builder(book, tmp_path, options).build(destination)
+
+    from docx import Document
+    document = Document(destination)
+    assert not document.tables
+    assert any("سلولی" in p.text for p in document.paragraphs)

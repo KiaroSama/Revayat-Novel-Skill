@@ -62,6 +62,21 @@ def set_paragraph_rtl(paragraph, rtl: bool = True) -> None:
         properties.append(el("bidi"))
 
 
+def set_table_rtl(table, rtl: bool = True) -> None:
+    """Mirror a table's column order for right-to-left reading.
+
+    A table is not made right-to-left by its paragraphs: those set the direction
+    of the text *inside* each cell, while the columns keep marching left to
+    right. ``w:bidiVisual`` is the separate switch that puts the first column on
+    the right, where a Persian reader looks for it.
+    """
+    properties = table._tbl.tblPr
+    for existing in properties.findall(qn("w:bidiVisual")):
+        properties.remove(existing)
+    if rtl:
+        properties.append(el("bidiVisual"))
+
+
 def set_run_direction(run, *, rtl: bool, bidi_lang: str = "fa-IR",
                       latin_lang: str = "en-US") -> None:
     """Mark a run as Persian (``w:rtl``) or as isolated Latin.
