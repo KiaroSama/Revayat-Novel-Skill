@@ -6,4 +6,4 @@ lxml>=5.0                # OOXML manipulation (also a python-docx dependency)
 
 # Development only.
 pytest>=8.0
-pytest-timeout>=2.3
+pytest-timeout>=2.4.0
