@@ -117,9 +117,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $parseErrors = $null
+          $scriptPath = (Resolve-Path 'install/install.ps1').Path
           $null = [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path 'install/install.ps1'), [ref]$null, [ref]$errors)
-          if ($errors) { $errors; throw 'install.ps1 does not parse' }
+            $scriptPath, [ref]$null, [ref]$parseErrors)
+          if ($parseErrors) { $parseErrors; throw 'install.ps1 does not parse' }
 
           $target = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
           foreach ($d in '.claude','.kiro','.codex','.cursor','.cline','.hermes','.opencode','.agents') {
@@ -144,6 +146,16 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: skills/revayat/requirements.txt
+
+      # Two checks below import the project, so they need its dependencies.
+      # Without them pytest collects nothing and the coverage check reads that
+      # as "every suite is unreachable".
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r skills/revayat/requirements.txt
 
       - name: Every plugin manifest is valid JSON and agrees on version
         run: |
@@ -253,11 +265,17 @@ jobs:
           import pathlib, subprocess, sys
 
           on_disk = {p.name for p in pathlib.Path("tests").glob("test_*.py")}
-          collected = subprocess.run(
+          run = subprocess.run(
               [sys.executable, "-m", "pytest", "tests", "--collect-only", "-q"],
               capture_output=True, text=True,
-          ).stdout
-          missing = [name for name in on_disk if name.replace(".py", "") not in collected]
+          )
+          # Without this, a collection error would look like "no suite is
+          # reachable" and point the blame at the wrong thing entirely.
+          assert run.returncode == 0, (
+              "pytest could not collect at all: "
+              + run.stdout[-1500:] + run.stderr[-1500:]
+          )
+          missing = [name for name in on_disk if name.replace(".py", "") not in run.stdout]
           assert not missing, f"test files never collected by CI: {missing}"
           print(f"ok: all {len(on_disk)} test modules are collected")
           PY
