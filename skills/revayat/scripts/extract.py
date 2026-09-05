@@ -106,30 +106,39 @@ def probe_pdf(path: Path) -> dict[str, Any]:
 # OCR
 # --------------------------------------------------------------------------- #
 
-def run_ocr(
+def find_ocrmypdf() -> list[str] | None:
+    """How to launch OCRmyPDF, or ``None`` if it is not available.
+
+    Prefers the executable on PATH, then falls back to running it as a module
+    in *this* interpreter — which is the normal case when the skill's
+    dependencies live in a virtual environment that is not on PATH.
+    """
+    binary = shutil.which("ocrmypdf")
+    if binary:
+        return [binary]
+    try:
+        import ocrmypdf  # noqa: F401
+    except ImportError:
+        return None
+    return [sys.executable, "-m", "ocrmypdf"]
+
+
+def ocr_command(
+    launcher: list[str],
     source: Path,
     destination: Path,
     *,
     kind: str,
     language: str = "eng",
     deskew: bool | None = None,
-    timeout: int = OCR_TIMEOUT_SECONDS,
-) -> dict[str, Any]:
-    """Add a text layer with OCRmyPDF, preserving the original rasters."""
-    binary = shutil.which("ocrmypdf")
-    if not binary:
-        raise ExtractError(
-            "ocrmypdf is not on PATH but this PDF needs OCR.\n"
-            "  install:  pip install ocrmypdf   (plus Tesseract and Ghostscript)\n"
-            "  Windows:  winget install tesseract-ocr.tesseract "
-            "&& winget install ArtifexSoftware.GhostScript\n"
-            "  or re-run with --ocr off to extract only the pages that already "
-            "have a text layer."
-        )
+) -> list[str]:
+    """Build the OCRmyPDF argv for a book of this ``kind``.
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    Separated from execution so the routing decisions — which are the part with
+    real consequences — can be tested without the binary installed.
+    """
     command = [
-        binary,
+        *launcher,
         "--language", language,
         "--rotate-pages",
         # Keep the book's own pictures byte-identical: no re-encoding, no PDF/A
@@ -141,8 +150,40 @@ def run_ocr(
     # page is a scan anyway. On a mixed book it would damage the good pages.
     if deskew if deskew is not None else (kind == "scanned"):
         command.append("--deskew")
+    # --skip-text leaves pages that already carry text untouched; re-recognising
+    # them would replace accurate characters with guessed ones.
     command.append("--force-ocr" if kind == "scanned" else "--skip-text")
-    command += [str(source), str(destination)]
+    return command + [str(source), str(destination)]
+
+
+def run_ocr(
+    source: Path,
+    destination: Path,
+    *,
+    kind: str,
+    language: str = "eng",
+    deskew: bool | None = None,
+    timeout: int = OCR_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Add a text layer with OCRmyPDF, preserving the original rasters."""
+    launcher = find_ocrmypdf()
+    if not launcher:
+        raise ExtractError(
+            "this PDF needs OCR, but OCRmyPDF is not available.\n"
+            "  1. pip install ocrmypdf\n"
+            "  2. Tesseract:   winget install tesseract-ocr.tesseract\n"
+            "     (macOS: brew install tesseract · Debian: apt install tesseract-ocr)\n"
+            "  3. Ghostscript: https://ghostscript.com/releases/gsdnld.html\n"
+            "     Not in winget; on macOS `brew install ghostscript`, on Debian\n"
+            "     `apt install ghostscript`. Make sure its bin/ is on PATH.\n"
+            "  Then run `revayat.py doctor` to confirm all three are found.\n"
+            "  Or re-run with --ocr off to extract only the pages that already\n"
+            "  have a text layer."
+        )
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    command = ocr_command(launcher, source, destination, kind=kind,
+                          language=language, deskew=deskew)
 
     try:
         completed = subprocess.run(
@@ -161,7 +202,12 @@ def run_ocr(
         raise ExtractError(
             "ocrmypdf failed (exit %s):\n  %s" % (completed.returncode, "\n  ".join(tail))
         )
-    return {"command": command[0], "exit": completed.returncode, "output": str(destination)}
+    return {
+        "launcher": " ".join(launcher),
+        "mode": "force-ocr" if kind == "scanned" else "skip-text",
+        "exit": completed.returncode,
+        "output": str(destination),
+    }
 
 
 # --------------------------------------------------------------------------- #

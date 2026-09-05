@@ -43,13 +43,25 @@ REQUIRED = {
     "lxml": "OOXML manipulation (installed with python-docx)",
 }
 
+#: Optional binaries, each as the list of names it may go by. Ghostscript is
+#: ``gs`` on Unix but ``gswin64c`` / ``gswin32c`` on Windows — checking only the
+#: Unix name reports it missing on every Windows machine that has it.
 OPTIONAL_TOOLS = {
-    "ocrmypdf": "adds a text layer to scanned or mixed PDFs",
-    "tesseract": "the OCR engine OCRmyPDF drives",
-    "gs": "Ghostscript, required by OCRmyPDF",
-    "mineru": "stronger layout/OCR extraction for difficult scans",
-    "soffice": "LibreOffice, for rendering the DOCX to PDF during visual QA",
+    "ocrmypdf": (["ocrmypdf"], "adds a text layer to scanned or mixed PDFs"),
+    "tesseract": (["tesseract"], "the OCR engine OCRmyPDF drives"),
+    "ghostscript": (["gs", "gswin64c", "gswin32c"], "required by OCRmyPDF"),
+    "mineru": (["mineru", "magic-pdf"], "stronger extraction for difficult scans"),
+    "libreoffice": (["soffice", "libreoffice"],
+                    "renders the DOCX to PDF for visual QA"),
 }
+
+
+def find_tool(names: list[str]) -> str | None:
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
 
 
 def doctor() -> dict[str, object]:
@@ -71,8 +83,8 @@ def doctor() -> dict[str, object]:
             modules[name] = f"MISSING — needed for {why}"
 
     tools = {
-        name: (shutil.which(name) or f"not found — {why}")
-        for name, why in OPTIONAL_TOOLS.items()
+        label: (find_tool(names) or f"not found — {why}")
+        for label, (names, why) in OPTIONAL_TOOLS.items()
     }
     missing = [name for name, value in modules.items() if str(value).startswith("MISSING")]
     return {
