@@ -241,8 +241,13 @@ def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
 
     for entry in glossary.get("entries", []):
         match = _PARENTHETICAL.search(entry.get("first_form") or "")
-        if not match or not entry.get("locked"):
+        if not match:
             continue
+        # Deliberately not gated on `locked`. Locking governs whether the
+        # enforcement pass may rewrite the text — a destructive act that should
+        # only touch a name the translator has confirmed. Reporting costs
+        # nothing, and a name introduced three times is a defect whether or not
+        # anyone has ticked the box yet.
         introduction = match.group(0)
         name = entry.get("id") or introduction
         owner = entry.get("first_block_id") or ""
@@ -263,8 +268,9 @@ def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
 
         if total == 0:
             report.add(ERROR, "first-mention-missing", name,
-                       f"{introduction} never appears; the name is introduced "
-                       f"nowhere in the book")
+                       f"{introduction} never appears; re-run merge with "
+                       f"--glossary, which places it once in "
+                       f"{owner or 'the block that first mentions the name'}")
             continue
 
         if total > 1:
