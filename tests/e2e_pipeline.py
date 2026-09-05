@@ -117,7 +117,12 @@ def translate(worksheet: str) -> str:
             # Keep the locked name in the output, the way a real translator
             # would, so the glossary gate is exercised rather than tripped.
             name = "الیزابت بنت " if "Elizabeth Bennet" in span["text"] else ""
-            span["text"] = name + "متن فارسی برای آزمون سراسری خط لوله است. " * 2
+            # The unit id goes in the filler so no two units come back with
+            # word-for-word identical Persian. A fixed string made every
+            # multi-span paragraph in the book identical, which is exactly the
+            # pasted-worksheet shape qa's duplicate-translation gate rejects.
+            span["text"] = (f"{name}متن فارسی یکتای {current} "
+                            f"برای آزمون خط لوله است. ") * 2
         rendered = ir.render_spans(spans).strip()
         # Exercise the translator-footnote path once.
         if counter == 1:
