@@ -1,0 +1,16 @@
+{
+  "name": "revayat-skill",
+  "owner": {
+    "name": "Kiaro Sama",
+    "url": "https://github.com/KiaroSama"
+  },
+  "plugins": [
+    {
+      "name": "revayat",
+      "source": "./",
+      "description": "Translate a whole book into publication-quality Persian and build a professional Word file: OCR for scanned and mixed PDFs, original illustrations at their real size, Word-native footnotes, a clickable table of contents, RTL typography and a locked name glossary.",
+      "version": "1.0.0",
+      "license": "MIT"
+    }
+  ]
+}

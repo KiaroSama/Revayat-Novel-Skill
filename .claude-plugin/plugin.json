@@ -1,0 +1,27 @@
+{
+  "name": "revayat",
+  "displayName": "Revayat — Persian Book Translation",
+  "version": "1.0.0",
+  "description": "Translate a whole book into publication-quality Persian and build a professional Word file: OCR for scanned and mixed PDFs, original illustrations at their real size, Word-native footnotes, a clickable table of contents, RTL typography and a locked name glossary.",
+  "author": {
+    "name": "Kiaro Sama",
+    "url": "https://github.com/KiaroSama"
+  },
+  "homepage": "https://github.com/KiaroSama/Revayat-Skill",
+  "repository": "https://github.com/KiaroSama/Revayat-Skill",
+  "license": "MIT",
+  "keywords": [
+    "translation",
+    "persian",
+    "farsi",
+    "rtl",
+    "docx",
+    "ocr",
+    "epub",
+    "pdf",
+    "book",
+    "typography"
+  ],
+  "skills": "./skills/",
+  "commands": "./commands/"
+}

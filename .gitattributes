@@ -1,0 +1,27 @@
+# Normalise every text file to LF in the repository.
+* text=auto eol=lf
+
+# A shell script with CRLF line endings fails to execute on Linux and macOS:
+# the interpreter path ends up with a trailing carriage return.
+*.sh   text eol=lf
+*.py   text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+
+# PowerShell keeps CRLF, the convention on the platform it runs on.
+*.ps1  text eol=crlf
+
+# Never let a filter touch these.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.pdf  binary
+*.docx binary
+*.epub binary
+*.zip  binary
+*.ttf  binary
+*.otf  binary
+*.woff binary
+*.woff2 binary
