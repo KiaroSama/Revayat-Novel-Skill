@@ -9,6 +9,7 @@ OCRmyPDF's problem; whether we ask it for the right thing is ours.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,8 @@ import pytest
 import bookir as ir
 from extract import (
     ExtractError,
+    _mineru_bbox,
+    merge_mineru_figures,
     detect_format,
     find_ocrmypdf,
     from_markdown,
@@ -247,3 +250,194 @@ def test_markdown_import_tolerates_a_missing_image(tmp_path):
                          lang_source="en", lang_target="fa-IR")
     assert not any(b["type"] == "image" for b in book["blocks"])
     assert any(b["type"] == "paragraph" for b in book["blocks"])
+
+
+# --------------------------------------------------------------------------- #
+# MinerU figure extraction
+# --------------------------------------------------------------------------- #
+
+def _mineru_output(tmp_path, items, *, name="book") -> Path:
+    """Build the directory layout MinerU 3.4.x actually writes."""
+    from PIL import Image
+
+    root = tmp_path / "mineru" / name / "auto"
+    (root / "images").mkdir(parents=True, exist_ok=True)
+    content = []
+    for number, item in enumerate(items, start=1):
+        relative = item.get("img_path", f"images/fig{number}.jpg")
+        target = root / relative.replace("/", os.sep)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (item.pop("_px", (60, 40))),
+                  item.pop("_colour", (10, 20 * number % 250, 30))).save(target)
+        content.append({"type": "image", "img_path": relative, **item})
+    (root / f"{name}_content_list.json").write_text(
+        json.dumps(content, ensure_ascii=False), encoding="utf-8"
+    )
+    return tmp_path / "mineru"
+
+
+def _scanned_book(pages: int = 4) -> dict:
+    """A book of whole-page scans, which is what OCR of an image PDF leaves."""
+    book = ir.new_book(lang_source="fa", lang_target="fa-IR")
+    blocks = []
+    for page in range(1, pages + 1):
+        blocks.append(ir.make_block("image", len(blocks) + 1, page=page,
+                                    asset=f"page{page}.png", alt=""))
+        blocks.append(ir.make_block("paragraph", len(blocks) + 1, page=page,
+                                    text=f"متن صفحهٔ {page}"))
+    book["blocks"] = blocks
+    return book
+
+
+def test_mineru_bbox_is_scaled_from_thousandths_to_points():
+    page = {"width_pt": 595.3, "height_pt": 841.9}
+    assert _mineru_bbox([0, 0, 1000, 1000], page) == [0.0, 0.0, 595.3, 841.9]
+    # Measured against a real crop: 286/1000 of a 200-DPI A4 render is 170pt.
+    left, _, right, _ = _mineru_bbox([100, 200, 386, 400], page)
+    assert round(right - left) == 170
+
+
+@pytest.mark.parametrize("bbox", [None, [], [1, 2, 3], ["a", "b", "c", "d"]])
+def test_mineru_bbox_rejects_junk_without_raising(bbox):
+    assert _mineru_bbox(bbox, {"width_pt": 595.3, "height_pt": 841.9}) is None
+
+
+def test_figures_replace_the_page_scan_they_were_cropped_from(tmp_path):
+    book = _scanned_book(2)
+    mineru = _mineru_output(tmp_path, [
+        {"page_idx": 0, "bbox": [100, 200, 500, 400], "image_caption": ["قارچ"]},
+        {"page_idx": 0, "bbox": [100, 500, 500, 700], "_colour": (200, 40, 40)},
+    ])
+
+    report = merge_mineru_figures(book, mineru, tmp_path / "assets")
+    assert report["figures_added"] == 2
+    assert report["page_scans_replaced"] == 1
+
+    images = [b for b in book["blocks"] if b["type"] == "image"]
+    # The page-1 scan is gone, replaced by its two crops; page 2 is untouched.
+    assert [b["page"] for b in images] == [1, 1, 2]
+    assert all((tmp_path / "assets" / b["asset"]).exists() for b in images[:2])
+    assert images[0]["alt"] == "قارچ"
+    # Real size travels with the crop, or a picture cannot be placed to scale.
+    assert images[0]["width_pt"] == pytest.approx(158.4, abs=0.1)
+    assert ir.validate_book(book) == []
+
+
+def test_figures_are_ordered_down_the_page(tmp_path):
+    book = _scanned_book(1)
+    mineru = _mineru_output(tmp_path, [
+        {"page_idx": 0, "bbox": [0, 700, 500, 900], "image_caption": ["پایین"]},
+        {"page_idx": 0, "bbox": [0, 100, 500, 300], "image_caption": ["بالا"]},
+    ])
+    merge_mineru_figures(book, mineru, tmp_path / "assets")
+    captions = [b["alt"] for b in book["blocks"] if b["type"] == "image"]
+    assert captions == ["بالا", "پایین"]
+
+
+def test_page_offset_maps_a_partial_mineru_run_onto_the_book(tmp_path):
+    """`mineru -s 39 -e 41` numbers its own pages from zero."""
+    book = _scanned_book(41)
+    mineru = _mineru_output(tmp_path, [
+        {"page_idx": 0, "bbox": [0, 100, 500, 300]},
+        {"page_idx": 1, "bbox": [0, 100, 500, 300]},
+    ])
+    merge_mineru_figures(book, mineru, tmp_path / "assets", page_offset=39)
+    pages = [b["page"] for b in book["blocks"]
+             if b["type"] == "image" and "fig" in b["asset"]]
+    assert pages == [40, 41]
+
+
+def test_figures_append_when_the_page_scan_was_already_dropped(tmp_path):
+    """read_pdf drops page-sized scans, so there is nothing left to replace."""
+    book = _scanned_book(2)
+    book["blocks"] = [b for b in book["blocks"] if b["type"] != "image"]
+    mineru = _mineru_output(tmp_path, [{"page_idx": 0, "bbox": [0, 100, 500, 300]}])
+
+    report = merge_mineru_figures(book, mineru, tmp_path / "assets")
+    assert report["page_scans_replaced"] == 0 and report["figures_added"] == 1
+    # It lands after page 1's prose and before page 2 starts.
+    order = [(b["type"], b["page"]) for b in book["blocks"]]
+    assert order == [("paragraph", 1), ("image", 1), ("paragraph", 2)]
+
+
+def test_a_watermark_cropped_on_every_page_is_dropped(tmp_path):
+    """MinerU crops a translucent publisher stamp as if it were a picture.
+
+    Measured on a real scan: the same 170x69pt box came back from page after
+    page. Nothing that recurs in the same spot on a quarter of the book is an
+    illustration.
+    """
+    stamp = {"bbox": [100, 40, 386, 122]}
+    items = [{"page_idx": page, **stamp} for page in range(6)]
+    items.append({"page_idx": 2, "bbox": [100, 300, 800, 700]})  # a real photo
+    book = _scanned_book(6)
+
+    report = merge_mineru_figures(book, _mineru_output(tmp_path, items),
+                                  tmp_path / "assets")
+    assert report["furniture_dropped"] == 6
+    assert report["figures_added"] == 1
+    kept = [b for b in book["blocks"] if b["type"] == "image"
+            and "fig" in b["asset"]]
+    assert len(kept) == 1 and kept[0]["page"] == 3
+
+
+def test_a_repeated_figure_is_kept_when_the_book_is_short(tmp_path):
+    """Two crops out of two pages is not evidence of furniture."""
+    items = [{"page_idx": p, "bbox": [100, 40, 386, 122]} for p in range(2)]
+    book = _scanned_book(2)
+    report = merge_mineru_figures(book, _mineru_output(tmp_path, items),
+                                  tmp_path / "assets")
+    assert report["furniture_dropped"] == 0 and report["figures_added"] == 2
+
+
+def test_missing_mineru_output_says_how_to_produce_it(tmp_path):
+    with pytest.raises(ExtractError, match="mineru -p"):
+        merge_mineru_figures(_scanned_book(1), tmp_path, tmp_path / "assets")
+
+
+def test_a_crop_file_that_vanished_is_skipped_not_fatal(tmp_path):
+    mineru = _mineru_output(tmp_path, [
+        {"page_idx": 0, "bbox": [0, 100, 500, 300]},
+        {"page_idx": 0, "bbox": [0, 400, 500, 600], "img_path": "images/gone.jpg"},
+    ])
+    (mineru / "book" / "auto" / "images" / "gone.jpg").unlink()
+
+    book = _scanned_book(1)
+    assert merge_mineru_figures(book, mineru, tmp_path / "assets")["figures_added"] == 1
+
+
+def test_skipping_ocr_is_not_recorded_as_having_run(scanned_pdf, tmp_path,
+                                                   monkeypatch):
+    """`--ocr off` on a scan must not claim an OCR text layer it never made.
+
+    Deriving the flag from the report was wrong in both directions that matter:
+    the book's provenance said `from_ocr` when nothing had been recognised, and
+    the extractor switched to OCR's loose font-size tolerance -- which is what
+    turns ordinary paragraphs into false headings.
+    """
+    import argparse
+
+    import extract
+    import read_pdf
+
+    parser = argparse.ArgumentParser()
+    extract.add_arguments(parser)
+    args = parser.parse_args([str(scanned_pdf), "--out", str(tmp_path),
+                              "--ocr", "off", "--clean-scan", "off"])
+
+    seen: dict[str, object] = {}
+    real = read_pdf.read_pdf
+
+    def spy(*positional, **keyword):
+        seen["ocr_text"] = keyword.get("ocr_text")
+        return real(*positional, **keyword)
+
+    monkeypatch.setattr(read_pdf, "read_pdf", spy)
+
+    report: dict = {}
+    book = extract._extract_native(args, tmp_path, tmp_path / "assets", report)
+
+    assert seen["ocr_text"] is False
+    assert book["source"]["from_ocr"] is False
+    # The skip is still reported, so the gap stays visible rather than silent.
+    assert "skipped" in report["ocr"]
