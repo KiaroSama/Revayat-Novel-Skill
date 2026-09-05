@@ -180,7 +180,84 @@ mentions yourself.
 
 Delete entries that are not real names. Then continue.
 
-## Step 4 — Chunk
+## Step 4 — Cut into worksheets
+
+A whole novel must never reach one model context, so it is cut up first. There
+are two ways to cut, and **the source decides which** — this is not a
+preference:
+
+| Source | Route |
+| --- | --- |
+| **PDF**, born-digital or scanned | **by page** — below |
+| EPUB, DOCX, plain text | by character budget — [step 4b](#step-4b--when-the-source-has-no-pages) |
+
+**Cut a PDF by page.** A page is a boundary the book already has: stable
+between runs, the unit a reviewer looks at, and the only unit a *rendered* page
+can be compared against. A worksheet cut by character budget breaks wherever
+the budget happens to run out, which is nowhere in particular — and a page that
+does not exist in the source cannot be checked against the source. The formats
+below the line have no pages of their own to cut on, so they take the budget
+route and give up that check.
+
+```bash
+$PY $SKILL_DIR/scripts/revayat-novel.py pages build \
+  --book $WORK/book.json --out $WORK/pages --glossary $WORK/glossary.json
+```
+
+This writes one worksheet per source page — `page0001.md`, and its translation
+goes in `out_page0001.md` beside it. **Use those names, not the `chunkNNNN.md`
+of step 5**: the format is identical, only the filenames differ, and `pages
+next` tells you exactly which file to open so there is nothing to guess.
+
+It also writes `$WORK/pages/source/page-0001.pdf` — each source page as its own
+PDF, copied rather than re-rendered so boxes, rotation and image quality are the
+book's own. The manifest records each one with its SHA-256, and names the
+`reference_pdf` the whole run was read from. **Read the source PDF from the
+manifest**; it is the original for a born-digital book and the OCR'd copy for a
+scan, and hard-coding either one is wrong for the other.
+
+Each page job carries only what it needs: the glossary rows that apply on that
+page, the voices that speak there, the words OCR was unsure of there, and a
+**bounded** slice of the neighbouring pages marked *do not translate*. A page
+whose own text exceeds the budget is split into numbered parts rather than
+truncated — `part` and `parts` in the manifest say so — and the parts rejoin
+before the page is judged.
+
+A paragraph the page break cut in half belongs to the page it *started* on and
+is translated exactly once; the page it runs onto sees it as context only.
+Never translate a block that appears under the neighbour-context heading — it
+already belongs to another page's worksheet.
+
+```bash
+$PY $SKILL_DIR/scripts/revayat-novel.py pages status --pages $WORK/pages
+$PY $SKILL_DIR/scripts/revayat-novel.py pages next   --pages $WORK/pages
+```
+
+`status` reports every page's state; `next` names the first page still to do,
+so an interrupted run resumes where it stopped rather than from the beginning.
+
+Then, per page, after you have written `out_pageNNNN.md`:
+
+```bash
+$PY $SKILL_DIR/scripts/revayat-novel.py pages merge \
+  --book $WORK/book.json --pages $WORK/pages --page 12 --glossary $WORK/glossary.json
+$PY $SKILL_DIR/scripts/revayat-novel.py pages accept \
+  --book $WORK/book.json --pages $WORK/pages --page 12
+```
+
+`accept` refuses unless the page has actually passed its gates — it reads the
+evidence rather than taking your word for it, so a page cannot be marked done
+by asserting that it is.
+
+Rebuilding is safe and never throws a translation away. A page whose source
+text has changed since it was last cut is listed under `invalidated` — those,
+and only those, need translating again. A worksheet left over from a rebuild at
+a different budget is listed under `orphaned`: it is still on disk, but nothing
+reads it any more, so its translation will not reach the book.
+
+## Step 4b — When the source has no pages
+
+EPUB, DOCX and plain text only. For a PDF, use step 4.
 
 ```bash
 $PY $SKILL_DIR/scripts/revayat-novel.py chunk build \
@@ -194,47 +271,24 @@ this refuses with `"refused": "stale-worksheets"` rather than quietly handing
 you worksheets that no longer match the book. Re-read the reason it gives; add
 `--force` only once you have decided the existing translations are still good.
 
-### For a long PDF, cut by page instead
-
-A whole novel must never reach one model context, and a worksheet cut by
-character budget alone breaks wherever the budget happens to run out. A page is
-a boundary the book already has — stable between runs, the unit a reviewer
-looks at, and the only unit a *rendered* page can be compared against.
-
-```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py pages build \
-  --book $WORK/book.json --out $WORK/chunks --glossary $WORK/glossary.json
-```
-
-This writes one worksheet per source page, in the same format step 5 expects,
-so the rest of the pipeline is unchanged. Each page job carries only what it
-needs: the glossary rows that apply on that page, the voices that speak there,
-the words OCR was unsure of there, and a **bounded** slice of the neighbouring
-pages marked *do not translate*.
-
-A paragraph the page break cut in half belongs to the page it *started* on and
-is translated exactly once; the page it runs onto sees it as context only.
-Never translate a block that appears under the neighbour-context heading — it
-already belongs to another page's worksheet.
-
-```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py pages status --chunks $WORK/chunks
-$PY $SKILL_DIR/scripts/revayat-novel.py pages next   --chunks $WORK/chunks
-```
-
-`status` reports every page's state; `next` names the first page still to do,
-so an interrupted run resumes on the page it stopped at rather than from the
-beginning.
-
 ## Step 5 — Translate
 
-For each `$WORK/chunks/chunkNNNN.md`, produce `$WORK/chunks/out_chunkNNNN.md`.
-Use a separate sub-agent per chunk when your runtime has them, 8 at a time. If
-it does not, do them one at a time — the result is the same, only slower.
+Both routes write the same worksheet format, and differ only in what the file
+is called. Take the names from the route you built:
+
+| Route | Read | Write |
+| --- | --- | --- |
+| pages (step 4) | `$WORK/pages/pageNNNN.md` | `$WORK/pages/out_pageNNNN.md` |
+| chunks (step 4b) | `$WORK/chunks/chunkNNNN.md` | `$WORK/chunks/out_chunkNNNN.md` |
+
+Below, `$JOB` is whichever worksheet you are on — `pages next` names it for the
+page route, and there is no guessing to do. Use a separate sub-agent per
+worksheet when your runtime has them, 8 at a time. If it does not, do them one
+at a time — the result is the same, only slower.
 
 **Give the sub-agent exactly this:**
 
-> Read `$WORK/chunks/chunkNNNN.md` and write `$WORK/chunks/out_chunkNNNN.md`.
+> Read `$JOB` and write `out_` + the same filename, in the same directory.
 >
 > Translate into Persian. Read
 > `$SKILL_DIR/references/translation-policy.md` first and follow it.
@@ -256,13 +310,21 @@ it does not, do them one at a time — the result is the same, only slower.
 >   `@@ tr-01 footnote` block at the end with its text. Only for a genuine
 >   cultural reference or wordplay.
 
-Check what is left at any time:
+Check what is left at any time — one of these, matching your route:
 
 ```bash
 $PY $SKILL_DIR/scripts/revayat-novel.py chunk status --chunks $WORK/chunks
+$PY $SKILL_DIR/scripts/revayat-novel.py pages status --pages  $WORK/pages
 ```
 
 ## Step 6 — Merge
+
+**Page route: you have already done this.** `pages merge` merges a page into
+`book.json` the moment it is translated, glossary and all, and re-settles first
+mentions across everything merged so far each time. There are no `$WORK/chunks`
+to point the command below at — go straight to step 7.
+
+Chunk route:
 
 ```bash
 $PY $SKILL_DIR/scripts/revayat-novel.py merge \
@@ -312,9 +374,22 @@ set left-to-right because a style lost its `w:bidi`, a caption clipped off the
 trim, a page that came out blank because the build failed halfway.
 
 ```bash
+# The source PDF is whichever one this run was read from: the book's own for a
+# born-digital PDF, the OCR'd copy for a scan. The manifest recorded it — take
+# it from there rather than naming a file that may not exist.
+SOURCE_PDF=$($PY -c "import json,sys;print(json.load(open(sys.argv[1]))['reference_pdf'])" \
+  $WORK/pages/manifest.json)
+
 $PY $SKILL_DIR/scripts/revayat-novel.py render-qa \
-  --book $WORK/book.json --work $WORK --page 12 --source-pdf $WORK/ocr.pdf
+  --book $WORK/book.json --work $WORK --page 12 \
+  --docx $WORK/book.docx --source-pdf $SOURCE_PDF
 ```
+
+`--docx` is how the translated page gets laid out at all: without it there is
+nothing to compare the source against, and the report comes back `unverified`
+rather than passing. Word does the laying out on Windows and LibreOffice
+elsewhere; the report records which one ran, because the two do not paginate
+identically.
 
 It writes `renders/source/page-0012.png`, `renders/target/page-0012.png` and
 `qa/pages/page-0012.json`, then compares them **structurally**. Do not expect
@@ -323,6 +398,45 @@ direction, so the line breaks, the line count and often the page count differ.
 What must hold is that every block is present once, nothing is clipped or
 outside the margins, the illustrations are the same ones in the same order at
 the same aspect ratio, and the paragraphs are right-to-left.
+
+### Then look at the two images yourself
+
+The checks above are geometric, and geometry has a blind spot the size of the
+thing you were worried about. A plate can sit inside the body area, at exactly
+the right aspect ratio, present exactly once — three pages away from the
+paragraph it illustrates. Persian can clear every one of those checks and still
+render as disconnected letters, because the font it fell back to has no joining
+forms. A heading can be present, correctly placed, and look like body text.
+None of that is in `book.json`; it is on the page, which is why both images
+were written.
+
+**Open `renders/source/page-0012.png` and `renders/target/page-0012.png` and
+look at them side by side.** Then answer all five, and mean it:
+
+| Question | What you are looking for |
+| --- | --- |
+| `figure-placement` | is each picture beside the text it belongs to? |
+| `script-integrity` | joined, readable Persian — no disconnected letters, no boxes, no dotted circles |
+| `no-source-language` | is everything that should be Persian actually Persian, captions and headings included? |
+| `hierarchy` | do headings still read as headings, and dialogue as dialogue? |
+| `reads-as-a-book` | even margins, an even colour of type, no line crushed or stretched to fit |
+
+```bash
+$PY $SKILL_DIR/scripts/revayat-novel.py pages review \
+  --pages $WORK/pages --page 12 \
+  --answer figure-placement=yes --answer script-integrity=yes \
+  --answer no-source-language=yes --answer hierarchy=yes \
+  --answer reads-as-a-book=yes --note "what you saw, in your own words"
+```
+
+All five are required: an unanswered question is not a question nobody minded,
+so a partial answer sheet is refused and nothing is written. Answer `no` where
+it is `no` — a `no` names the fault in the report and stops the page being
+accepted, which is the entire point of being asked.
+
+The verdict is tied to the image it was made from. Re-render the page and the
+review goes stale automatically, because it describes a page that no longer
+exists. `pages accept` will not take a page without a current one.
 
 A page that fails is re-translated and re-rendered on its own — `--max-attempts`
 bounds the retries so a page that cannot be fixed stops rather than looping.
