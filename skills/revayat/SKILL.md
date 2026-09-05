@@ -68,6 +68,42 @@ Read the JSON it prints and follow the table:
 | an error naming OCRmyPDF | install it as the message says, then re-run this step |
 | `clean_scan.cleaned` above 0 | a colour watermark was removed from that many pages |
 | `ocr.warning` is not null | read it; the file was still usable, so continue |
+| `page_scans_dropped` above 0 | that many whole-page rasters were recognised as the scan itself, not as pictures |
+
+The cleaner never edits your file: the original stays untouched and the cleaned
+copy is written to `$WORK/cleaned.pdf`, with a per-page record in `clean_scan`
+of what was removed and what was left alone. Pass `--clean-scan off` to skip it
+entirely, or `--clean-scan force` when a stamp survived.
+
+**If the book was scanned, do these two extra passes now.**
+
+*Recognition confidence* — without it a misread word is indistinguishable from
+a correct one, because both are fluent Persian:
+
+```bash
+python3 $SKILL_DIR/scripts/revayat.py ocr-sidecar   --pdf $WORK/ocr.pdf --out $WORK --lang fas --book $WORK/book.json
+```
+
+This writes `source.ocr.json` (per word, line, block and page: box, confidence,
+reading order, and what preprocessing ran) and `source.ocr.txt`, then stamps
+each block in `book.json` with the confidence of the region it came from.
+Blocks graded `low` are reported by `qa check` as `ocr-low-confidence`, and
+accepting one means looking at the page image. Thresholds default to 85 and 60
+and move with `--high` / `--low`.
+
+*Illustrations inside a scan* — a scanned page is one flat image, so a
+photograph on it is not a separate picture until something finds it:
+
+```bash
+mineru -p $WORK/cleaned.pdf -o $WORK/mineru -b pipeline -l arabic
+python3 $SKILL_DIR/scripts/revayat.py extract "<input file>" --out $WORK   --figures-from-mineru $WORK/mineru
+```
+
+Run MinerU on `cleaned.pdf`, not the original, or it crops the watermark as if
+it were a figure. **Take only the pictures from MinerU.** Its own recognised
+text for Persian comes back with the words *and the letters inside them*
+reversed; Tesseract with `fas` reads the same page correctly, so the text stays
+where it is. Use `--figures-page-offset N` when MinerU ran over a page range.
 
 **Then look at the result before going further:**
 
@@ -111,6 +147,11 @@ python3 $SKILL_DIR/scripts/revayat.py chunk build \
 ```
 
 Note the number of chunks. Each becomes one translation task.
+
+If you have already translated some worksheets and an input has changed since,
+this refuses with `"refused": "stale-worksheets"` rather than quietly handing
+you worksheets that no longer match the book. Re-read the reason it gives; add
+`--force` only once you have decided the existing translations are still good.
 
 ## Step 5 — Translate
 
@@ -189,10 +230,16 @@ python3 $SKILL_DIR/scripts/revayat.py qa check \
 | `possible-omission` | target far shorter than source | read it; usually a dropped clause |
 | `untranslated` | English left in the Persian | re-run that chunk |
 | `asset-missing` / `asset-modified` | a picture is gone or altered | re-extract |
+| `copied-source-run` | a clause of the source is alive inside the Persian | re-run that chunk |
+| `duplicate-translation` | two different sources got the same Persian | a worksheet reply was pasted twice; re-run both |
+| `first-mention-repeated` | a name is introduced in more than one place | keep the first, drop the rest |
+| `image-order` | pictures are in the wrong order in the package | re-build |
+| `bookmarks-missing` / `bookmark-duplicate` | the TOC would link nowhere, or to the wrong place | re-build |
 | `emphasis-parity` (warning) | bold/italic count changed | check one; often fine |
 | `glossary-drift` (warning) | a locked name was rendered differently | re-run that chunk |
+| `ocr-low-confidence` (warning) | the engine was unsure of this block | open the page image and compare |
 
-Add `--strict` to make the last two blocking as well, for publication work.
+Add `--strict` to make the last three blocking as well, for publication work.
 
 Translate the book's title and author into `meta.title_target` and
 `meta.author_target` in `book.json` — that is the one hand-edit that *is*
