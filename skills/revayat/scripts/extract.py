@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -342,6 +343,187 @@ def _mineru_bbox(bbox: Any, page: dict[str, Any]) -> list[float] | None:
             round(right / 1000 * width, 2), round(bottom / 1000 * height, 2)]
 
 
+def merge_mineru_figures(
+    book: dict[str, Any],
+    mineru_dir: Path,
+    asset_dir: Path,
+    *,
+    page_offset: int = 0,
+) -> dict[str, Any]:
+    """Replace whole-page scans with the figures MinerU cropped out of them.
+
+    This deliberately takes *only* the pictures. MinerU's own recognised text is
+    ignored, and for Persian it has to be: measured on a real page, its OCR
+    returned the words and the letters within them in reverse order — the
+    classic right-to-left failure. Tesseract with `fas` reads the same page
+    correctly, so the text keeps coming from there and MinerU is used for the
+    one thing OCR cannot do, which is finding where a picture sits inside a
+    flat raster.
+
+    ``page_offset`` maps MinerU's ``page_idx`` onto the book's page numbers,
+    for when MinerU was run over a page range rather than the whole file.
+    """
+    candidates = sorted(mineru_dir.rglob("*content_list.json"))
+    if not candidates:
+        raise ExtractError(
+            f"no *_content_list.json under {mineru_dir} — run MinerU first, e.g. "
+            f"mineru -p book.pdf -o {mineru_dir} -b pipeline"
+        )
+    content = json.loads(candidates[0].read_text(encoding="utf-8"))
+    base = candidates[0].parent
+    asset_dir.mkdir(parents=True, exist_ok=True)
+
+    page_size = book.get("page", ir.default_page_setup())
+    figures: dict[int, list[dict[str, Any]]] = {}
+    seen: dict[str, str] = {}
+
+    for item in content:
+        if item.get("type") not in {"image", "table"}:
+            continue
+        relative = item.get("img_path")
+        if not relative:
+            continue
+        source = base / relative.replace("/", os.sep)
+        if not source.exists():
+            matches = sorted(source.parent.glob(source.name + "*"))
+            if not matches:
+                continue
+            source = matches[0]
+
+        page = int(item.get("page_idx", 0)) + 1 + page_offset
+        asset_name = _copy_asset(source, asset_dir, seen, page)
+        if not asset_name:
+            continue
+        box = _mineru_bbox(item.get("bbox"), page_size)
+        captions = [c for c in (item.get("image_caption") or []) if str(c).strip()]
+        figures.setdefault(page, []).append({
+            "asset": asset_name,
+            "sha256": seen[asset_name],
+            "bbox": box,
+            "width_pt": round(box[2] - box[0], 2) if box else None,
+            "height_pt": round(box[3] - box[1], 2) if box else None,
+            "top": box[1] if box else 0.0,
+            "caption": captions[0] if captions else "",
+        })
+
+    return _place_figures(book, figures)
+
+
+#: A figure of the same size in the same spot on at least this share of pages
+#: is furniture — a watermark or a logo — rather than an illustration.
+FIGURE_REPEAT_SHARE = 0.25
+#: Rounding used when deciding "the same size in the same spot", in points.
+FIGURE_REPEAT_TOLERANCE = 8
+
+
+def _drop_repeated_furniture(figures: dict[int, list[dict[str, Any]]]
+                             ) -> tuple[dict[int, list[dict[str, Any]]], int]:
+    """Remove a figure that recurs at the same place on page after page.
+
+    A layout model cannot tell a watermark from a picture — measured on a real
+    book, MinerU cropped the publisher's translucent stamp as a figure. The
+    signal that separates them is the same one that finds a running head: real
+    illustrations differ from page to page, furniture does not.
+
+    Running MinerU on ``cleaned.pdf`` avoids this entirely, because the stamp is
+    already gone. This is the guard for when it is run on the original instead.
+    """
+    if len(figures) < 4:
+        return figures, 0
+
+    def key(figure: dict[str, Any]) -> tuple[int, ...]:
+        box = figure.get("bbox") or [0, 0, 0, 0]
+        return tuple(int(round(v / FIGURE_REPEAT_TOLERANCE)) for v in box)
+
+    counts: dict[tuple[int, ...], int] = {}
+    for items in figures.values():
+        for shape in {key(figure) for figure in items}:
+            counts[shape] = counts.get(shape, 0) + 1
+
+    threshold = max(3, int(len(figures) * FIGURE_REPEAT_SHARE))
+    furniture = {shape for shape, count in counts.items() if count >= threshold}
+    if not furniture:
+        return figures, 0
+
+    dropped = 0
+    kept: dict[int, list[dict[str, Any]]] = {}
+    for page, items in figures.items():
+        survivors = [f for f in items if key(f) not in furniture]
+        dropped += len(items) - len(survivors)
+        if survivors:
+            kept[page] = survivors
+    return kept, dropped
+
+
+def _place_figures(book: dict[str, Any],
+                   figures: dict[int, list[dict[str, Any]]]) -> dict[str, Any]:
+    """Put each cropped figure where it belongs in the page's block order."""
+    figures, furniture_dropped = _drop_repeated_furniture(figures)
+    if not figures:
+        return {"pages": 0, "figures_added": 0, "page_scans_replaced": 0,
+                "furniture_dropped": furniture_dropped}
+
+    blocks = book.get("blocks", [])
+    highest = max(
+        (int(b["id"][1:]) for b in blocks if b["id"][1:].isdigit()), default=0
+    )
+    counter = highest
+    replaced = 0
+    added = 0
+    rebuilt: list[dict[str, Any]] = []
+    handled: set[int] = set()
+
+    for block in blocks:
+        page = int(block.get("page") or 0)
+        if page in figures and page not in handled:
+            # A whole-page scan on this page is exactly what the crops replace.
+            if block["type"] == "image":
+                replaced += 1
+                handled.add(page)
+                for figure in sorted(figures[page], key=lambda f: f["top"]):
+                    counter += 1
+                    rebuilt.append(_figure_block(counter, page, figure))
+                    added += 1
+                continue
+        rebuilt.append(block)
+
+    # Pages whose scan was already dropped get their figures appended in
+    # reading order at the end of that page's blocks.
+    for page, items in figures.items():
+        if page in handled:
+            continue
+        index = _last_index_on_page(rebuilt, page)
+        insert_at = index + 1 if index >= 0 else len(rebuilt)
+        for figure in sorted(items, key=lambda f: f["top"], reverse=True):
+            counter += 1
+            rebuilt.insert(insert_at, _figure_block(counter, page, figure))
+            added += 1
+
+    book["blocks"] = rebuilt
+    return {
+        "pages": len(figures),
+        "figures_added": added,
+        "page_scans_replaced": replaced,
+        "furniture_dropped": furniture_dropped,
+    }
+
+
+def _figure_block(index: int, page: int, figure: dict[str, Any]) -> dict[str, Any]:
+    return ir.make_block(
+        "image", index, page=page, asset=figure["asset"], sha256=figure["sha256"],
+        bbox=figure["bbox"], width_pt=figure["width_pt"],
+        height_pt=figure["height_pt"], pixel_width=None, pixel_height=None,
+        alt=figure["caption"], target_alt=None, source="mineru",
+    )
+
+
+def _last_index_on_page(blocks: list[dict[str, Any]], page: int) -> int:
+    for index in range(len(blocks) - 1, -1, -1):
+        if int(blocks[index].get("page") or 0) == page:
+            return index
+    return -1
+
+
 def _copy_asset(src: Path, asset_dir: Path, seen: dict[str, str], page: int) -> str | None:
     if not src.exists():
         return None
@@ -454,7 +636,21 @@ def extract(args: argparse.Namespace) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     report: dict[str, Any] = {}
 
-    if args.from_mineru:
+    if args.figures_from_mineru:
+        # Operates on the book that is already there: extraction and OCR have
+        # run, and this only swaps whole-page scans for the real figures.
+        book_path = out_dir / "book.json"
+        if not book_path.exists():
+            raise ExtractError(
+                f"no book.json in {out_dir} — run extract on the PDF first, then "
+                f"re-run with --figures-from-mineru"
+            )
+        book = ir.load_book(book_path)
+        report["figures"] = merge_mineru_figures(
+            book, Path(args.figures_from_mineru), asset_dir,
+            page_offset=args.figures_page_offset,
+        )
+    elif args.from_mineru:
         book = from_mineru(
             Path(args.from_mineru), asset_dir,
             source_name=Path(args.input).stem if args.input else "book",
@@ -508,6 +704,12 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
     probe = probe_pdf(source)
     report["probe"] = probe
     read_from = source
+    #: True only once the text actually being read came out of an OCR pass.
+    #: Deriving this from ``report["ocr"]`` was wrong: the *skipped* branch
+    #: writes there too, so `--ocr off` claimed `from_ocr` in the book's own
+    #: provenance and put the extractor on OCR's loose size tolerances over a
+    #: perfectly good digital text layer.
+    from_ocr = False
 
     # Strip a colour watermark before OCR: a stamp across a line of text costs
     # recognition accuracy, and the cleaned raster is what OCR should read.
@@ -540,6 +742,7 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
             )
             report["ocr"]["probe_after"] = probe_pdf(ocr_pdf)
         read_from = ocr_pdf
+        from_ocr = True
     elif probe["kind"] != "digital":
         report["ocr"] = {"skipped": "--ocr off", "warning":
                          f"{len(probe['pages_without_text'])}+ pages have no text layer"}
@@ -548,7 +751,7 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
     book = read_pdf(str(read_from), asset_dir,
                     lang_source=args.source_lang, lang_target=args.target_lang,
                     max_pages=args.max_pages,
-                    ocr_text=bool(report.get("ocr")))
+                    ocr_text=from_ocr)
     book["source"]["original_path"] = str(source)
     book["source"]["probe"] = probe
     return book
@@ -578,6 +781,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
                         help="import a MinerU output directory instead of parsing")
     parser.add_argument("--from-markdown", metavar="FILE",
                         help="import Markdown from Marker/Docling instead of parsing")
+    parser.add_argument("--figures-from-mineru", metavar="DIR",
+                        help="merge the figures MinerU cropped out of scanned pages "
+                             "into the book already extracted in --out. Takes only "
+                             "the pictures; the text keeps coming from the OCR pass")
+    parser.add_argument("--figures-page-offset", type=int, default=0, metavar="N",
+                        help="add N to MinerU's page numbers, for when it was run "
+                             "over a page range rather than the whole book")
 
 
 def main(argv: list[str] | None = None) -> int:
