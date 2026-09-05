@@ -47,14 +47,28 @@ PAGE_IMAGE_AREA_SHARE = 0.85
 PAGE_IMAGE_TEXT_THRESHOLD = 200
 
 
-def _style_of(span: dict[str, Any]) -> tuple[bool, bool]:
+#: Fonts an OCR pass writes its invisible text layer in. They carry no styling
+#: at all, so anything they seem to say about weight or slope is an artefact.
+_OCR_FONTS = ("glyphless", "notoserif-regular", "invisible")
+
+
+def _style_of(span: dict[str, Any], *, ocr: bool = False) -> tuple[bool, bool]:
     """Bold/italic for a span, from render flags and the font name.
 
     Flags alone miss synthetic faces (e.g. ``AGaramondPro-BoldItalic`` embedded
     with flags=0), so the font name is consulted as well.
+
+    On an OCR layer there is nothing to consult. OCRmyPDF writes one invisible
+    glyphless face over the picture of the page; the *image* still shows the
+    italics, but the text layer knows nothing about them. Reading style off it
+    is not conservative-but-wrong, it is meaningless — so the OCR path returns
+    no emphasis and the book records that emphasis was unrecoverable, rather
+    than reporting a scanned book as prose without a single italic in it.
     """
-    flags = int(span.get("flags", 0))
     name = str(span.get("font", "")).lower()
+    if ocr or any(marker in name for marker in _OCR_FONTS):
+        return False, False
+    flags = int(span.get("flags", 0))
     bold = bool(flags & FLAG_BOLD) or "bold" in name or "black" in name or "heavy" in name
     italic = bool(flags & FLAG_ITALIC) or "italic" in name or "oblique" in name
     return bold, italic
@@ -317,7 +331,8 @@ OCR_SIZE_GROUP_TOLERANCE = 0.28
 
 
 def _block_groups(block: dict[str, Any], drop: set[str],
-                  tolerance: float = SIZE_GROUP_TOLERANCE) -> list[dict[str, Any]]:
+                  tolerance: float = SIZE_GROUP_TOLERANCE,
+                  *, ocr: bool = False) -> list[dict[str, Any]]:
     """Split one PyMuPDF text block into same-size line groups.
 
     A single PDF text block routinely holds the tail of a paragraph *and* the
@@ -340,7 +355,7 @@ def _block_groups(block: dict[str, Any], drop: set[str],
             text = span.get("text", "")
             if not text:
                 continue
-            bold, italic = _style_of(span)
+            bold, italic = _style_of(span, ocr=ocr)
             bold_line = bold_line or bold
             italic_line = italic_line or italic
             size = max(size, float(span.get("size", 0)))
@@ -540,7 +555,7 @@ def _read_open_pdf(
         for raw_block in page_dict.get("blocks", []):
             if raw_block.get("type") != 0:
                 continue
-            for group in _block_groups(raw_block, drop, tolerance):
+            for group in _block_groups(raw_block, drop, tolerance, ocr=ocr_text):
                 page_chars += len(group["markup"])
                 text_items.append((group["bbox"][1], "text", group))
 
@@ -610,6 +625,15 @@ def _read_open_pdf(
     book["source"]["body_font_pt"] = body_size
     book["source"]["running_heads_dropped"] = sorted(drop)[:20]
     book["source"]["from_ocr"] = ocr_text
+    if ocr_text:
+        # Stated rather than left to be inferred from an absence: a scanned
+        # book that comes back with no italics anywhere has not necessarily
+        # lost them in translation — they were never in the text layer to read.
+        book["source"]["emphasis"] = {
+            "recovered": False,
+            "reason": "the OCR text layer is one invisible glyphless face; the "
+                      "page image still shows the emphasis but the text does not",
+        }
     book["source"]["page_scans_dropped"] = len(dropped_page_scans)
     return book
 

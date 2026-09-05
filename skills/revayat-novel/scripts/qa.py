@@ -474,6 +474,12 @@ def _check_page_geometry(book: dict[str, Any], report: Report) -> None:
     the dominant size. That is a defensible choice, but it is not something to
     make silently while the report implies the original geometry was preserved.
     """
+    emphasis = (book.get("source") or {}).get("emphasis") or {}
+    if emphasis and not emphasis.get("recovered", True):
+        report.add(WARNING, "emphasis-unrecoverable", "source",
+                   emphasis.get("reason", "the source's bold and italic could "
+                                          "not be read"))
+
     geometry = (book.get("source") or {}).get("page_geometry") or {}
     if not geometry or geometry.get("uniform", True):
         return
