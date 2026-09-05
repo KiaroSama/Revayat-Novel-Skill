@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import bookir as ir
+import runstate
 
 #: A page with fewer characters than this has no usable text layer.
 PAGE_TEXT_THRESHOLD = 80
@@ -871,6 +872,15 @@ def extract(args: argparse.Namespace) -> dict[str, Any]:
 
     book_path = out_dir / "book.json"
     ir.save_book(book, book_path)
+
+    # What this extraction was run against, so a later stage can tell whether
+    # the book it is reading came from the file and settings it thinks it did.
+    runstate.RunState(out_dir).record("extract", {
+        "source": runstate.file_hash(args.input) if args.input else "",
+        "ocr_lang": str(getattr(args, "ocr_lang", "")),
+        "ocr": str(getattr(args, "ocr", "")),
+        "clean_scan": str(getattr(args, "clean_scan", "")),
+    }, {"book": runstate.source_digest(book)})
 
     report.update({
         "book": str(book_path),

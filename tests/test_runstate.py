@@ -272,3 +272,92 @@ def test_the_cli_refuses_with_a_non_zero_exit_and_says_why(tmp_path, capsys):
 
     assert chunking.main(arguments + ["--force"]) == 0
     assert json.loads(capsys.readouterr().out)["chunks"]
+
+
+# --------------------------------------------------------------------------- #
+# Every stage records, not only the two that refuse
+# --------------------------------------------------------------------------- #
+
+def test_extract_records_what_it_ran_against(sample_epub, tmp_path):
+    """Without this the book carries no evidence of where it came from."""
+    import argparse
+
+    import extract
+
+    parser = argparse.ArgumentParser()
+    extract.add_arguments(parser)
+    args = parser.parse_args([str(sample_epub), "--out", str(tmp_path)])
+    extract.extract(args)
+
+    entry = runstate.RunState(tmp_path).recorded("extract")
+    assert entry is not None, "extraction left no record"
+    assert entry["inputs"]["source"] == runstate.file_hash(sample_epub)
+    assert entry["outputs"]["book"]
+
+
+def test_the_glossary_records_the_book_it_was_scanned_from(sample_epub, tmp_path):
+    import argparse
+
+    import extract
+    import glossary as gl
+
+    parser = argparse.ArgumentParser()
+    extract.add_arguments(parser)
+    extract.extract(parser.parse_args([str(sample_epub), "--out", str(tmp_path)]))
+
+    gl.main(["scan", "--book", str(tmp_path / "book.json"),
+             "--out", str(tmp_path / "glossary.json"), "--min-count", "1"])
+
+    entry = runstate.RunState(tmp_path).recorded("glossary")
+    assert entry is not None
+    book = ir.load_book(tmp_path / "book.json")
+    assert entry["inputs"]["book"] == runstate.source_digest(book)
+
+
+def test_the_glossary_is_keyed_on_the_source_side_so_merge_cannot_stale_it():
+    """The bug this shape exists to avoid, stated as a test.
+
+    Merge writes the translations back into the same `book.json`. Keyed on the
+    file, every successful merge would report the glossary as stale against a
+    book whose source text never moved.
+    """
+    book = ir.new_book()
+    block = ir.make_block("paragraph", 1, page=1, text="Elizabeth Bennet arrived.")
+    book["blocks"] = [block]
+    before = runstate.source_digest(book)
+
+    block["target"] = "الیزابت بنت رسید."
+    assert runstate.source_digest(book) == before, (
+        "translating a block changed the source digest"
+    )
+
+    block["text"] = "Elizabeth Bennet departed."
+    assert runstate.source_digest(book) != before, (
+        "re-extracting with different text did not change the digest"
+    )
+
+
+def test_the_build_records_the_document_it_produced(translated_book, tmp_path):
+    import argparse
+
+    import build_docx
+
+    book, assets = translated_book
+    book_path = tmp_path / "book.json"
+    ir.save_book(book, book_path)
+
+    destination = tmp_path / "out.docx"
+    build_docx.main(["--book", str(book_path), "--assets", str(assets),
+                     "--out", str(destination), "--font", "Tahoma"])
+
+    entry = runstate.RunState(tmp_path).recorded("build")
+    assert entry is not None
+    assert entry["outputs"]["document"] == runstate.file_hash(destination)
+    assert entry["inputs"]["font"] == "Tahoma"
+
+
+def test_every_declared_stage_can_actually_be_recorded():
+    """A stage in the list that nothing writes is a promise with no keeper."""
+    assert set(runstate.STAGES) == {
+        "extract", "glossary", "chunk", "translate", "typography", "build",
+    }

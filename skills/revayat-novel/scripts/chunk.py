@@ -210,24 +210,9 @@ class StaleWorksheets(RuntimeError):
     """Rebuilding would discard translations that answer a different book."""
 
 
-def source_digest(book: dict[str, Any]) -> str:
-    """Identity of everything a worksheet is cut from.
-
-    The *source* side only. Hashing ``book.json`` itself would be wrong in the
-    one direction that matters: merge writes the translations back into that
-    same file, so every successful merge would report the worksheets it was
-    built from as stale — and the next ``chunk build`` would refuse over a book
-    whose source text never moved. A re-extraction changes this digest; a
-    translation does not.
-    """
-    parts = [
-        f"{block['id']}\x00{block['type']}\x00"
-        f"{block.get('text') or ''}\x00{block.get('alt') or ''}"
-        for block in book.get("blocks", [])
-    ]
-    parts += [f"{note['id']}\x00{note.get('text') or ''}"
-              for note in book.get("footnotes", [])]
-    return ir.sha256_bytes("\n".join(parts).encode("utf-8"))
+#: Lives in `runstate` now: it is the staleness primitive, and four
+#: stages need it without taking a dependency on the chunker.
+source_digest = runstate.source_digest
 
 
 def _chunk_inputs(book_path: Path | None, glossary_path: Path | None,
