@@ -349,6 +349,7 @@ def merge_mineru_figures(
     asset_dir: Path,
     *,
     page_offset: int = 0,
+    source_pdf: Path | None = None,
 ) -> dict[str, Any]:
     """Replace whole-page scans with the figures MinerU cropped out of them.
 
@@ -376,6 +377,14 @@ def merge_mineru_figures(
     page_size = book.get("page", ir.default_page_setup())
     figures: dict[int, list[dict[str, Any]]] = {}
     seen: dict[str, str] = {}
+    degraded: list[str] = []
+
+    # Opened once for the whole run: a 400-page scan would otherwise be reopened
+    # for every plate in it.
+    document = None
+    if source_pdf is not None and Path(source_pdf).exists():
+        import pymupdf
+        document = pymupdf.open(source_pdf)
 
     for item in content:
         if item.get("type") not in {"image", "table"}:
@@ -391,10 +400,31 @@ def merge_mineru_figures(
             source = matches[0]
 
         page = int(item.get("page_idx", 0)) + 1 + page_offset
-        asset_name = _copy_asset(source, asset_dir, seen, page)
-        if not asset_name:
-            continue
         box = _mineru_bbox(item.get("bbox"), page_size)
+
+        # MinerU's exported crop is a re-encode of its own render, at whatever
+        # resolution it happened to work at. The detection is what it is good
+        # for; the pixels should come from the book. Cutting the same box out
+        # of the page's own raster keeps the plate at the resolution the scan
+        # actually holds.
+        cut = None
+        if document is not None and box:
+            candidate = asset_dir / f"m{page:04d}-fig{len(seen) + 1:03d}.png"
+            try:
+                cut = crop_from_source(document, page, box, candidate)
+            except Exception as error:  # a damaged page must not lose the figure
+                cut = None
+                degraded.append(f"page {page}: {type(error).__name__}")
+            if cut:
+                data = candidate.read_bytes()
+                asset_name = candidate.name
+                seen[asset_name] = ir.sha256_bytes(data)
+
+        if cut is None:
+            asset_name = _copy_asset(source, asset_dir, seen, page)
+            if not asset_name:
+                continue
+
         captions = [c for c in (item.get("image_caption") or []) if str(c).strip()]
         figures.setdefault(page, []).append({
             "asset": asset_name,
@@ -404,9 +434,19 @@ def merge_mineru_figures(
             "height_pt": round(box[3] - box[1], 2) if box else None,
             "top": box[1] if box else 0.0,
             "caption": captions[0] if captions else "",
+            "pixel_width": (cut or {}).get("pixel_width"),
+            "pixel_height": (cut or {}).get("pixel_height"),
+            "crop": (cut or {}).get("crop"),
+            "source": "source-raster" if cut else "mineru",
         })
 
-    return _place_figures(book, figures)
+    if document is not None:
+        document.close()
+
+    report = _place_figures(book, figures)
+    if degraded:
+        report["fell_back_to_mineru_crop"] = degraded
+    return report
 
 
 #: A figure of the same size in the same spot on at least this share of pages
@@ -552,12 +592,132 @@ def _reading_order_slot(blocks: list[dict[str, Any]], page: int,
 
 
 def _figure_block(index: int, page: int, figure: dict[str, Any]) -> dict[str, Any]:
+    width = figure.get("pixel_width")
+    height = figure.get("pixel_height")
     return ir.make_block(
         "image", index, page=page, asset=figure["asset"], sha256=figure["sha256"],
         bbox=figure["bbox"], width_pt=figure["width_pt"],
-        height_pt=figure["height_pt"], pixel_width=None, pixel_height=None,
-        alt=figure["caption"], target_alt=None, source="mineru",
+        height_pt=figure["height_pt"],
+        pixel_width=width, pixel_height=height,
+        aspect_ratio=round(width / height, 4) if width and height else None,
+        alt=figure["caption"], target_alt=None,
+        source=figure.get("source", "mineru"),
+        crop=figure.get("crop"),
     )
+
+
+#: Rendering fallback resolution. Only reached when the page has no single
+#: embedded raster to cut from; 400 DPI keeps a half-page plate above the
+#: 300 DPI that print work assumes.
+CROP_RENDER_DPI = 400
+#: An embedded image must cover at least this share of the page to be treated
+#: as the scan of the whole page rather than one picture already placed on it.
+#: Not 0.9: a scan is placed with its own aspect ratio preserved, so a page
+#: whose proportions differ from the paper's is letterboxed by a few percent —
+#: measured on a real 1200x1600 scan on a 396x612pt page, coverage is 0.86.
+FULL_PAGE_COVERAGE = 0.8
+
+
+def best_page_raster(document, page_number: int):
+    """The best pixels this page has, and the rectangle they occupy on it.
+
+    Returns ``(PIL image, provenance, placement)`` where ``placement`` is the
+    ``(left, top, right, bottom)`` in points that the image covers. A scanned
+    page is normally one large embedded raster, and those are its *original*
+    pixels — re-rendering the page instead resamples them to whatever DPI was
+    asked for, which either throws detail away or, worse, invents it by
+    upscaling. So the embedded image wins whenever one covers the page, and
+    rendering is the fallback for a page assembled from several objects.
+    """
+    from io import BytesIO
+
+    from PIL import Image
+
+    page = document[page_number - 1]
+    rect = page.rect
+    page_area = float(rect.width) * float(rect.height)
+
+    best = None
+    for block in page.get_image_info(xrefs=True):
+        box = block.get("bbox")
+        xref = block.get("xref")
+        if not box or not xref:
+            continue
+        covered = (box[2] - box[0]) * (box[3] - box[1])
+        if page_area and covered / page_area >= FULL_PAGE_COVERAGE:
+            pixels = int(block.get("width") or 0) * int(block.get("height") or 0)
+            if best is None or pixels > best[1]:
+                best = (xref, pixels, box)
+
+    if best is not None:
+        extracted = document.extract_image(best[0])
+        image = Image.open(BytesIO(extracted["image"]))
+        return image, {
+            "method": "embedded-page-image",
+            "pixel_width": image.width,
+            "pixel_height": image.height,
+            "original_format": extracted.get("ext"),
+        }, tuple(best[2])
+
+    pixmap = page.get_pixmap(dpi=CROP_RENDER_DPI)
+    image = Image.open(BytesIO(pixmap.tobytes("png")))
+    return (image,
+            {"method": "rendered-page", "dpi": CROP_RENDER_DPI,
+             "pixel_width": image.width, "pixel_height": image.height},
+            (0.0, 0.0, float(rect.width), float(rect.height)))
+
+
+def crop_from_source(document, page_number: int, bbox_pt: list[float],
+                     destination: Path) -> dict[str, Any] | None:
+    """Cut ``bbox_pt`` out of the best raster this page has, without resampling.
+
+    MinerU exports its own crop, and taking that is the easy path — but it is a
+    re-encode of a render, at whatever resolution MinerU happened to work at.
+    The detection is what MinerU is good for; the pixels should come from the
+    book. Nothing here resizes: the crop is exactly the pixels inside the box,
+    written as PNG so the cut itself adds no further loss.
+
+    The box is mapped through the raster's own placement on the page, not
+    through the page box. A scan rarely fills the paper exactly — it is centred
+    with its aspect ratio kept — and measuring from the page corner instead of
+    the image's own corner slides every crop by the size of the margin.
+    """
+    page = document[page_number - 1]
+    if float(page.rect.width) <= 0 or float(page.rect.height) <= 0:
+        return None
+
+    image, provenance, placement = best_page_raster(document, page_number)
+    placed_width = placement[2] - placement[0]
+    placed_height = placement[3] - placement[1]
+    if placed_width <= 0 or placed_height <= 0:
+        return None
+
+    scale_x = image.width / placed_width
+    scale_y = image.height / placed_height
+    left = max(0, int(round((bbox_pt[0] - placement[0]) * scale_x)))
+    top = max(0, int(round((bbox_pt[1] - placement[1]) * scale_y)))
+    right = min(image.width, int(round((bbox_pt[2] - placement[0]) * scale_x)))
+    bottom = min(image.height, int(round((bbox_pt[3] - placement[1]) * scale_y)))
+    if right - left < 2 or bottom - top < 2:
+        return None
+
+    cut = image.crop((left, top, right, bottom))
+    cut.save(destination, format="PNG")
+    return {
+        "pixel_width": cut.width,
+        "pixel_height": cut.height,
+        "crop": {
+            **provenance,
+            "source_page": page_number,
+            "bbox_pt": [round(v, 2) for v in bbox_pt],
+            # Where the raster itself sits on the page, so a reviewer can
+            # recompute the mapping instead of trusting it.
+            "placement_pt": [round(v, 2) for v in placement],
+            "pixel_box": [left, top, right, bottom],
+            "resized": False,
+            "encoding": "png",
+        },
+    }
 
 
 def _copy_asset(src: Path, asset_dir: Path, seen: dict[str, str], page: int) -> str | None:
@@ -682,9 +842,14 @@ def extract(args: argparse.Namespace) -> dict[str, Any]:
                 f"re-run with --figures-from-mineru"
             )
         book = ir.load_book(book_path)
+        # The *original* file, deliberately: the watermark cleaner and OCR both
+        # rewrite page rasters, and a plate cut from the original keeps the
+        # pixels the book was scanned at rather than the ones a preprocessing
+        # step left behind.
         report["figures"] = merge_mineru_figures(
             book, Path(args.figures_from_mineru), asset_dir,
             page_offset=args.figures_page_offset,
+            source_pdf=Path(args.input) if args.input else None,
         )
     elif args.from_mineru:
         book = from_mineru(
