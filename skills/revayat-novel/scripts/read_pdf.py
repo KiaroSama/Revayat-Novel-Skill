@@ -64,6 +64,54 @@ def _line_text(line: dict[str, Any]) -> str:
     return "".join(span.get("text", "") for span in line.get("spans", []))
 
 
+#: Sizes within this many points of each other are the same paper. PDF page
+#: boxes drift by fractions of a point between pages of one book.
+GEOMETRY_TOLERANCE_PT = 2.0
+
+
+def _survey_geometry(doc, page_count: int) -> dict[str, Any]:
+    """Census every page's size and rotation, not just the first one's.
+
+    Taking page 1 as the book's geometry is wrong in a specific and common way:
+    a novel with a landscape map or a differently trimmed front matter page at
+    the front would set the *whole* translated document to that shape. The
+    dominant geometry is the book's; anything else is reported so the mismatch
+    is visible rather than silently applied to every page.
+    """
+    shapes: dict[tuple[int, int, int], list[int]] = {}
+    for index in range(page_count):
+        page = doc[index]
+        key = (int(round(page.rect.width / GEOMETRY_TOLERANCE_PT)),
+               int(round(page.rect.height / GEOMETRY_TOLERANCE_PT)),
+               int(getattr(page, "rotation", 0) or 0))
+        shapes.setdefault(key, []).append(index + 1)
+
+    if not shapes:
+        return {"width_pt": 396.0, "height_pt": 612.0, "uniform": True,
+                "rotated_pages": [], "variants": []}
+
+    dominant = max(shapes.items(), key=lambda item: len(item[1]))
+    width = dominant[0][0] * GEOMETRY_TOLERANCE_PT
+    height = dominant[0][1] * GEOMETRY_TOLERANCE_PT
+
+    variants = [
+        {"width_pt": round(key[0] * GEOMETRY_TOLERANCE_PT, 2),
+         "height_pt": round(key[1] * GEOMETRY_TOLERANCE_PT, 2),
+         "rotation": key[2], "pages": pages[:20], "page_count": len(pages)}
+        for key, pages in sorted(shapes.items(), key=lambda item: -len(item[1]))
+    ]
+    return {
+        "width_pt": round(width, 2),
+        "height_pt": round(height, 2),
+        "rotation": dominant[0][2],
+        "uniform": len(shapes) == 1,
+        "rotated_pages": sorted(
+            page for key, pages in shapes.items() if key[2] for page in pages
+        )[:20],
+        "variants": variants,
+    }
+
+
 def _collect_running_heads(pages: list[dict[str, Any]], page_height: float) -> set[str]:
     """Normalised text of lines that repeat in the top/bottom margin bands."""
     top_limit = page_height * MARGIN_BAND
@@ -441,9 +489,8 @@ def _read_open_pdf(
         doc[i].get_text("dict", sort=True) for i in range(page_count)
     ]
 
-    first = doc[0] if page_count else None
-    page_w = float(first.rect.width) if first else 396.0
-    page_h = float(first.rect.height) if first else 612.0
+    geometry = _survey_geometry(doc, page_count)
+    page_w, page_h = geometry["width_pt"], geometry["height_pt"]
 
     drop = _collect_running_heads(raw_pages, page_h)
     body_size = _body_font_size(raw_pages)
@@ -463,6 +510,10 @@ def _read_open_pdf(
         "width_pt": round(page_w, 2),
         "height_pt": round(page_h, 2),
     })
+    # The census travels with the book so nothing downstream has to assume the
+    # geometry is uniform. When it is not, `book["page"]` is the dominant shape
+    # and this says plainly which pages disagree with it.
+    book["source"]["page_geometry"] = geometry
 
     blocks: list[dict[str, Any]] = []
     seen_assets: dict[str, str] = {}
