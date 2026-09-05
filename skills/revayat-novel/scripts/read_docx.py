@@ -109,6 +109,30 @@ def iter_runs(paragraph: Paragraph) -> Iterator[Run]:
             yield from item.runs
 
 
+def hyperlinks(paragraph: Paragraph) -> list[dict[str, str]]:
+    """The links in this paragraph, as ``{"text", "href"}``.
+
+    ``iter_runs`` keeps a link's *words* - that was the loss worth fixing first,
+    because a missing phrase reads as a sentence the author wrote that way. The
+    target is the other half: it survives here, on the block, rather than in the
+    markup the translator answers. A URL is not text to translate, and a paired
+    inline marker for something a printed Persian book cannot click would be a
+    contract every worksheet has to honour for no reader's benefit.
+    """
+    found = []
+    for item in paragraph.iter_inner_content():
+        if not isinstance(item, Hyperlink):
+            continue
+        # `address` is the external target; `fragment` the in-document anchor.
+        # A link may have either or both, and one without the other is normal.
+        target = item.address or ""
+        if item.fragment:
+            target = f"{target}#{item.fragment}" if target else f"#{item.fragment}"
+        if item.text and target:
+            found.append({"text": item.text, "href": target})
+    return found
+
+
 def has_page_break(run: Run) -> bool:
     return any(node.get(qn("w:type")) == "page"
                for node in run._r.findall(qn("w:br")))
@@ -180,30 +204,44 @@ def _run_style(run) -> tuple[bool, bool]:
     return bool(bold), bool(italic)
 
 
-def _read_footnotes(document) -> dict[str, str]:
-    """``footnote id -> plain text`` from ``word/footnotes.xml``.
+#: The two ways Word stores a note. They are the same shape and the same loss
+#: if missed - a book that puts its notes at the back rather than the foot of
+#: the page came through with every one of them gone, and nothing said so.
+#: Both become footnotes in the Persian edition, because that is where a
+#: Persian reader looks, and because it is what the builder writes.
+NOTE_PARTS = (("footnote", RT.FOOTNOTES, "w:footnote", "w:footnoteReference"),
+              ("endnote", RT.ENDNOTES, "w:endnote", "w:endnoteReference"))
+
+
+def _read_notes(document) -> dict[str, str]:
+    """``"<kind>:<id>" -> plain text``, from both note parts.
+
+    Keyed by kind as well as id because the two id spaces are separate: an
+    endnote 1 and a footnote 1 are different notes, and merging them on the
+    number alone silently drops one of the two.
 
     Word reserves ids -1 and 0 for the separator marks; they carry no content.
     """
-    try:
-        part = document.part.part_related_by(RT.FOOTNOTES)
-    except KeyError:
-        return {}
-    try:
-        from lxml import etree
-        root = etree.fromstring(part.blob)
-    except Exception:
-        return {}
+    from lxml import etree
 
     notes: dict[str, str] = {}
-    for node in root.findall(qn("w:footnote")):
-        note_id = node.get(qn("w:id"))
-        if note_id is None or int(note_id) <= 0:
+    for kind, relationship, tag, _ in NOTE_PARTS:
+        try:
+            part = document.part.part_related_by(relationship)
+        except KeyError:
             continue
-        pieces = [t.text or "" for t in node.iter(qn("w:t"))]
-        text = re.sub(r"\s+", " ", "".join(pieces)).strip()
-        if text:
-            notes[note_id] = text
+        try:
+            root = etree.fromstring(part.blob)
+        except Exception:
+            continue
+        for node in root.findall(qn(tag)):
+            note_id = node.get(qn("w:id"))
+            if note_id is None or int(note_id) <= 0:
+                continue
+            pieces = [t.text or "" for t in node.iter(qn("w:t"))]
+            text = re.sub(r"\s+", " ", "".join(pieces)).strip()
+            if text:
+                notes[f"{kind}:{note_id}"] = text
     return notes
 
 
@@ -248,7 +286,7 @@ def read_docx(
 ) -> dict[str, Any]:
     asset_dir.mkdir(parents=True, exist_ok=True)
     document = Document(path)
-    notes = _read_footnotes(document)
+    notes = _read_notes(document)
     core = document.core_properties
 
     book = ir.new_book(
@@ -291,12 +329,17 @@ def read_docx(
     def read_paragraph(paragraph, **extra: Any) -> None:
         spans: list[tuple[str, bool, bool]] = []
         pending_notes: list[str] = []
+        # A link belongs to the prose of this paragraph, never to a picture
+        # that happens to sit inside it, so the two branches carry different
+        # context.
+        links = hyperlinks(paragraph)
+        prose = {**extra, "links": links} if links else extra
 
         for run in iter_runs(paragraph):
             picture = _picture(run, document)
             if picture is not None:
                 _flush(spans, pending_notes, paragraph, add, footnotes,
-                       used_notes, notes, extra)
+                       used_notes, notes, prose)
                 spans, pending_notes = [], []
                 digest = picture["sha256"]
                 if digest in seen_assets:
@@ -311,10 +354,11 @@ def read_docx(
                     **extra)
                 continue
 
-            for ref in run._r.findall(qn("w:footnoteReference")):
-                note_id = ref.get(qn("w:id"))
-                if note_id in notes:
-                    pending_notes.append(note_id)
+            for kind, _, _, reference in NOTE_PARTS:
+                for ref in run._r.findall(qn(reference)):
+                    key = f"{kind}:{ref.get(qn('w:id'))}"
+                    if key in notes:
+                        pending_notes.append(key)
 
             text = run.text
             if text:
@@ -323,12 +367,12 @@ def read_docx(
 
             if has_page_break(run):
                 _flush(spans, pending_notes, paragraph, add, footnotes,
-                       used_notes, notes, extra)
+                       used_notes, notes, prose)
                 spans, pending_notes = [], []
                 add("pagebreak", page=0, soft=False)
 
         _flush(spans, pending_notes, paragraph, add, footnotes, used_notes,
-               notes, extra)
+               notes, prose)
 
     def read_table(table, table_id: str, depth: int = 0) -> int:
         """One table's cells, each read exactly once. Returns the row count.
@@ -380,6 +424,24 @@ def read_docx(
 
     book["blocks"] = blocks
     book["footnotes"] = footnotes
+    linked = sum(len(block.get("links") or []) for block in blocks)
+    if linked:
+        warnings.append({
+            "kind": "hyperlinks-kept-as-metadata", "count": linked,
+            "detail": "link text is in the prose and each target is on its "
+                      "block as `links`; the built document sets the words, "
+                      "not a clickable link",
+        })
+
+    running = sum(1 for relationship in document.part.rels.values()
+                  if relationship.reltype in (RT.HEADER, RT.FOOTER))
+    if running:
+        warnings.append({
+            "kind": "running-heads-dropped", "count": running,
+            "detail": "the source's headers and footers are not read; the "
+                      "built document generates its own from --page-numbers",
+        })
+
     if len(document.sections) > 1:
         warnings.append({
             "kind": "sections-collapsed", "count": len(document.sections),

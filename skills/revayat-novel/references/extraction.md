@@ -153,12 +153,12 @@ Neither of these is reimplemented here; the adapters import their output.
 ```bash
 # MinerU: OCR + layout analysis + figure extraction
 mineru -p book.pdf -o work/mineru
-python3 scripts/revayat-novel.py extract --from-mineru work/mineru --out work/
+$PY scripts/revayat-novel.py extract --from-mineru work/mineru --out work/
 ```
 
 ```bash
 # Marker or Docling, or any Markdown you already have
-python3 scripts/revayat-novel.py extract --from-markdown work/book.md --out work/
+$PY scripts/revayat-novel.py extract --from-markdown work/book.md --out work/
 ```
 
 The Markdown importer resolves `![alt](path)` images relative to the Markdown
@@ -175,7 +175,22 @@ note body pulled from the element the link points at and its leading `1.`
 stripped — Word numbers footnotes itself.
 
 DOCX input reads paragraphs, runs and styles through python-docx, and reads
-`word/footnotes.xml` directly because python-docx has no footnote API.
+`word/footnotes.xml` and `word/endnotes.xml` directly because python-docx has
+no API for either. Both become footnotes in the Persian edition: that is where
+a Persian reader looks for a note, and it is what the builder writes. The two
+id spaces are kept apart — Word numbers footnotes and endnotes separately, so a
+book with a footnote 1 and an endnote 1 has two notes, not one.
+
+`book["source"]["docx_warnings"]` says what the reader could not carry across
+in full. None of them stops the import; each one exists so the loss is visible
+rather than discovered by a reader of the finished book.
+
+| Warning | What it means |
+| --- | --- |
+| `table-merged-cells` | a table had merged cells; the spans are recorded, so check the rebuilt table looks right |
+| `sections-collapsed` | the file had several sections; only the first one's page geometry is used |
+| `hyperlinks-kept-as-metadata` | link text is in the prose and each target is on its block as `links`; the built document sets the words, not a clickable link |
+| `running-heads-dropped` | the source had headers or footers; the Persian edition generates its own instead of copying an English running head onto a Persian page |
 
 ## What the Book IR holds
 
