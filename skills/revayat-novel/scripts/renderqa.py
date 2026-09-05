@@ -628,6 +628,15 @@ def check(
         if rendered is not None:
             renders["target"] = str(target_png.relative_to(work_dir).as_posix())
 
+    if "target" in renders:
+        # The page exists as an image now, whatever the checks below go on to
+        # say about it. Recording that here rather than at the end is what makes
+        # the state worth having: laying a document out is the slow part, and a
+        # run that dies while judging must not come back reading `merged`, as
+        # though the render had never happened.
+        state.set_page(page, "rendered",
+                       hashes={"render": ir.sha256_file(target_png)})
+
     try:
         unverified = _why_unverified(target_pdf, conversion_failure)
         view = None if unverified else page_view(Path(target_pdf), page - 1)

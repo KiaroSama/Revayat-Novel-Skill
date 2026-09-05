@@ -617,3 +617,28 @@ def test_a_document_that_cannot_be_laid_out_is_unverified_not_passed(
     assert (tmp_path / "qa" / "document.json").exists(), (
         "the report must be written even when nothing could be looked at"
     )
+
+
+def test_a_page_that_was_laid_out_says_so_even_when_judging_it_fails(tmp_path,
+                                                                     monkeypatch):
+    """Laying the document out is the slow part; losing that fact wastes it.
+
+    If the run dies between rendering the page and judging it, the record must
+    not read `merged` — that says the page was never laid out, and the next run
+    pays for the render again. `rendered` was in the state list from the start
+    with nothing writing it, which is the same bug wearing a name.
+    """
+    pytest.importorskip("pymupdf")
+    book_path = _latin_book(tmp_path, "A line that was rendered before the crash.")
+    rendered = _pdf_page(tmp_path / "target.pdf", [("Anything.", 60, 100)])
+
+    def damaged(*args, **kwargs):
+        raise RuntimeError("the PDF ended in the middle of an object")
+
+    monkeypatch.setattr(renderqa, "page_view", damaged)
+    written = renderqa.check(tmp_path, book_path, 1, target_pdf=rendered)
+
+    assert written["verified"] is False, "a page nobody could read is not a pass"
+    record = runstate.RunState(tmp_path).page(1)
+    assert record["state"] == "rendered"
+    assert record["hashes"]["render"], "the render it kept is not identified"
