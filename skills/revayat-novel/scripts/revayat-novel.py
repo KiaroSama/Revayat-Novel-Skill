@@ -31,6 +31,8 @@ STAGES = {
     "ocr-sidecar": "ocr_sidecar",
     "glossary": "glossary",
     "chunk": "chunk",
+    "pages": "pagerun",
+    "render-qa": "renderqa",
     "merge": "merge",
     "falint": "falint",
     "qa": "qa",
