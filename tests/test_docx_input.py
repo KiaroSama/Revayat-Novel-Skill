@@ -152,12 +152,17 @@ def test_table_cells_survive_and_know_where_they_came_from(imported):
     assert {(b["row"], b["cell"]) for b in cells} == {(1, 1), (1, 2), (2, 1), (2, 2)}
 
 
-def test_a_flattened_table_is_declared_not_implied(imported):
-    """The words are kept; the grid is not. Both facts have to be stated."""
+def test_a_plain_table_needs_no_warning_now_that_the_grid_is_rebuilt(imported):
+    """The warning that used to say "the grid is not reconstructed" was stale.
+
+    It was true when cells could only come out as consecutive paragraphs. The
+    builder reproduces the grid, so a table with no merges has nothing left to
+    warn about — and a warning that no longer describes reality is worse than
+    none, because it teaches a reader to ignore the channel.
+    """
     book, _ = imported
-    warnings = book["source"].get("docx_warnings") or []
-    flattened = [w for w in warnings if w["kind"] == "table-flattened"]
-    assert flattened and flattened[0]["rows"] == 2
+    kinds = {w["kind"] for w in (book["source"].get("docx_warnings") or [])}
+    assert "table-flattened" not in kinds
 
 
 def test_linked_text_survives(imported):
@@ -363,3 +368,94 @@ def test_a_cell_with_no_coordinates_is_written_rather_than_dropped(tmp_path):
     document = Document(destination)
     assert not document.tables
     assert any("سلولی" in p.text for p in document.paragraphs)
+
+
+# --------------------------------------------------------------------------- #
+# Merged and nested cells
+# --------------------------------------------------------------------------- #
+
+def _merged_docx(directory: Path) -> Path:
+    """A 3x3 grid with one horizontal merge, one vertical, and a nested table."""
+    document = Document()
+    table = document.add_table(rows=3, cols=3)
+    for row in range(3):
+        for column in range(3):
+            table.cell(row, column).text = f"cell {row + 1}-{column + 1}"
+    table.cell(0, 0).merge(table.cell(0, 1))
+    table.cell(1, 0).merge(table.cell(2, 0))
+    inner = table.cell(1, 2).add_table(rows=1, cols=1)
+    inner.cell(0, 0).text = "nested cell text"
+
+    destination = directory / "merged.docx"
+    document.save(destination)
+    return destination
+
+
+def test_a_merged_cell_is_read_once_not_once_per_position(tmp_path):
+    """`row.cells` expands a merge, and every cell here is a worksheet unit.
+
+    Read naively, a cell spanning two columns is translated twice and printed
+    twice — the reader sees the same sentence in two boxes.
+    """
+    book = read_docx(str(_merged_docx(tmp_path)), tmp_path / "assets")
+    blocks = [b for b in book["blocks"] if b.get("table") == "t0000"]
+
+    # Counted by grid position, not by block: `merge()` concatenates the
+    # paragraphs of the cells it joins, so one merged cell legitimately yields
+    # two blocks here. What must not happen is the same *position* twice.
+    positions = [(b["row"], b["cell"]) for b in blocks]
+    assert len(set(positions)) == 7, f"expected 7 distinct cells: {positions}"
+
+    texts = [ir.plain_text(b["text"]) for b in blocks]
+    assert len(texts) == len(set(texts)), f"a cell was read twice: {texts}"
+
+
+def test_the_span_of_a_merge_is_recorded(tmp_path):
+    book = read_docx(str(_merged_docx(tmp_path)), tmp_path / "assets")
+    spans = {(b["row"], b["cell"]): (b.get("row_span", 1), b.get("col_span", 1))
+             for b in book["blocks"] if b.get("table") == "t0000"}
+    assert spans[(1, 1)] == (1, 2), "the horizontal merge was lost"
+    assert spans[(2, 1)] == (2, 1), "the vertical merge was lost"
+    assert (3, 1) not in spans, "the covered position was read as its own cell"
+
+
+def test_a_table_inside_a_cell_is_not_dropped(tmp_path):
+    """Nested tables are not in `iter_inner_content`; they used to vanish."""
+    book = read_docx(str(_merged_docx(tmp_path)), tmp_path / "assets")
+    nested = [b for b in book["blocks"]
+              if b.get("table", "").startswith("t0000-")]
+    assert nested, "the nested table's text was lost"
+    assert "nested cell text" in " ".join(b["text"] for b in nested)
+
+
+def test_merges_survive_the_round_trip_into_the_built_document(tmp_path):
+    """Read, translate, rebuild — the grid that comes out is the one that went in."""
+    from docx import Document as Open
+
+    from build_docx import Builder, add_arguments
+    from read_docx import table_cells
+
+    book = read_docx(str(_merged_docx(tmp_path)), tmp_path / "assets")
+    for block in ir.iter_text_blocks(book):
+        if (block.get("text") or "").strip():
+            block["target"] = f"ترجمهٔ {block['id']} با طول کافی برای عبور از گیت."
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    destination = tmp_path / "rebuilt.docx"
+    Builder(book, tmp_path / "assets",
+            parser.parse_args(["--book", "x", "--out", "y", "--font", "Vazirmatn",
+                               "--no-toc"])).build(destination)
+
+    rebuilt = Open(destination).tables[0]
+    grid = {(r["row"], r["cell"]): (r["row_span"], r["col_span"])
+            for r in table_cells(rebuilt)}
+    assert grid[(1, 1)] == (1, 2)
+    assert grid[(2, 1)] == (2, 1)
+    assert len(grid) == 7
+
+
+def test_a_merge_is_reported_so_a_reviewer_knows_to_look(tmp_path):
+    book = read_docx(str(_merged_docx(tmp_path)), tmp_path / "assets")
+    kinds = {w["kind"] for w in (book["source"].get("docx_warnings") or [])}
+    assert "table-merged-cells" in kinds

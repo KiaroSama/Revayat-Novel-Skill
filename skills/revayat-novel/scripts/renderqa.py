@@ -21,16 +21,17 @@ already decided there — but the source page is still rendered beside the
 translated one, because the reviewer this produces evidence for wants to see
 both.
 
-Give it ``--docx`` and it drives **Word** to lay the document out; give it
-``--target-pdf`` or ``--target-image`` and it uses what you hand over. The
-first exists because a check nobody can run without a manual detour is a check
-nobody runs.
+Give it ``--docx`` and it lays the document out itself; give it ``--target-pdf``
+or ``--target-image`` and it uses what you hand over. The first exists because
+a check nobody can run without a manual detour is a check nobody runs.
 
-Word and not a substitute renderer: the deliverable is a .docx, so Word's
-pagination is the real one. A check that reports where things fall on the page
-is worth nothing if the pages are not the ones the reader will see. That ties
-this path to Windows, and elsewhere a page is reported *unverified* — which is
-the honest answer, and not the same as passing.
+Word does the laying out on Windows and LibreOffice elsewhere — see
+`wordrender`. Word first where it exists because the deliverable is a .docx and
+its pagination is the one the reader will see; LibreOffice rather than nothing
+elsewhere, because none of the questions asked here ("is this block present
+once", "did this paragraph come out left-to-right", "is the plate the right
+shape") depend on where a line broke. Which backend ran is recorded in the
+report, since the two do not paginate identically.
 
 Artifacts, all under the working directory::
 
@@ -53,6 +54,7 @@ import bookir as ir
 import pagerun
 import qa
 import runstate
+import wordrender
 
 
 class RenderError(RuntimeError):
@@ -500,9 +502,11 @@ def check(
     # could not look" must not be able to masquerade as "we looked and it was
     # fine", and it must not stop the report being written either.
     conversion_failure = ""
+    laid_out_by = ""
     if docx is not None and target_pdf is None and target_image is None:
         try:
             target_pdf = render_docx(Path(docx), work_dir / "renders")
+            laid_out_by = wordrender.backend()
         except RenderError as error:
             conversion_failure = str(error)
     state = runstate.RunState(work_dir)
@@ -569,6 +573,9 @@ def check(
         "verified": True,
         "attempts": attempts + (0 if outcome["ok"] else 1),
         "renders": renders,
+        # Word and LibreOffice do not paginate identically, so a reader
+        # comparing two reports has to be able to tell which produced each.
+        "laid_out_by": laid_out_by or "supplied by the caller",
         **outcome,
     })
 
@@ -586,83 +593,32 @@ def check(
     return written
 
 
-#: Word's own "save as PDF" format code.
-WORD_PDF_FORMAT = 17
-
-
 def word_available() -> str:
-    """Why Word cannot be driven here, or ``""`` when it can.
+    """Kept as the module's own name for "can a page be laid out here at all".
 
-    Deliberately Word and not LibreOffice. The two paginate differently, and a
-    check that reports where things fall on the page is worth nothing if the
-    pages are not the ones the reader will see — the document is a .docx, so
-    Word's layout is the real one and anything else is an approximation being
-    passed off as the answer.
+    Delegates: which backend is used is `wordrender`'s decision, and the answer
+    differs per platform. Returns the reason it cannot, or ``""``.
     """
-    if sys.platform != "win32":
-        return ("Word can only be driven on Windows; on this platform a page "
-                "cannot be laid out, so it is reported unverified rather than "
-                "measured against a different renderer's pagination")
-    try:
-        import win32com.client  # noqa: F401,PLC0415
-    except ImportError:
-        return ("pywin32 is not installed, so Word cannot be driven "
-                "(pip install pywin32)")
-    return ""
+    return wordrender.unavailable_reason()
 
 
-def render_docx(docx: Path, out_dir: Path, *, timeout: float = 300.0) -> Path:
-    """Lay the built document out with Word, so there is something to look at.
+def render_docx(docx: Path, out_dir: Path,
+                *, timeout: float = wordrender.DEFAULT_TIMEOUT) -> Path:
+    """Lay the built document out, so there is something to look at.
 
-    Render QA compares a *rendered* page, and until now the caller had to
-    produce that PDF by hand — which meant the check that exists to be run
-    routinely was the one nobody could run without a manual detour.
+    Render QA compares a *rendered* page, and the caller used to have to produce
+    that PDF by hand — which made the check that exists to be run routinely the
+    one nobody could run without a manual detour.
 
-    ``timeout`` is accepted for interface symmetry and not enforced: COM is a
-    blocking call with no cancellation, so promising a bound that cannot be
-    kept would be worse than saying plainly that this waits for Word.
+    Word on Windows, LibreOffice elsewhere, and the timeout is real on both:
+    `wordrender` puts Word in a child process precisely because COM cannot be
+    cancelled. Which one ran is recorded in the report, because the two do not
+    paginate identically and a reader comparing two reports deserves to know.
     """
-    reason = word_available()
-    if reason:
-        raise RenderError(reason + ". Or render it yourself and pass --target-pdf.")
-
-    import pythoncom  # noqa: PLC0415
-    import win32com.client  # noqa: PLC0415
-
-    docx = Path(docx).resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    produced = (out_dir / (docx.stem + ".pdf")).resolve()
-
-    pythoncom.CoInitialize()
-    word = None
-    document = None
     try:
-        word = win32com.client.DispatchEx("Word.Application")
-        word.Visible = False
-        word.DisplayAlerts = False
-        document = word.Documents.Open(str(docx), ReadOnly=True,
-                                       AddToRecentFiles=False)
-        # Repaginate before exporting: a document built by python-docx carries
-        # no layout, and the field results (the TOC, the page numbers) are
-        # whatever was cached at build time until Word works them out.
-        document.Fields.Update()
-        document.Repaginate()
-        document.SaveAs2(str(produced), FileFormat=WORD_PDF_FORMAT)
-    except Exception as error:  # pywin32 raises com_error, not an OSError
-        raise RenderError(f"Word could not lay out {docx.name}: {error}") from error
-    finally:
-        # Order matters and so does the guard: leaving a hidden WINWORD.EXE
-        # running is how a test run ends with a process nobody can see.
-        try:
-            if document is not None:
-                document.Close(SaveChanges=False)
-        finally:
-            if word is not None:
-                word.Quit()
-            pythoncom.CoUninitialize()
-
-    if not produced.exists():
-        raise RenderError(f"Word reported success but wrote no PDF to {produced}")
+        produced, _backend = wordrender.render(docx, out_dir, timeout=timeout)
+    except wordrender.RenderError as error:
+        raise RenderError(str(error)) from error
     return produced
 
 
@@ -726,6 +682,7 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.work), Path(args.book), args.page,
         target_pdf=Path(args.target_pdf) if args.target_pdf else None,
         target_image=Path(args.target_image) if args.target_image else None,
+        docx=Path(args.docx) if args.docx else None,
         source_pdf=Path(args.source_pdf) if args.source_pdf else None,
         dpi=args.dpi,
         max_attempts=args.max_attempts,
