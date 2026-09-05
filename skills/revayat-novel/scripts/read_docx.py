@@ -15,6 +15,10 @@ from typing import Any, Iterator
 from docx import Document
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml.ns import qn
+from docx.table import Table
+from docx.text.hyperlink import Hyperlink
+from docx.text.paragraph import Paragraph
+from docx.text.run import Run
 
 import bookir as ir
 
@@ -22,6 +26,69 @@ EMU_PER_PT = ir.EMU_PER_PT
 
 _HEADING_STYLE = re.compile(r"^\s*heading\s*(\d)\s*$", re.I)
 _LIST_STYLE = re.compile(r"list\s*(bullet|number|paragraph)", re.I)
+
+
+def iter_runs(paragraph: Paragraph) -> Iterator[Run]:
+    """Every run in the paragraph, including the ones inside a hyperlink.
+
+    ``paragraph.runs`` omits hyperlink content entirely. A sentence with a
+    linked phrase in the middle of it therefore came through with the phrase
+    missing — not flagged, not empty, just quietly shorter than the source.
+    """
+    for item in paragraph.iter_inner_content():
+        if isinstance(item, Run):
+            yield item
+        elif isinstance(item, Hyperlink):
+            yield from item.runs
+
+
+def has_page_break(run: Run) -> bool:
+    return any(node.get(qn("w:type")) == "page"
+               for node in run._r.findall(qn("w:br")))
+
+
+def _ilvl(element) -> int | None:
+    """The 0-based ``w:ilvl`` under this element, as a 1-based depth."""
+    if element is None:
+        return None
+    numbering = element.find(f".//{qn('w:numPr')}")
+    if numbering is None:
+        return None
+    level = numbering.find(qn("w:ilvl"))
+    try:
+        return int(level.get(qn("w:val"))) + 1
+    except (AttributeError, TypeError, ValueError):
+        return 1
+
+
+def list_level(paragraph: Paragraph) -> int | None:
+    """The nesting depth of a list item, 1-based, or ``None`` if not a list.
+
+    Word records the depth in one of two places and it is genuinely either:
+    a paragraph numbered directly carries ``w:numPr/w:ilvl`` itself, while one
+    numbered through a style — which is what "List Bullet 2" is — carries
+    nothing, and the depth lives in the style definition.
+
+    When the style says a paragraph is a list but neither place gives a level,
+    the trailing digit of the style name is used. That is a reading of Word's
+    own naming convention rather than of the file's data, so it is last, and it
+    is only ever reached for a paragraph already known to be a list item.
+    """
+    depth = _ilvl(paragraph._p.find(qn("w:pPr")))
+    if depth is not None:
+        return depth
+
+    style = getattr(paragraph, "style", None)
+    element = getattr(style, "element", None)
+    depth = _ilvl(element)
+    if depth is not None and depth > 1:
+        return depth
+
+    name = (getattr(style, "name", "") or "").strip()
+    if not _LIST_STYLE.search(name):
+        return None
+    trailing = re.search(r"(\d+)\s*$", name)
+    return int(trailing.group(1)) if trailing else 1
 
 
 def _heading_level(style_name: str) -> int | None:
@@ -152,14 +219,17 @@ def read_docx(
         blocks.append(block)
         return block
 
-    for paragraph in document.paragraphs:
+    warnings: list[dict[str, Any]] = []
+
+    def read_paragraph(paragraph, **extra: Any) -> None:
         spans: list[tuple[str, bool, bool]] = []
         pending_notes: list[str] = []
 
-        for run in paragraph.runs:
+        for run in iter_runs(paragraph):
             picture = _picture(run, document)
             if picture is not None:
-                _flush(spans, pending_notes, paragraph, add, footnotes, used_notes, notes)
+                _flush(spans, pending_notes, paragraph, add, footnotes,
+                       used_notes, notes, extra)
                 spans, pending_notes = [], []
                 digest = picture["sha256"]
                 if digest in seen_assets:
@@ -170,7 +240,8 @@ def read_docx(
                     seen_assets[digest] = asset_name
                 add("image", page=0, asset=asset_name, sha256=digest, bbox=None,
                     width_pt=picture["width_pt"], height_pt=picture["height_pt"],
-                    pixel_width=None, pixel_height=None, alt="", target_alt=None)
+                    pixel_width=None, pixel_height=None, alt="", target_alt=None,
+                    **extra)
                 continue
 
             for ref in run._r.findall(qn("w:footnoteReference")):
@@ -183,20 +254,61 @@ def read_docx(
                 bold, italic = _run_style(run)
                 spans.append((text, bold, italic))
 
-        _flush(spans, pending_notes, paragraph, add, footnotes, used_notes, notes)
+            if has_page_break(run):
+                _flush(spans, pending_notes, paragraph, add, footnotes,
+                       used_notes, notes, extra)
+                spans, pending_notes = [], []
+                add("pagebreak", page=0, soft=False)
+
+        _flush(spans, pending_notes, paragraph, add, footnotes, used_notes,
+               notes, extra)
+
+    # The body in document order. `document.paragraphs` walks only top-level
+    # paragraphs, so every table in the book — every cell of it — was dropped
+    # without a word: not flagged, not empty, simply absent from the IR and
+    # therefore from the translation and from the finished file.
+    for index, item in enumerate(document.iter_inner_content()):
+        if isinstance(item, Paragraph):
+            read_paragraph(item)
+        elif isinstance(item, Table):
+            table_id = f"t{index:04d}"
+            rows = 0
+            for row_number, row in enumerate(item.rows, start=1):
+                rows = row_number
+                for cell_number, cell in enumerate(row.cells, start=1):
+                    for paragraph in cell.paragraphs:
+                        read_paragraph(paragraph, table=table_id,
+                                       row=row_number, cell=cell_number)
+            # Said plainly rather than implied: the words are all here and will
+            # be translated, but they come out as consecutive paragraphs. The
+            # IR has no table type, so the grid itself is not rebuilt.
+            warnings.append({
+                "kind": "table-flattened", "table": table_id, "rows": rows,
+                "detail": "cell text is preserved and translated, but the "
+                          "table grid is not reconstructed in the output",
+            })
 
     book["blocks"] = blocks
     book["footnotes"] = footnotes
+    if len(document.sections) > 1:
+        warnings.append({
+            "kind": "sections-collapsed", "count": len(document.sections),
+            "detail": "only the first section's page geometry is carried over",
+        })
+    if warnings:
+        book["source"]["docx_warnings"] = warnings
     return book
 
 
-def _flush(spans, pending_notes, paragraph, add, footnotes, used_notes, notes) -> None:
+def _flush(spans, pending_notes, paragraph, add, footnotes, used_notes, notes,
+           extra: dict[str, Any] | None = None) -> None:
     """Emit the accumulated runs of one paragraph as a block."""
     if not spans:
         return
     text = ir.render_markup(spans).strip()
     if not text:
         return
+    extra = dict(extra or {})
 
     for note_id in pending_notes:
         if note_id in used_notes:
@@ -208,18 +320,21 @@ def _flush(spans, pending_notes, paragraph, add, footnotes, used_notes, notes) -
         text = f"{text}[[fn:{note['id']}]]"
 
     style_name = getattr(paragraph.style, "name", "") or ""
+    # The style records the paragraph's role; the numbering properties record
+    # how deep it sits. A nested list needs both.
+    depth = list_level(paragraph)
     level = _heading_level(style_name)
     if level is not None:
-        block = add("heading", page=0, level=level, text=text)
+        block = add("heading", page=0, level=level, text=text, **extra)
     elif style_name.lower().startswith("quote") or style_name.lower() == "intense quote":
-        block = add("blockquote", page=0, text=text)
-    elif _LIST_STYLE.search(style_name):
-        block = add("listitem", page=0, level=1,
-                    ordered="number" in style_name.lower(), text=text)
+        block = add("blockquote", page=0, text=text, **extra)
+    elif depth is not None or _LIST_STYLE.search(style_name):
+        block = add("listitem", page=0, level=depth or 1,
+                    ordered="number" in style_name.lower(), text=text, **extra)
     elif style_name.lower() == "caption":
-        block = add("caption", page=0, text=text)
+        block = add("caption", page=0, text=text, **extra)
     else:
-        block = add("paragraph", page=0, text=text)
+        block = add("paragraph", page=0, text=text, **extra)
 
     for note in footnotes:
         if not note["anchor_block"] and note["id"] in ir.footnote_refs(text):
