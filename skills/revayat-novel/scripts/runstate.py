@@ -13,6 +13,12 @@ the SHA-256 of everything that stage depends on, in ``run-state.json`` in the
 working directory. :meth:`RunState.is_stale` compares a stage's recorded inputs
 against the ones a caller is about to use and names what moved.
 
+The same file also carries the finer record a page-at-a-time run needs: where
+each source page has got to, how many times it has failed, and the hashes of
+its source, its translation, its render and its QA report. Stage identity
+answers for the book, and a book is finished one page at a time — "chunked" is
+not an answer about page 214.
+
 It is a record, not a lock. Nothing here deletes, rewrites or refuses anything —
 the caller decides what to do with the answer.
 """
@@ -31,6 +37,18 @@ SCHEMA = "revayat-novel/runstate@1"
 
 #: The stages that leave reusable output behind, in pipeline order.
 STAGES = ("extract", "glossary", "chunk", "translate", "typography", "build")
+
+#: The lifecycle of one source page, in order. A page-at-a-time run needs its
+#: own record because the stage-level one answers for the book: "the book was
+#: chunked" says nothing about whether page 214 has been looked at, and a book
+#: is finished one page at a time or not at all.
+PAGE_STATES = ("pending", "extracted", "translated", "merged", "rendered",
+               "qa_passed", "accepted", "failed")
+
+#: A page's hashes, in dependency order. ``source`` is the input; everything
+#: after it is evidence *derived* from that input, so a moved source page
+#: invalidates them and nothing else — not the page before it, not the book.
+PAGE_HASHES = ("source", "translation", "render", "qa")
 
 #: Sits beside ``book.json`` in the working directory rather than inside any one
 #: stage's output folder: staleness is a relationship *between* stages, and the
@@ -114,9 +132,86 @@ class RunState:
             "recorded_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         }
         self.data["stages"][stage] = entry
+        self._save()
+        return entry
+
+    # ----------------------------------------------------------------- #
+    # Per-page lifecycle
+    # ----------------------------------------------------------------- #
+
+    def page(self, page_no: int) -> dict[str, Any] | None:
+        """The record for one source page, or ``None`` if it has none."""
+        entry = self.data["pages"].get(str(int(page_no)))
+        return entry if isinstance(entry, dict) else None
+
+    def pages(self) -> dict[int, dict[str, Any]]:
+        """Every page record, keyed by page number."""
+        return {int(key): value
+                for key, value in sorted(self.data["pages"].items(),
+                                         key=lambda kv: int(kv[0]))
+                if isinstance(value, dict)}
+
+    def set_page(self, page_no: int, state: str, *,
+                 hashes: Mapping[str, Any] | None = None,
+                 error: str = "") -> dict[str, Any]:
+        """Move one page to ``state`` and record the evidence for it.
+
+        ``attempts`` counts failures rather than runs, because that is what a
+        retry cap is about: a page that has been rendered five times and passed
+        every time has not exhausted anything. Only ``failed`` increments it,
+        and any other state clears the error that went with it.
+        """
+        if state not in PAGE_STATES:
+            raise ValueError(f"unknown page state {state!r}; "
+                             f"expected one of {PAGE_STATES}")
+        entry = self.page(page_no) or {"state": "pending", "attempts": 0,
+                                       "last_error": "", "hashes": {}}
+        entry["state"] = state
+        if state == "failed":
+            entry["attempts"] = int(entry.get("attempts", 0)) + 1
+            entry["last_error"] = str(error)[:400]
+        else:
+            entry["last_error"] = str(error)[:400] if error else ""
+        for name, value in (hashes or {}).items():
+            if name not in PAGE_HASHES:
+                raise ValueError(f"unknown page hash {name!r}; "
+                                 f"expected one of {PAGE_HASHES}")
+            entry.setdefault("hashes", {})[name] = str(value)
+        entry["updated_utc"] = datetime.now(timezone.utc).strftime(
+            "%Y-%m-%d %H:%M:%S")
+        self.data["pages"][str(int(page_no))] = entry
+        self._save()
+        return entry
+
+    def note_page_source(self, page_no: int, source_hash: str) -> bool:
+        """Record this page's source, and say whether that invalidated it.
+
+        A corrected page has to discard its own translation, render and QA
+        report — they answer text the book no longer contains — while leaving
+        every other page exactly where it was. That containment is the whole
+        reason the record is per page: re-extracting one bad scan should not
+        cost a translator the other four hundred pages.
+        """
+        entry = self.page(page_no)
+        if entry is None:
+            self.set_page(page_no, "pending", hashes={"source": source_hash})
+            return False
+        if entry.get("hashes", {}).get("source", "") == str(source_hash):
+            return False
+
+        entry["hashes"] = {"source": str(source_hash)}
+        entry["state"] = "pending"
+        entry["attempts"] = 0
+        entry["last_error"] = ""
+        entry["updated_utc"] = datetime.now(timezone.utc).strftime(
+            "%Y-%m-%d %H:%M:%S")
+        self.data["pages"][str(int(page_no))] = entry
+        self._save()
+        return True
+
+    def _save(self) -> None:
         ir.write_text(self.path,
                       json.dumps(self.data, ensure_ascii=False, indent=1) + "\n")
-        return entry
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -131,6 +226,8 @@ def _read(path: Path) -> dict[str, Any]:
     except (OSError, ValueError):
         data = None
     if not isinstance(data, dict) or not isinstance(data.get("stages"), dict):
-        return {"schema": SCHEMA, "stages": {}}
+        return {"schema": SCHEMA, "stages": {}, "pages": {}}
     data.setdefault("schema", SCHEMA)
+    if not isinstance(data.get("pages"), dict):
+        data["pages"] = {}
     return data
