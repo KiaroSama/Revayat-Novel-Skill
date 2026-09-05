@@ -304,19 +304,69 @@ def _check_lengths(book: dict[str, Any], report: Report) -> None:
 
 
 def _check_footnotes(book: dict[str, Any], report: Report) -> None:
-    defined = {note["id"] for note in book.get("footnotes", [])}
-    referenced: set[str] = set()
-    for block in ir.iter_text_blocks(book):
-        referenced.update(ir.footnote_refs(block.get("target") or block.get("text") or ""))
+    """Every note must have a body, and exactly one marker pointing at it.
 
-    for note_id in sorted(referenced - defined):
+    A note the *translator* added is held to a stricter standard than one that
+    came with the book, and the reason is where each one can go wrong. A source
+    note that loses its marker is caught upstream as `footnote-marker-lost`,
+    because the source text still has the marker to compare against. A
+    translator's note has no such counterpart: if its `[[fn:…]]` does not
+    survive the worksheet round trip, nothing else in the pipeline notices, and
+    the note simply vanishes from the finished book — the translator's own
+    explanation, silently dropped. That is a publication defect, not a remark.
+    """
+    notes = book.get("footnotes", [])
+    defined = {note["id"] for note in notes}
+
+    # Which blocks point at which note. A list, not a set: the same marker
+    # written twice in one block is a real defect and must stay visible.
+    anchors: dict[str, list[str]] = {}
+    for block in ir.iter_text_blocks(book):
+        text = block.get("target") or block.get("text") or ""
+        # footnote_refs returns every match, not a set: the same marker twice
+        # in one block is a real defect and must stay countable.
+        for note_id in ir.footnote_refs(text):
+            anchors.setdefault(note_id, []).append(block["id"])
+
+    for note_id in sorted(set(anchors) - defined):
         report.add(ERROR, "footnote-undefined", note_id, "referenced but never defined")
-    for note_id in sorted(defined - referenced):
-        report.add(WARNING, "footnote-unreferenced", note_id,
-                   "defined but no marker points at it; it will not appear")
-    for note in book.get("footnotes", []):
-        if note["id"] in referenced and not (note.get("target") or "").strip():
-            report.add(WARNING, "footnote-untranslated", note["id"],
+
+    for note in notes:
+        note_id = note["id"]
+        by_translator = note.get("origin") == "translator"
+        pointing = anchors.get(note_id, [])
+
+        if not (note.get("text") or "").strip() and not (note.get("target") or "").strip():
+            report.add(ERROR, "footnote-body-empty", note_id,
+                       "the note has no text at all; it would print as a bare number")
+
+        if not pointing:
+            if by_translator:
+                report.add(ERROR, "footnote-orphaned", note_id,
+                           "a translator's note with no marker left in the text: "
+                           f"{ir.plain_text(note.get('target') or note.get('text') or '')[:80]!r}")
+            else:
+                report.add(WARNING, "footnote-unreferenced", note_id,
+                           "defined but no marker points at it; it will not appear")
+        elif len(pointing) > 1:
+            # Word gives each note one reference. A second marker for the same
+            # note either loses one or renumbers the rest of the book.
+            report.add(ERROR if by_translator else WARNING, "footnote-multiple-anchors",
+                       note_id, f"{len(pointing)} markers point at this note: "
+                                f"{', '.join(pointing[:5])}")
+
+        anchor = note.get("anchor_block") or ""
+        if by_translator and pointing:
+            if not anchor:
+                report.add(ERROR, "footnote-anchor-missing", note_id,
+                           f"no anchor_block recorded; the marker is in {pointing[0]}")
+            elif anchor not in pointing:
+                report.add(ERROR, "footnote-anchor-mismatch", note_id,
+                           f"anchor_block is {anchor} but the marker is in "
+                           f"{', '.join(pointing)}")
+
+        if pointing and not (note.get("target") or "").strip():
+            report.add(WARNING, "footnote-untranslated", note_id,
                        ir.plain_text(note.get("text") or "")[:100])
 
 
