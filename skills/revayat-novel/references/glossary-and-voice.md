@@ -128,7 +128,7 @@ a new name, add the entry and re-run `scan` (it preserves existing entries and
 only appends), then refresh frequencies:
 
 ```bash
-python3 scripts/revayat-novel.py glossary count --glossary work/glossary.json --book work/book.json
+$PY scripts/revayat-novel.py glossary count --glossary work/glossary.json --book work/book.json
 ```
 
 Chunks already translated are not re-translated automatically. Decide whether

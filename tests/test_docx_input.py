@@ -459,3 +459,150 @@ def test_a_merge_is_reported_so_a_reviewer_knows_to_look(tmp_path):
     book = read_docx(str(_merged_docx(tmp_path)), tmp_path / "assets")
     kinds = {w["kind"] for w in (book["source"].get("docx_warnings") or [])}
     assert "table-merged-cells" in kinds
+
+
+# --------------------------------------------------------------------------- #
+# The rest of what a Word file carries: link targets, notes kept at the back,
+# and the running heads this pipeline deliberately does not copy.
+# --------------------------------------------------------------------------- #
+
+def _note_part(document, kind: str, entries: dict[str, str]) -> None:
+    """Attach a real ``word/<kind>s.xml`` with the given id -> text."""
+    from docx.opc.packuri import PackURI
+    from docx.opc.part import Part
+
+    notes = "".join(
+        f'<w:{kind} w:id="{note_id}"><w:p><w:r><w:t>{text}</w:t></w:r></w:p>'
+        f"</w:{kind}>"
+        for note_id, text in entries.items()
+    )
+    body = (f'<w:{kind}s xmlns:w="http://schemas.openxmlformats.org/'
+            f'wordprocessingml/2006/main">{notes}</w:{kind}s>')
+    part = Part(
+        PackURI(f"/word/{kind}s.xml"),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml."
+        f"{kind}s+xml",
+        body.encode("utf-8"),
+        document.part.package,
+    )
+    document.part.relate_to(part, getattr(RT, f"{kind.upper()}S"))
+
+
+def _reference(paragraph, kind: str, note_id: str) -> None:
+    run = paragraph.add_run()
+    reference = OxmlElement(f"w:{kind}Reference")
+    reference.set(qn("w:id"), note_id)
+    run._r.append(reference)
+
+
+def _noted_docx(tmp_path, *, footnotes=None, endnotes=None) -> Path:
+    """A document whose notes live at the foot, at the back, or both."""
+    document = Document()
+    if footnotes:
+        _note_part(document, "footnote", footnotes)
+    if endnotes:
+        _note_part(document, "endnote", endnotes)
+
+    for kind, entries in (("footnote", footnotes), ("endnote", endnotes)):
+        for note_id in entries or {}:
+            paragraph = document.add_paragraph(
+                f"A sentence anchoring {kind} {note_id}.")
+            _reference(paragraph, kind, note_id)
+
+    destination = tmp_path / f"noted-{bool(footnotes)}-{bool(endnotes)}.docx"
+    document.save(str(destination))
+    return destination
+
+
+def test_a_link_keeps_its_target_and_not_only_its_words(imported):
+    """The words were already kept; the address used to go nowhere.
+
+    It rides on the block rather than in the markup on purpose — a URL is not
+    text to translate, and a printed Persian book cannot click it — but it must
+    still leave the Word file, or an EPUB's citations are gone for good.
+    """
+    book, _ = imported
+    targets = [link for block in book["blocks"]
+               for link in (block.get("links") or [])]
+
+    assert targets, "the document's hyperlink left no target behind at all"
+    assert {"text": LINKED, "href": "https://example.com/source"} in targets
+
+    carrying = [b for b in book["blocks"] if b.get("links")]
+    assert all(LINKED in (b.get("text") or "") for b in carrying), (
+        "a link is filed on a block whose prose does not contain it"
+    )
+    kinds = {w["kind"] for w in (book["source"].get("docx_warnings") or [])}
+    assert "hyperlinks-kept-as-metadata" in kinds
+
+
+def test_a_picture_does_not_inherit_the_paragraph_links(imported):
+    book, _ = imported
+    for block in book["blocks"]:
+        if block["type"] == "image":
+            assert not block.get("links")
+
+
+def test_notes_kept_at_the_back_of_the_book_are_read_too(tmp_path):
+    """An endnote is a footnote that Word files somewhere else.
+
+    Before this, a book that put its notes at the back imported with every one
+    of them missing — and passed, because the IR never knew they existed.
+    """
+    book = read_docx(str(_noted_docx(tmp_path, endnotes={"1": "The note at the back."})),
+                     tmp_path / "assets")
+
+    assert len(book["footnotes"]) == 1
+    note = book["footnotes"][0]
+    assert note["text"] == "The note at the back."
+    anchor = next(b for b in book["blocks"] if b["id"] == note["anchor_block"])
+    assert note["id"] in ir.footnote_refs(anchor["text"])
+
+
+def test_a_footnote_and_an_endnote_numbered_the_same_are_two_notes(tmp_path):
+    """Word numbers the two kinds separately, so id 1 exists twice.
+
+    Keyed on the number alone, one of them overwrites the other and the book
+    silently carries the same note twice — or loses one entirely.
+    """
+    book = read_docx(
+        str(_noted_docx(tmp_path, footnotes={"1": "The note at the foot."},
+                        endnotes={"1": "The note at the back."})),
+        tmp_path / "assets",
+    )
+
+    assert [n["text"] for n in book["footnotes"]] == ["The note at the foot.",
+                                                      "The note at the back."]
+    anchors = {n["anchor_block"] for n in book["footnotes"]}
+    assert len(anchors) == 2, "both notes were anchored to the same sentence"
+
+
+def test_running_heads_are_reported_rather_than_silently_dropped(tmp_path):
+    """The Persian edition generates its own; the source's are not copied.
+
+    That is a decision, not an oversight — a running head reading the English
+    title on a Persian page is worse than none. It still has to be *said*, or
+    the next reader assumes the source had none.
+    """
+    document = Document()
+    document.add_paragraph("Body text under a running head.")
+    document.sections[0].header.paragraphs[0].text = "The English Title"
+    destination = tmp_path / "with-header.docx"
+    document.save(str(destination))
+
+    book = read_docx(str(destination), tmp_path / "assets")
+    warned = {w["kind"]: w for w in (book["source"].get("docx_warnings") or [])}
+    assert "running-heads-dropped" in warned
+    assert warned["running-heads-dropped"]["count"] >= 1
+
+
+def test_a_document_with_no_links_or_heads_warns_about_neither(tmp_path):
+    """A warning that fires on every file is a warning nobody reads."""
+    document = Document()
+    document.add_paragraph("Nothing but prose.")
+    destination = tmp_path / "plain.docx"
+    document.save(str(destination))
+
+    book = read_docx(str(destination), tmp_path / "assets")
+    kinds = {w["kind"] for w in (book["source"].get("docx_warnings") or [])}
+    assert not kinds & {"hyperlinks-kept-as-metadata", "running-heads-dropped"}

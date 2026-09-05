@@ -94,9 +94,17 @@ def test_the_source_language_is_a_variable_set_once(skill_text):
     assert skill_text.count("--lang $OCR_LANG") >= 1
 
 
-def test_no_documented_command_hard_codes_python3(skill_text):
+#: SKILL.md is the file an agent follows, but not the only file it reads: a
+#: reference is opened precisely when something has gone wrong, which is the
+#: worst moment to hand someone a command that cannot run.
+DOCS = [SKILL] + sorted((SKILL.parent / "references").glob("*.md"))
+
+
+def test_no_documented_command_hard_codes_python3():
     """`python3` is absent from most Windows installs; resolve `$PY` instead."""
-    offenders = [line.strip() for line in skill_text.splitlines()
+    offenders = [f"{doc.name}: {line.strip()}"
+                 for doc in DOCS
+                 for line in doc.read_text(encoding="utf-8").splitlines()
                  if "python3 " in line and "revayat-novel.py" in line]
     assert not offenders, (
         "these command lines will not run on Windows:\n  " + "\n  ".join(offenders)
