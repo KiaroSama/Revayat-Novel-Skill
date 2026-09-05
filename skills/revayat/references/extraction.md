@@ -40,10 +40,25 @@ The error names the fix:
 
 ```bash
 pip install ocrmypdf
-# Windows, for the engines it drives:
-winget install tesseract-ocr.tesseract
-winget install ArtifexSoftware.GhostScript
+
+# Tesseract, the recognition engine:
+winget install tesseract-ocr.tesseract     # Windows
+brew install tesseract                     # macOS
+sudo apt install tesseract-ocr             # Debian/Ubuntu
+
+# Ghostscript. Verified 2026-09-05: it is NOT in the winget default
+# source, so on Windows take the installer from
+# https://ghostscript.com/releases/gsdnld.html and put its bin/ on PATH.
+brew install ghostscript                   # macOS
+sudo apt install ghostscript               # Debian/Ubuntu
 ```
+
+`revayat.py doctor` reports all three. On Windows it looks for
+`gswin64c`/`gswin32c` as well as `gs`, because Ghostscript does not ship a
+binary called `gs` there.
+
+OCRmyPDF is also found when it is installed in the same interpreter as the
+skill's other dependencies, even if its script directory is not on PATH.
 
 `--ocr off` proceeds without it, extracting only the pages that already have a
 text layer. Say so explicitly to the user — a book that comes back suspiciously

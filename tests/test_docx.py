@@ -138,11 +138,28 @@ def test_untranslated_block_falls_back_to_source_and_warns(translated_book, tmp_
         ("الیزابت بنت (Elizabeth Bennet) رفت", ["Elizabeth Bennet"]),
         ("متن فارسی بدون لاتین", []),
         ("Alice در سرزمین Wonderland", ["Alice", "Wonderland"]),
+        ("نگاه کن [see Smith] و برو", ["see Smith"]),
     ],
 )
 def test_split_by_script_isolates_latin_runs(text, expected_latin):
     latin = [chunk.strip() for chunk, is_latin in split_by_script(text) if is_latin]
     assert latin == expected_latin
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "الیزابت بنت (Elizabeth Bennet) رفت",
+        "متن فارسی بدون لاتین",
+        "Alice در سرزمین Wonderland",
+        "نگاه کن [see Smith] و برو",
+        "متن (Elizabeth رفت",
+        "((nested)) و ادامه",
+        "",
+    ],
+)
+def test_split_by_script_never_loses_a_character(text):
+    """Splitting is a partition: concatenating the segments rebuilds the input."""
     assert "".join(chunk for chunk, _ in split_by_script(text)) == text
 
 

@@ -51,7 +51,7 @@ _PROTECTED = re.compile(
     r"""(?xi)
     (?:https?://|www\.)\S+
     | [\w.+-]+@[\w-]+\.[\w.-]+
-    | \b\d{1,4}(?:[.:/-]\d{1,4})+\b          # dates, versions, ISBN fragments
+    | \b[0-9]{1,4}(?:[.:/-][0-9]{1,4})+\b    # dates, versions, ISBN fragments
     | \b[A-Za-z][\w.'’-]*\b                  # any Latin word
     """
 )
@@ -81,7 +81,10 @@ _MISSING_SPACE_AFTER = re.compile(rf"([،؛؟!:])(?=[{PERSIAN_LETTER}])")
 _MULTI_SPACE = re.compile(r"[ \t]{2,}")
 _QUOTE_PAIR = re.compile(r"[\"“](.+?)[\"”]", re.S)
 _GUILLEMET_INNER = re.compile(r"«\s+|\s+»")
-_DIGIT_RUN = re.compile(r"(?<![\w.:/-])\d+(?![\w.:/-])")
+#: A standalone run of ASCII digits. Explicitly [0-9], never \d: Python's
+#: \d also matches Persian digits, so a second fix pass would try to convert
+#: already-converted text and fail. The pass has to be idempotent.
+_DIGIT_RUN = re.compile(r"(?<![\w.:/-])[0-9]+(?![\w.:/-])")
 
 
 class Options:

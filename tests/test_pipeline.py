@@ -212,6 +212,26 @@ def test_typography_leaves_protected_regions_alone(text):
             assert fragment in fixed
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "او در سال 1984 با John Smith دیدار كرد , و رفت .",
+        "كتاب ها ی من مهم ترین چیز است ؛ می روم .",
+        "او در سال ۱۸۱۳ رفت و ۴۲ نامه نوشت.",     # already-Persian digits
+        "برو به https://example.com/a,b?x=1 و ISBN 978-0-19-953556-9 را ببین",
+    ],
+)
+def test_typography_is_idempotent(text):
+    """Running the pass twice must not crash or change the result again.
+
+    Python's ``\\d`` matches Persian digits as well as ASCII ones, so a digit
+    rule written with ``\\d`` re-matches its own output and fails on the second
+    pass — which happens for real whenever a partially-fixed book is re-fixed.
+    """
+    once = falint.fix_text(text)
+    assert falint.fix_text(once) == once
+
+
 def test_typography_preserves_emphasis_markers():
     source = "**پررنگ** و *كج* با , نقطه ."
     fixed = falint.fix_text(source)

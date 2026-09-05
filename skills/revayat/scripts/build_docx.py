@@ -53,6 +53,14 @@ def split_by_script(text: str) -> list[tuple[str, bool]]:
     Unicode bidi algorithm with the correct per-run character direction, which
     is why "الیزابت بنت (Elizabeth Bennet) رفت" comes out in the right order —
     and why nothing anywhere in this project reverses a string.
+
+    Note that a run boundary is *not* a bidi boundary: brackets and other
+    neutral characters around a Latin run resolve against the paragraph
+    direction no matter which ``w:r`` holds them. Moving them between runs
+    changes nothing on the page (measured in Word), so this deliberately does
+    not try. Controlling that grouping would need Unicode isolates in the text
+    itself, which is not worth putting invisible control characters into a
+    manuscript people will edit.
     """
     segments: list[tuple[str, bool]] = []
     cursor = 0

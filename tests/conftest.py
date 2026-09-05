@@ -90,6 +90,65 @@ def sample_pdf(tmp_path_factory, sample_png) -> Path:
     return path
 
 
+def _text_page(doc, page_no: int):
+    """One typeset page, used as the source for the rasterised fixtures."""
+    page = doc.new_page(width=396, height=612)
+    y = 100.0
+    for text, size, font in [
+        ("Chapter One", 20, "hebo"),
+        ("The morning came slowly over the ridge and", 12, "helv"),
+        ("Elizabeth Bennet stood beside the window,", 12, "helv"),
+        ("She had not slept at all that night.", 12, "helv"),
+    ]:
+        page.insert_text((54, y), text, fontsize=size, fontname=font)
+        y += size * 2.0
+    page.insert_text((190, 580), str(page_no), fontsize=9, fontname="helv")
+    return page
+
+
+@pytest.fixture(scope="session")
+def scanned_pdf(tmp_path_factory) -> Path:
+    """Every page a 200-DPI raster with no text layer — a real scan's shape."""
+    pymupdf = pytest.importorskip("pymupdf")
+    path = tmp_path_factory.mktemp("scan") / "scanned.pdf"
+
+    source = pymupdf.open()
+    for number in (1, 2):
+        _text_page(source, number)
+
+    scan = pymupdf.open()
+    for index in range(len(source)):
+        pixmap = source[index].get_pixmap(dpi=200)
+        scan.new_page(width=396, height=612).insert_image(
+            pymupdf.Rect(0, 0, 396, 612), pixmap=pixmap
+        )
+    scan.save(str(path))
+    scan.close()
+    source.close()
+    return path
+
+
+@pytest.fixture(scope="session")
+def mixed_pdf(tmp_path_factory) -> Path:
+    """Page 1 has a real text layer, page 2 is a scan — the awkward common case."""
+    pymupdf = pytest.importorskip("pymupdf")
+    path = tmp_path_factory.mktemp("mixed") / "mixed.pdf"
+
+    source = pymupdf.open()
+    _text_page(source, 2)
+
+    mixed = pymupdf.open()
+    _text_page(mixed, 1)
+    pixmap = source[0].get_pixmap(dpi=200)
+    mixed.new_page(width=396, height=612).insert_image(
+        pymupdf.Rect(0, 0, 396, 612), pixmap=pixmap
+    )
+    mixed.save(str(path))
+    mixed.close()
+    source.close()
+    return path
+
+
 @pytest.fixture(scope="session")
 def sample_epub(tmp_path_factory, sample_png) -> Path:
     """A spine of two documents with a heading, emphasis, an image and a footnote."""
