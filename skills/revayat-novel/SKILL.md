@@ -1,7 +1,7 @@
 ---
 name: revayat-novel
 description: Translate a whole book from English (or another language) into publication-quality Persian and produce a professional Word document. Handles scanned, digital and mixed PDFs with OCR, removes colour watermarks, keeps every illustration at its original size, and builds real Word footnotes, a clickable table of contents, RTL typography and a locked name glossary. Use for translating novels, non-fiction, PDFs, EPUBs or DOCX files into Persian (فارسی).
-license: MIT
+license: GPL-3.0-or-later
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent, AskUserQuestion
 metadata: {"homepage":"https://github.com/KiaroSama/Revayat-Novel-Skill","requires":{"bins":["python3"],"pip":["pymupdf","python-docx","beautifulsoup4","pillow"],"optional":["ocrmypdf","tesseract","ghostscript","mineru"]}}
 ---
