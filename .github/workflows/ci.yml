@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest and newest supported interpreters, on both the platform most
+        # contributors use and the one most users run this on.
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: skills/revayat/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r skills/revayat/requirements.txt
+
+      - name: Run tests
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python -m pytest tests -q --timeout=120 --durations=10
+
+      - name: Smoke-test the CLI
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python skills/revayat/scripts/revayat.py doctor
+
+  lint:
+    name: manifests and encoding
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Every plugin manifest is valid JSON and agrees on version
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+
+          manifests = sorted(pathlib.Path(".").glob("*-plugin/plugin.json"))
+          assert manifests, "no plugin manifests found"
+          versions = set()
+          for path in manifests:
+              data = json.loads(path.read_text(encoding="utf-8"))
+              for field in ("name", "version", "description", "license"):
+                  assert data.get(field), f"{path}: missing {field}"
+              versions.add(data["version"])
+              print(f"ok {path} -> {data['name']} {data['version']}")
+
+          market = json.loads(
+              pathlib.Path(".claude-plugin/marketplace.json").read_text(encoding="utf-8")
+          )
+          versions.add(market["plugins"][0]["version"])
+          assert len(versions) == 1, f"plugin versions disagree: {versions}"
+          print("ok marketplace.json, all manifests at", versions.pop())
+          PY
+
+      - name: Every tracked text file is valid UTF-8
+        run: |
+          python - <<'PY'
+          import pathlib, subprocess, sys
+
+          binary_suffixes = {
+              ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".docx",
+              ".epub", ".zip", ".ico", ".woff", ".woff2", ".ttf", ".otf",
+          }
+          tracked = subprocess.run(
+              ["git", "ls-files", "-z"], capture_output=True, check=True
+          ).stdout.split(b"\0")
+
+          bad = []
+          for raw in tracked:
+              if not raw:
+                  continue
+              path = pathlib.Path(raw.decode("utf-8"))
+              if path.suffix.lower() in binary_suffixes or not path.is_file():
+                  continue
+              try:
+                  path.read_bytes().decode("utf-8")
+              except UnicodeDecodeError as error:
+                  bad.append(f"{path}: {error}")
+
+          if bad:
+              print("\n".join(bad))
+              sys.exit(1)
+          print("ok: all tracked text files decode as UTF-8")
+          PY
+
+      - name: The skill declares itself correctly
+        run: |
+          python - <<'PY'
+          import pathlib, re
+
+          text = pathlib.Path("skills/revayat/SKILL.md").read_text(encoding="utf-8")
+          front = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+          assert front, "SKILL.md has no YAML front matter"
+          body = front.group(1)
+          for field in ("name:", "description:"):
+              assert field in body, f"SKILL.md front matter is missing {field}"
+          # Several agents parse this front matter with a line-oriented reader,
+          # so every field has to stay on one line.
+          for line in body.splitlines():
+              assert not line.startswith(" "), f"front matter must be flat: {line!r}"
+          name = re.search(r"^name:\s*(\S+)", body, re.M).group(1)
+          assert name == "revayat", f"skill name drifted: {name}"
+
+          referenced = set(re.findall(r"references/([a-z0-9-]+\.md)", text))
+          on_disk = {p.name for p in pathlib.Path("skills/revayat/references").glob("*.md")}
+          missing = referenced - on_disk
+          assert not missing, f"SKILL.md references files that do not exist: {missing}"
+          print(f"ok: skill '{name}', {len(on_disk)} reference files, none dangling")
+          PY

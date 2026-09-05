@@ -1,0 +1,44 @@
+# --- Upstream reference clone (never committed; it is a separate repository) ---
+/translate-book/
+
+# --- Local-only agent / tooling state ---
+/.ai/
+/.agents/
+/.claude/
+/.kiro/
+/.codex/
+/.cursor/
+/.cline/
+/CLAUDE.local.md
+/graphify-out/
+.ignoreme
+**/.ignoreme
+
+# --- Secrets and private notes ---
+/secrets.md
+/explain-AI.md
+/reference.md
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# --- Revayat working directories and outputs ---
+*_revayat/
+/work/
+/out/
+*.docx
+!templates/*.docx
+!tests/fixtures/*.docx
+
+# --- OS ---
+.DS_Store
+Thumbs.db
