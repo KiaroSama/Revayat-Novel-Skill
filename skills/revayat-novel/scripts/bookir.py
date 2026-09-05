@@ -138,15 +138,30 @@ def new_book(
     }
 
 
+#: One centimetre in points. Persian trims are quoted in centimetres, and
+#: converting through inches loses a point or two on every edge.
+PT_PER_CM = 72.0 / 2.54
+
+
 def default_page_setup() -> dict[str, float]:
-    """A5-ish trade paperback, a sane default for a novel."""
+    """وزیری — 16.5 x 23.5 cm, the ordinary Iranian book trim.
+
+    Only ever reached when the source has no page size of its own: a PDF or a
+    DOCX brings its own geometry and that is used instead. So this is the size
+    an EPUB or a Markdown import becomes, and it should be the size Persian
+    books are actually printed at rather than a US trade paperback.
+
+    The earlier default was 5.5 x 8.5in, which is a real size but a foreign
+    one, and noticeably small for a novel set in Persian — the script needs
+    more room per line than Latin at the same point size.
+    """
     return {
-        "width_pt": 5.5 * PT_PER_INCH,
-        "height_pt": 8.5 * PT_PER_INCH,
-        "margin_top_pt": 54.0,
-        "margin_bottom_pt": 54.0,
-        "margin_inner_pt": 54.0,
-        "margin_outer_pt": 45.0,
+        "width_pt": 16.5 * PT_PER_CM,
+        "height_pt": 23.5 * PT_PER_CM,
+        "margin_top_pt": 62.0,
+        "margin_bottom_pt": 62.0,
+        "margin_inner_pt": 62.0,
+        "margin_outer_pt": 50.0,
     }
 
 

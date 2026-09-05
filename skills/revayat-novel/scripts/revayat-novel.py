@@ -55,8 +55,7 @@ OPTIONAL_TOOLS = {
     "tesseract": (["tesseract"], "the OCR engine OCRmyPDF drives"),
     "ghostscript": (["gs", "gswin64c", "gswin32c"], "required by OCRmyPDF"),
     "mineru": (["mineru", "magic-pdf"], "stronger extraction for difficult scans"),
-    "libreoffice": (["soffice", "libreoffice"],
-                    "renders the DOCX to PDF for visual QA"),
+    "word": (["WINWORD"], "lays the built document out for render QA (Windows)"),
 }
 
 

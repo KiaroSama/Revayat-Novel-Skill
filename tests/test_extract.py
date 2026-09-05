@@ -319,7 +319,10 @@ def test_figures_replace_the_page_scan_they_were_cropped_from(tmp_path):
     assert all((tmp_path / "assets" / b["asset"]).exists() for b in images[:2])
     assert images[0]["alt"] == "قارچ"
     # Real size travels with the crop, or a picture cannot be placed to scale.
-    assert images[0]["width_pt"] == pytest.approx(158.4, abs=0.1)
+    # Derived from the page the book actually has: the MinerU box spans
+    # 100..500 of 1000, so two fifths of the trim, whatever the trim is.
+    expected = 0.4 * book["page"]["width_pt"]
+    assert images[0]["width_pt"] == pytest.approx(expected, abs=0.1)
     assert ir.validate_book(book) == []
 
 
