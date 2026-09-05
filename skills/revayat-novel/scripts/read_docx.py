@@ -28,6 +28,73 @@ _HEADING_STYLE = re.compile(r"^\s*heading\s*(\d)\s*$", re.I)
 _LIST_STYLE = re.compile(r"list\s*(bullet|number|paragraph)", re.I)
 
 
+def column_span(tc) -> int:
+    """How many grid columns this ``w:tc`` covers, from ``w:gridSpan``."""
+    properties = tc.find(qn("w:tcPr"))
+    if properties is None:
+        return 1
+    grid = properties.find(qn("w:gridSpan"))
+    try:
+        return max(1, int(grid.get(qn("w:val"))))
+    except (AttributeError, TypeError, ValueError):
+        return 1
+
+
+def _vertical_merge(tc) -> str | None:
+    """``"restart"``, ``"continue"``, or ``None`` when the cell is not merged."""
+    properties = tc.find(qn("w:tcPr"))
+    if properties is None:
+        return None
+    merge = properties.find(qn("w:vMerge"))
+    if merge is None:
+        return None
+    # A bare <w:vMerge/> means continue; only "restart" opens a new span.
+    return "restart" if merge.get(qn("w:val")) == "restart" else "continue"
+
+
+def table_cells(table) -> list[dict[str, Any]]:
+    """Every distinct cell of a table, once, with its position and span.
+
+    Walks ``w:tr``/``w:tc`` rather than ``row.cells``. Two reasons, and the
+    second one is the reason this is not shorter:
+
+    ``row.cells`` *expands* merges — a cell spanning two columns comes back
+    twice, and a vertically merged one comes back on every row it covers. Since
+    every cell here becomes its own worksheet unit, that made a merged cell's
+    sentence get translated twice and printed twice.
+
+    And de-duplicating that expansion by object identity does not work.
+    `cell._tc` hands back a fresh lxml proxy on each access, and CPython reuses
+    the `id()` of a freed one — measured on a 3x3 grid, three different cells
+    reported the same id and a fourth reported one that had never been seen.
+    Walking the XML gives each cell exactly once by construction, so there is
+    nothing to de-duplicate.
+
+    Returns ``{"tc", "row", "cell", "row_span", "col_span"}`` with 1-based
+    ``row``/``cell`` counted in grid columns.
+    """
+    from docx.table import _Cell
+
+    found: list[dict[str, Any]] = []
+    # Grid column -> the record of the cell currently open there, so a
+    # `continue` row extends the span of the cell that started it.
+    open_at: dict[int, dict[str, Any]] = {}
+
+    for row_number, tr in enumerate(table._tbl.findall(qn("w:tr")), start=1):
+        column = 0
+        for tc in tr.findall(qn("w:tc")):
+            width = column_span(tc)
+            if _vertical_merge(tc) == "continue" and column in open_at:
+                open_at[column]["row_span"] += 1
+            else:
+                record = {"tc": _Cell(tc, table), "row": row_number,
+                          "cell": column + 1, "row_span": 1, "col_span": width}
+                found.append(record)
+                open_at[column] = record
+            column += width
+    return found
+
+
 def iter_runs(paragraph: Paragraph) -> Iterator[Run]:
     """Every run in the paragraph, including the ones inside a hyperlink.
 
@@ -263,6 +330,44 @@ def read_docx(
         _flush(spans, pending_notes, paragraph, add, footnotes, used_notes,
                notes, extra)
 
+    def read_table(table, table_id: str, depth: int = 0) -> int:
+        """One table's cells, each read exactly once. Returns the row count.
+
+        Two traps, both of which used to be live.
+
+        ``row.cells`` *expands* merges: a cell spanning two columns comes back
+        twice, and a vertically merged one comes back on every row it covers —
+        the same `w:tc` object each time. Since every cell becomes its own
+        worksheet unit, that meant a merged cell's sentence was translated
+        twice and printed twice. Cells are therefore keyed by the identity of
+        the underlying element, and the span is recorded instead.
+
+        And a table nested in a cell is not in ``document.iter_inner_content``
+        at all, so its text vanished exactly as every table's did before.
+        """
+        rows = 0
+        merges = 0
+        for record in table_cells(table):
+            rows = max(rows, record["row"] + record["row_span"] - 1)
+            span = {name: record[name] for name in ("row_span", "col_span")
+                    if record[name] > 1}
+            merges += bool(span)
+            cell = record["tc"]
+            for paragraph in cell.paragraphs:
+                read_paragraph(paragraph, table=table_id, row=record["row"],
+                               cell=record["cell"], **span)
+            for inner_number, inner in enumerate(cell.tables, start=1):
+                read_table(inner, f"{table_id}-{record['row']}"
+                                  f"{record['cell']}n{inner_number}", depth + 1)
+        if merges:
+            warnings.append({
+                "kind": "table-merged-cells", "table": table_id,
+                "detail": f"{merges} merged cell position(s); the text is read "
+                          f"once and its span recorded, and the builder "
+                          f"reproduces the merge",
+            })
+        return rows
+
     # The body in document order. `document.paragraphs` walks only top-level
     # paragraphs, so every table in the book — every cell of it — was dropped
     # without a word: not flagged, not empty, simply absent from the IR and
@@ -271,22 +376,7 @@ def read_docx(
         if isinstance(item, Paragraph):
             read_paragraph(item)
         elif isinstance(item, Table):
-            table_id = f"t{index:04d}"
-            rows = 0
-            for row_number, row in enumerate(item.rows, start=1):
-                rows = row_number
-                for cell_number, cell in enumerate(row.cells, start=1):
-                    for paragraph in cell.paragraphs:
-                        read_paragraph(paragraph, table=table_id,
-                                       row=row_number, cell=cell_number)
-            # Said plainly rather than implied: the words are all here and will
-            # be translated, but they come out as consecutive paragraphs. The
-            # IR has no table type, so the grid itself is not rebuilt.
-            warnings.append({
-                "kind": "table-flattened", "table": table_id, "rows": rows,
-                "detail": "cell text is preserved and translated, but the "
-                          "table grid is not reconstructed in the output",
-            })
+            read_table(item, f"t{index:04d}")
 
     book["blocks"] = blocks
     book["footnotes"] = footnotes
