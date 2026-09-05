@@ -549,3 +549,115 @@ def test_the_built_document_keeps_the_interleaved_order(tmp_path):
     drawing = document.index("<w:drawing>")
     last = document.rindex("بند فارسی")
     assert first < drawing < last
+
+
+# --------------------------------------------------------------------------- #
+# Crop quality: MinerU finds the picture, the book supplies the pixels
+# --------------------------------------------------------------------------- #
+
+def _scan_pdf(tmp_path, *, pixels=(1200, 1600), page_pt=(396.0, 612.0)) -> Path:
+    """A one-page PDF that is a single full-page raster, like a real scan."""
+    import pymupdf
+    from PIL import Image, ImageDraw
+
+    raster = Image.new("RGB", pixels, (250, 248, 244))
+    draw = ImageDraw.Draw(raster)
+    # A dark rectangle in the lower half, standing in for a plate.
+    draw.rectangle([pixels[0] // 4, pixels[1] // 2,
+                    pixels[0] * 3 // 4, pixels[1] * 3 // 4], fill=(20, 40, 90))
+    source = tmp_path / "scan.png"
+    raster.save(source)
+
+    document = pymupdf.open()
+    page = document.new_page(width=page_pt[0], height=page_pt[1])
+    page.insert_image(pymupdf.Rect(0, 0, *page_pt), filename=str(source))
+    destination = tmp_path / "scan.pdf"
+    document.save(destination)
+    document.close()
+    return destination
+
+
+def test_the_crop_comes_from_the_scan_not_from_minerus_export(tmp_path):
+    """MinerU's export is a re-encode of its own render; the book has better.
+
+    The exported crop here is deliberately tiny (60x40). If the pipeline copied
+    it, the asset would be 60x40. Cutting the same box out of the page's own
+    1200x1600 raster yields a plate several times larger — which is the whole
+    point of using MinerU for detection only.
+    """
+    from PIL import Image
+
+    scan = _scan_pdf(tmp_path)
+    book = _scanned_book(1)
+    book["page"] = {"width_pt": 396.0, "height_pt": 612.0}
+    mineru = _mineru_output(tmp_path, [
+        {"page_idx": 0, "bbox": [250, 500, 750, 750], "_px": (60, 40)},
+    ])
+
+    report = merge_mineru_figures(book, mineru, tmp_path / "assets",
+                                  source_pdf=scan)
+    assert report["figures_added"] == 1
+    assert "fell_back_to_mineru_crop" not in report
+
+    figure = next(b for b in book["blocks"] if b["type"] == "image"
+                  and b.get("source") == "source-raster")
+    written = Image.open(tmp_path / "assets" / figure["asset"])
+    assert written.width > 200 and written.height > 100, (
+        f"the low-resolution export was copied instead: {written.size}"
+    )
+    assert (figure["pixel_width"], figure["pixel_height"]) == written.size
+
+
+def test_the_crop_is_exactly_the_box_with_no_resampling(tmp_path):
+    """Never upscale, never downscale — the crop is the pixels inside the box."""
+    scan = _scan_pdf(tmp_path, pixels=(1200, 1600), page_pt=(396.0, 612.0))
+    book = _scanned_book(1)
+    book["page"] = {"width_pt": 396.0, "height_pt": 612.0}
+    # 250..750 of 1000 across a 396pt page -> 99..297pt -> x3.0303 px/pt.
+    mineru = _mineru_output(tmp_path, [{"page_idx": 0, "bbox": [250, 500, 750, 750]}])
+
+    merge_mineru_figures(book, mineru, tmp_path / "assets", source_pdf=scan)
+    figure = next(b for b in book["blocks"] if b["type"] == "image"
+                  and b.get("source") == "source-raster")
+
+    # The scan keeps its own aspect ratio, so a 1200x1600 raster on a
+    # 396x612pt page is letterboxed to 396x528pt: 1200/396 = 3.0303 px/pt in
+    # both directions. The requested box is 198pt wide and 153pt tall.
+    scale = 1200 / 396
+    assert figure["pixel_width"] == pytest.approx(round(198 * scale), abs=2)
+    assert figure["pixel_height"] == pytest.approx(round(153 * scale), abs=2)
+    assert figure["crop"]["resized"] is False
+    # Mapped through the raster's placement, not the page box; measuring from
+    # the page corner would slide the crop down by the 42pt margin.
+    assert figure["crop"]["placement_pt"][1] == pytest.approx(42.0, abs=1)
+
+
+def test_the_crop_records_where_it_came_from(tmp_path):
+    """Provenance travels with the plate, or nobody can audit the quality."""
+    scan = _scan_pdf(tmp_path)
+    book = _scanned_book(1)
+    book["page"] = {"width_pt": 396.0, "height_pt": 612.0}
+    mineru = _mineru_output(tmp_path, [{"page_idx": 0, "bbox": [250, 500, 750, 750]}])
+
+    merge_mineru_figures(book, mineru, tmp_path / "assets", source_pdf=scan)
+    figure = next(b for b in book["blocks"] if b["type"] == "image"
+                  and b.get("source") == "source-raster")
+
+    crop = figure["crop"]
+    assert crop["method"] == "embedded-page-image", crop
+    assert crop["source_page"] == 1
+    assert crop["encoding"] == "png"
+    assert len(crop["bbox_pt"]) == 4 and len(crop["pixel_box"]) == 4
+    assert figure["aspect_ratio"] == pytest.approx(
+        figure["pixel_width"] / figure["pixel_height"], abs=0.001)
+
+
+def test_without_a_source_pdf_the_export_is_still_used(tmp_path):
+    """MinerU alone must keep working; the better crop is an improvement, not
+    a new requirement."""
+    book = _scanned_book(1)
+    mineru = _mineru_output(tmp_path, [{"page_idx": 0, "bbox": [250, 500, 750, 750]}])
+    merge_mineru_figures(book, mineru, tmp_path / "assets")
+    figure = next(b for b in book["blocks"] if b["type"] == "image"
+                  and "fig" in b["asset"])
+    assert figure.get("source") == "mineru"
