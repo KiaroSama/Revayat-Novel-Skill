@@ -537,3 +537,83 @@ def test_a_target_image_that_is_not_there_is_reported_not_raised(
                             target_image=tmp_path / "missing.png")
     assert report["ok"] is False
     assert "missing.png" in report["unverified"]
+
+
+# --------------------------------------------------------------------------- #
+# The assembled document, not only its pages
+# --------------------------------------------------------------------------- #
+
+def test_furniture_is_not_reported_as_overflow():
+    """A page number lives below the bottom margin. That is where it belongs.
+
+    Measured on a real three-page build, reporting it produced 60 findings and
+    every one was a page number — and a check that fires on correct output
+    teaches the next reader to skip the report.
+    """
+    height = SETUP["height_pt"]
+    footer = [220, height - SETUP["margin_bottom_pt"] + 10, 240, height - 20]
+    assert renderqa.is_furniture(footer, SETUP, height)
+
+    header = [220, 8, 240, SETUP["margin_top_pt"] - 6]
+    assert renderqa.is_furniture(header, SETUP, height)
+
+    body = [62, 200, 400, 240]
+    assert not renderqa.is_furniture(body, SETUP, height)
+
+
+def test_a_leader_dot_is_not_an_illustration():
+    """A table of contents overlapping its own tab leaders is not a defect."""
+    assert not renderqa.is_illustration({"bbox": [100, 100, 104, 104]})
+    assert renderqa.is_illustration({"bbox": [100, 100, 300, 250]})
+
+
+def test_a_footnote_pinned_to_the_foot_is_not_a_hole():
+    """It is anchored there however little text sits above it."""
+    left, top, right, bottom = renderqa.body_rect(SETUP)
+    view = _view(blocks=[
+        _text(PERSIAN, [62, top, BODY_RIGHT, top + 40]),
+        _text(PERSIAN_OTHER, [62, bottom - 30, BODY_RIGHT, bottom - 1]),
+    ])
+    assert "blank-region" not in _codes(
+        renderqa.check_page(view, _expected(texts=[PERSIAN, PERSIAN_OTHER])))
+
+
+def test_a_paragraph_stranded_low_on_an_empty_page_is_still_a_hole():
+    """The distinction is where a band *ends*, not where it starts.
+
+    Judging by the start would swallow this — the build-gave-up shape the
+    check exists for.
+    """
+    left, top, right, bottom = renderqa.body_rect(SETUP)
+    view = _view(blocks=[
+        _text(PERSIAN, [62, top, BODY_RIGHT, top + 40]),
+        _text(PERSIAN_OTHER, [62, bottom - 120, BODY_RIGHT, bottom - 80]),
+    ])
+    assert "blank-region" in _codes(
+        renderqa.check_page(view, _expected(texts=[PERSIAN, PERSIAN_OTHER])))
+
+
+def test_direction_is_read_from_the_document_not_the_render(tmp_path,
+                                                            sample_book_and_docx):
+    """PyMuPDF's block boxes do not report RTL alignment faithfully.
+
+    Measured: a document whose every paragraph carries `w:bidi` came back from
+    the render looking flush-left on every line. The file says what Word will
+    actually do, so the file is what gets asked.
+    """
+    _book_path, docx_path = sample_book_and_docx
+    assert renderqa.check_direction_in_document(docx_path) == []
+
+
+def test_a_document_that_cannot_be_laid_out_is_unverified_not_passed(
+        monkeypatch, tmp_path, sample_book_and_docx):
+    book_path, docx_path = sample_book_and_docx
+    monkeypatch.setattr(wordrender, "word_available", lambda: False)
+    monkeypatch.setattr(wordrender, "find_libreoffice", lambda: None)
+
+    report = renderqa.check_document(tmp_path, book_path, docx_path)
+    assert report["ok"] is False and report["verified"] is False
+    assert "LibreOffice" in report["unverified"]
+    assert (tmp_path / "qa" / "document.json").exists(), (
+        "the report must be written even when nothing could be looked at"
+    )
