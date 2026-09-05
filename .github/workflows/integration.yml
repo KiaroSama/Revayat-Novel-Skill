@@ -1,0 +1,87 @@
+name: OCR integration
+
+# The unit tier runs on every push and deliberately installs no binaries: it
+# tests the decisions, which is the part with consequences and the part that
+# can be checked in a second. This workflow is the other half — it installs
+# OCRmyPDF, Tesseract and Ghostscript and runs the pipeline over a PDF built
+# to be unreadable without them.
+#
+# Kept off the push path on purpose. Apt, a 200 MB toolchain and real OCR are
+# the three least stable things in this repository's CI, and a flake in any of
+# them must not block an unrelated commit.
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, early Monday UTC. Enough to catch a breaking release of any of
+    # the three tools without spending a runner on every commit.
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ocr:
+    name: real OCR pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install the OCR toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr tesseract-ocr-eng tesseract-ocr-fas ghostscript
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r skills/revayat-novel/requirements.txt
+          pip install pytest pytest-timeout ocrmypdf
+
+      - name: The tools are actually here
+        # Without this, every test would skip itself and the job would pass
+        # green having proved nothing at all — the exact failure this tier
+        # exists to avoid.
+        run: |
+          python - <<'PY'
+          import shutil, sys
+          sys.path.insert(0, "skills/revayat-novel/scripts")
+          from extract import find_ocrmypdf
+
+          missing = [name for name, found in {
+              "ocrmypdf": find_ocrmypdf(),
+              "tesseract": shutil.which("tesseract"),
+              "ghostscript": shutil.which("gs"),
+          }.items() if not found]
+          assert not missing, f"the integration tier cannot run without {missing}"
+          print("ok: ocrmypdf, tesseract and ghostscript are all present")
+          PY
+
+      - name: Run the integration tier
+        # -rs prints the skip reasons, so a test that quietly opted out of
+        # running is visible in the log rather than lost in the dots.
+        run: python -m pytest tests/test_integration_ocr.py -v -rs --timeout=900
+
+      - name: No test silently skipped itself
+        run: |
+          python -m pytest tests/test_integration_ocr.py -q --timeout=900 \
+            --no-header -rs 2>&1 | tee /tmp/report.txt
+          python - <<'PY'
+          import pathlib, re
+          report = pathlib.Path("/tmp/report.txt").read_text(encoding="utf-8")
+          skipped = re.findall(r"^SKIPPED .*$", report, re.M)
+          # A skip for a language pack this job installs is a real failure;
+          # anything else is reported but tolerated.
+          fatal = [line for line in skipped if "language data" in line]
+          assert not fatal, "a test skipped for a tool this job installs:\n" + "\n".join(fatal)
+          print(f"ok: {len(skipped)} tolerated skip(s)")
+          PY
