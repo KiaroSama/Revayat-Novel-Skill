@@ -52,6 +52,7 @@ import glossary as gl
 import merge as merging
 import review as page_review
 import runstate
+import segments
 
 SCHEMA = "revayat-novel/pagerun@1"
 
@@ -475,6 +476,10 @@ def build(
                                     total=len(jobs), previous_tail=tail,
                                     next_head=head)
 
+        # A unit longer than the whole budget is cut into segments before the
+        # page is grouped, so the answer is "here is part one of the
+        # paragraph", never "raise the ceiling the budget exists to enforce".
+        units = segments.fit_units(units, render, budget)
         fitted = fit_jobs(render, units, budget)
         for group, worksheet in fitted:
             if len(worksheet) <= budget:
@@ -688,7 +693,9 @@ def untranslated(book: dict[str, Any], unit_ids: list[str]) -> list[str]:
     blocks = ir.blocks_by_id(book)
     notes = {note["id"]: note for note in book.get("footnotes", [])}
     missing: list[str] = []
-    for unit_id in unit_ids:
+    # A segment is transport: the book has never heard of `b00042#2` and would
+    # report it missing from a page that is complete.
+    for unit_id in segments.owners(unit_ids):
         if unit_id.endswith("#alt"):
             block = blocks.get(unit_id[: -len("#alt")]) or {}
             filled = bool((block.get("target_alt") or "").strip())
@@ -829,6 +836,17 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     p_merge.add_argument("--page", type=int, required=True)
     p_merge.add_argument("--glossary", default=None)
 
+    p_preview = sub.add_parser(
+        "preview", help="lay this page out on its own, to be looked at")
+    p_preview.add_argument("--book", required=True)
+    p_preview.add_argument("--pages", required=True)
+    p_preview.add_argument("--page", type=int, required=True)
+    p_preview.add_argument("--assets", default=None,
+                           help="asset directory (default: <book dir>/assets)")
+    p_preview.add_argument("--out", default=None,
+                           help="where to write it (default: "
+                                "<work>/previews/page-NNNN.docx)")
+
     p_review = sub.add_parser(
         "review", help="file what a reviewer saw on the rendered page")
     p_review.add_argument("--pages", required=True)
@@ -895,6 +913,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(report, ensure_ascii=False, indent=1))
         return 0 if report["ok"] else 1
+
+    if args.action == "preview":
+        # Imported here, not at the top: `preview` reaches back into this module
+        # for page ownership, so at module level the two would be a cycle.
+        import preview as page_preview  # noqa: PLC0415
+
+        work = Path(args.pages).parent
+        out = (Path(args.out) if args.out
+               else page_preview.preview_path(work, args.page))
+        made = page_preview.build(
+            Path(args.book), args.page, out,
+            assets=Path(args.assets) if args.assets else None)
+        print(json.dumps(made, ensure_ascii=False, indent=1))
+        return 0 if made["ok"] else 2
 
     if args.action == "review":
         try:

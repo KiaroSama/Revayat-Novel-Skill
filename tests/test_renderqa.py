@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import bookir as ir
+import pagecheck
 import renderqa
 import runstate
 import wordrender
@@ -165,17 +166,24 @@ def test_a_page_at_the_wrong_size_is_rejected():
     assert "on its side" in report.summary()["findings"][0]["detail"]
 
 
-def test_a_paragraph_that_is_not_right_to_left_is_rejected():
-    """Flush left, well short of the right margin: the bidi property was lost.
+def test_direction_is_never_judged_from_the_rendered_page():
+    """A Persian paragraph flush left is not evidence of anything.
 
-    The box has to sit *inside* the body, or overflow is reported too and the
-    finding under test is no longer the only one — which is the point of
-    asserting an exact set here.
+    There *was* a check here that read the alignment of PyMuPDF's block boxes.
+    It is gone, because for Arabic script those boxes do not report where the
+    ink actually sits: measured on a real Word render of a document whose every
+    paragraph carries `w:bidi`, it reported four of ten paragraphs set
+    left-to-right. A check that cannot be right for the only script this
+    project renders is not a check.
+
+    `check_direction_in_document` reads the `w:bidi` out of the file instead,
+    and `renderqa.check` folds its findings into the page report — see
+    `tests/test_docqa.py` for the document side of the same question.
     """
     left = SETUP["margin_inner_pt"] + 2
     view = _view(blocks=[_text(PERSIAN, [left, 100, left + 150, 140])])
-    assert _codes(renderqa.check_page(view, _expected(texts=[PERSIAN]))) == {
-        "paragraph-not-rtl"}
+    assert _codes(renderqa.check_page(view, _expected(texts=[PERSIAN]),
+                                      source=PERSIAN)) == set()
 
 
 def test_a_block_that_appears_twice_on_one_page_is_rejected():
@@ -187,10 +195,26 @@ def test_a_block_that_appears_twice_on_one_page_is_rejected():
         "text-duplicated"}
 
 
-def test_a_block_that_is_missing_from_the_page_is_rejected():
+def test_a_block_that_is_missing_from_the_document_is_rejected():
+    """With the file in hand the answer is exact: it is not there."""
+    view = _view(blocks=[_text(PERSIAN, [60, 100, BODY_RIGHT, 140])])
+    report = renderqa.check_page(view, _expected(texts=[PERSIAN, PERSIAN_OTHER]),
+                                 source=PERSIAN)
+    assert _codes(report) == {"text-missing"}
+
+
+def test_persian_missing_from_a_render_alone_is_unverified_not_missing():
+    """A rendered page cannot answer this question about Arabic script.
+
+    PyMuPDF drops the zero-width non-joiner and transposes letters, so a
+    paragraph that *is* on the page reads as absent. Reporting that as
+    `text-missing` fails every correct Persian page; reporting it as a pass
+    would be worse. It is neither — it was not asked.
+    """
     view = _view(blocks=[_text(PERSIAN, [60, 100, BODY_RIGHT, 140])])
     report = renderqa.check_page(view, _expected(texts=[PERSIAN, PERSIAN_OTHER]))
-    assert _codes(report) == {"text-missing"}
+    assert _codes(report) == {"text-unverified"}
+    assert report.summary()["errors"] == 0, "a warning, not a failure"
 
 
 # --------------------------------------------------------------------------- #
@@ -207,7 +231,7 @@ def test_a_hole_in_the_middle_of_a_page_is_rejected():
 
 
 def test_a_page_with_nothing_on_it_is_rejected():
-    report = renderqa.check_page(_view(), _expected(texts=[PERSIAN]))
+    report = renderqa.check_page(_view(), _expected(texts=[PERSIAN]), source="")
     codes = _codes(report)
     assert "blank-region" in codes and "text-missing" in codes
 
@@ -333,15 +357,30 @@ def test_a_page_that_lost_its_text_is_recorded_as_failed(tmp_path):
     assert record["last_error"].startswith("text-missing")
 
 
-def test_an_unrenderable_page_is_unverified_not_passed(tmp_path):
+def test_a_page_nothing_can_lay_out_is_unverified_not_passed(monkeypatch,
+                                                             tmp_path):
+    """Nobody has to hand a preview over any more - so the way to have nothing
+    to look at is for the machine to be unable to lay one out."""
     book_path = _latin_book(tmp_path, "Anything at all.")
-    written = renderqa.check(tmp_path, book_path, 1, target_pdf=None)
+    monkeypatch.setattr(wordrender, "word_available", lambda: False)
+    monkeypatch.setattr(wordrender, "find_libreoffice", lambda: None)
+
+    written = renderqa.check(tmp_path, book_path, 1)
 
     assert written["ok"] is False
     assert written["verified"] is False
-    assert "no --target-pdf" in written["unverified"]
+    assert "LibreOffice" in written["unverified"]
     # An absent renderer is not a failed page: no attempt was spent on it.
     assert runstate.RunState(tmp_path).page(1) is None
+
+
+def test_an_image_on_its_own_carries_no_geometry_to_check(tmp_path, sample_png):
+    """A picture of a page shows a reviewer the page and tells a check nothing."""
+    book_path = _latin_book(tmp_path, "Anything at all.")
+    written = renderqa.check(tmp_path, book_path, 1, target_image=sample_png)
+
+    assert written["ok"] is False and written["verified"] is False
+    assert "no --target-pdf" in written["unverified"]
 
 
 def test_a_target_that_is_not_there_is_unverified(tmp_path):
@@ -593,32 +632,6 @@ def test_a_paragraph_stranded_low_on_an_empty_page_is_still_a_hole():
         renderqa.check_page(view, _expected(texts=[PERSIAN, PERSIAN_OTHER])))
 
 
-def test_direction_is_read_from_the_document_not_the_render(tmp_path,
-                                                            sample_book_and_docx):
-    """PyMuPDF's block boxes do not report RTL alignment faithfully.
-
-    Measured: a document whose every paragraph carries `w:bidi` came back from
-    the render looking flush-left on every line. The file says what Word will
-    actually do, so the file is what gets asked.
-    """
-    _book_path, docx_path = sample_book_and_docx
-    assert renderqa.check_direction_in_document(docx_path) == []
-
-
-def test_a_document_that_cannot_be_laid_out_is_unverified_not_passed(
-        monkeypatch, tmp_path, sample_book_and_docx):
-    book_path, docx_path = sample_book_and_docx
-    monkeypatch.setattr(wordrender, "word_available", lambda: False)
-    monkeypatch.setattr(wordrender, "find_libreoffice", lambda: None)
-
-    report = renderqa.check_document(tmp_path, book_path, docx_path)
-    assert report["ok"] is False and report["verified"] is False
-    assert "LibreOffice" in report["unverified"]
-    assert (tmp_path / "qa" / "document.json").exists(), (
-        "the report must be written even when nothing could be looked at"
-    )
-
-
 def test_a_page_that_was_laid_out_says_so_even_when_judging_it_fails(tmp_path,
                                                                      monkeypatch):
     """Laying the document out is the slow part; losing that fact wastes it.
@@ -635,7 +648,7 @@ def test_a_page_that_was_laid_out_says_so_even_when_judging_it_fails(tmp_path,
     def damaged(*args, **kwargs):
         raise RuntimeError("the PDF ended in the middle of an object")
 
-    monkeypatch.setattr(renderqa, "page_view", damaged)
+    monkeypatch.setattr(pagecheck, "page_view", damaged)
     written = renderqa.check(tmp_path, book_path, 1, target_pdf=rendered)
 
     assert written["verified"] is False, "a page nobody could read is not a pass"

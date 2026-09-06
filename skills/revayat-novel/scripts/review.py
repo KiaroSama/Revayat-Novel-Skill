@@ -30,6 +30,11 @@ import runstate
 
 SCHEMA = "revayat-novel/review@1"
 
+#: The finished book is reviewed too, and it is not a page. Reviews are keyed by
+#: subject rather than by number so the two cannot be confused in a directory
+#: listing or in a gate that reads one and means the other.
+DOCUMENT = "document"
+
 #: What the reviewer is asked, and why a machine is not asked it instead. Each
 #: one is a question the deterministic checks provably cannot reach: they read
 #: geometry and text, and every question here is about meaning or shape that
@@ -58,8 +63,9 @@ YES = {"yes", "y", "true", "ok", "pass"}
 NO = {"no", "n", "false", "bad", "fail"}
 
 
-def review_path(work_dir: Path, page: int) -> Path:
-    return Path(work_dir) / "qa" / "reviews" / f"page-{page:04d}.json"
+def review_path(work_dir: Path, page: int | str) -> Path:
+    name = page if isinstance(page, str) else f"page-{page:04d}"
+    return Path(work_dir) / "qa" / "reviews" / f"{name}.json"
 
 
 def parse_answer(text: str) -> tuple[str, bool]:
@@ -76,21 +82,33 @@ def parse_answer(text: str) -> tuple[str, bool]:
     raise ValueError(f"{name}: {value!r} is neither yes nor no")
 
 
-def current_render(work_dir: Path, page: int) -> str:
-    """The hash of the image the reviewer would be looking at right now."""
+def current_render(work_dir: Path, page: int | str, *, render: str = "") -> str:
+    """The hash of what the reviewer would be looking at right now.
+
+    ``render`` is for a subject the run record does not track: the assembled
+    book has no page record and never will. Its caller passes the .docx hash
+    rather than the rendered PDF's, because Word stamps a PDF with the moment it
+    made it — binding there would make every review stale the instant it was
+    filed.
+    """
+    if render:
+        return render
+    if isinstance(page, str):
+        return ""
     return ((runstate.RunState(Path(work_dir)).page(page) or {})
             .get("hashes", {}).get("render", ""))
 
 
-def record(work_dir: Path, page: int, answers: dict[str, bool],
-           *, note: str = "") -> dict[str, Any]:
+def record(work_dir: Path, page: int | str, answers: dict[str, bool],
+           *, note: str = "", render: str = "") -> dict[str, Any]:
     """File one reviewer's answers against the render they were made from."""
     work_dir = Path(work_dir)
-    render = current_render(work_dir, page)
+    render = current_render(work_dir, page, render=render)
     if not render:
+        subject = "the document" if isinstance(page, str) else f"page {page}"
         return {"ok": False, "page": page, "refused": "not-rendered",
-                "detail": f"page {page} has not been rendered, so there is "
-                          f"nothing to have reviewed; run render-qa first"}
+                "detail": f"{subject} has not been rendered, so there is "
+                          f"nothing to have reviewed; render it first"}
 
     unanswered = sorted(set(QUESTIONS) - set(answers))
     if unanswered:
@@ -116,12 +134,14 @@ def record(work_dir: Path, page: int, answers: dict[str, bool],
     return written
 
 
-def verdict(work_dir: Path, page: int) -> dict[str, Any]:
-    """What a gate should make of this page's review. Never raises."""
+def verdict(work_dir: Path, page: int | str, *,
+            render: str = "") -> dict[str, Any]:
+    """What a gate should make of this subject's review. Never raises."""
     path = review_path(Path(work_dir), page)
+    subject = "the document" if isinstance(page, str) else f"page {page}"
     if not path.exists():
         return {"ok": False, "refused": "not-reviewed",
-                "detail": f"nobody has looked at page {page}: there is no "
+                "detail": f"nobody has looked at {subject}: there is no "
                           f"{path}. Deterministic checks do not answer "
                           f"{', '.join(sorted(QUESTIONS))}."}
     try:
@@ -130,15 +150,15 @@ def verdict(work_dir: Path, page: int) -> dict[str, Any]:
         return {"ok": False, "refused": "unreadable-review",
                 "detail": f"{path} could not be read: {failure}"}
 
-    render = current_render(Path(work_dir), page)
+    render = current_render(Path(work_dir), page, render=render)
     if render and found.get("render_sha256") != render:
         return {"ok": False, "refused": "stale-review",
-                "detail": f"page {page} was reviewed, then rendered again. The "
-                          f"review describes a page that no longer exists; "
-                          f"look at the new one."}
+                "detail": f"{subject} was reviewed, then rendered again. The "
+                          f"review describes something that no longer exists; "
+                          f"look at what is there now."}
     if not found.get("ok"):
         return {"ok": False, "refused": "review-rejected",
-                "detail": f"the reviewer rejected page {page}: "
+                "detail": f"the reviewer rejected {subject}: "
                           f"{', '.join(found.get('failed') or ['no reason given'])}"
                           + (f" - {found['note']}" if found.get("note") else "")}
     return {"ok": True, **found}

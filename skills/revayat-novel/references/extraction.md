@@ -176,7 +176,12 @@ stripped — Word numbers footnotes itself.
 
 DOCX input reads paragraphs, runs and styles through python-docx, and reads
 `word/footnotes.xml` and `word/endnotes.xml` directly because python-docx has
-no API for either. Both become footnotes in the Persian edition: that is where
+no API for either. Section breaks travel as `book["sections"]`, each entry
+naming the block it opens at and carrying that section's page size,
+orientation, margins, gutter and header/footer distance; the builder puts the
+breaks back. `book["page"]` still reports the first section's geometry, exactly
+as it did when that was the only geometry the reader kept, so nothing
+downstream had to change. Both become footnotes in the Persian edition: that is where
 a Persian reader looks for a note, and it is what the builder writes. The two
 id spaces are kept apart — Word numbers footnotes and endnotes separately, so a
 book with a footnote 1 and an endnote 1 has two notes, not one.
@@ -188,8 +193,8 @@ rather than discovered by a reader of the finished book.
 | Warning | What it means |
 | --- | --- |
 | `table-merged-cells` | a table had merged cells; the spans are recorded, so check the rebuilt table looks right |
-| `sections-collapsed` | the file had several sections; only the first one's page geometry is used |
-| `hyperlinks-kept-as-metadata` | link text is in the prose and each target is on its block as `links`; the built document sets the words, not a clickable link |
+| `section-columns-dropped` | that section is set in two or more columns; its page size, orientation and margins are carried but the Persian edition is set in one |
+| `hyperlinks-kept-as-metadata` | every target is on its block as `links`; a live link goes back only where the translation kept the display phrase word for word, and each one that could not be placed is named |
 | `running-heads-dropped` | the source had headers or footers; the Persian edition generates its own instead of copying an English running head onto a Persian page |
 
 ## What the Book IR holds

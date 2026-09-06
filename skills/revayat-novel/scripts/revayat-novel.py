@@ -33,6 +33,7 @@ STAGES = {
     "chunk": "chunk",
     "pages": "pagerun",
     "render-qa": "renderqa",
+    "doc-qa": "docqa",
     "merge": "merge",
     "falint": "falint",
     "qa": "qa",

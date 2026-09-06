@@ -3,7 +3,7 @@ name: revayat-novel
 description: Translate a whole book from English (or another language) into publication-quality Persian and produce a professional Word document. Handles scanned, digital and mixed PDFs with OCR, removes colour watermarks, keeps every illustration at its original size, and builds real Word footnotes, a clickable table of contents, RTL typography and a locked name glossary. Use for translating novels, non-fiction, PDFs, EPUBs or DOCX files into Persian (فارسی).
 license: GPL-3.0-or-later
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent, AskUserQuestion
-metadata: {"homepage":"https://github.com/KiaroSama/Revayat-Novel-Skill","requires":{"bins":["python3"],"pip":["pymupdf","python-docx","beautifulsoup4","pillow"],"optional":["ocrmypdf","tesseract","ghostscript","mineru"]}}
+metadata: {"homepage":"https://github.com/KiaroSama/Revayat-Novel-Skill","requires":{"pip":["pymupdf","python-docx","beautifulsoup4","pillow"],"optional":["ocrmypdf","tesseract","ghostscript","mineru"]}}
 ---
 
 # Revayat Novel — English → Persian book translation
@@ -236,18 +236,71 @@ $PY $SKILL_DIR/scripts/revayat-novel.py pages next   --pages $WORK/pages
 `status` reports every page's state; `next` names the first page still to do,
 so an interrupted run resumes where it stopped rather than from the beginning.
 
-Then, per page, after you have written `out_pageNNNN.md`:
+### The page loop
+
+The source PDF is whichever one this run was read from: the book's own for a
+born-digital PDF, the OCR'd copy for a scan. The manifest recorded it — take it
+from there rather than naming a file that may not exist.
 
 ```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py pages merge \
-  --book $WORK/book.json --pages $WORK/pages --page 12 --glossary $WORK/glossary.json
-$PY $SKILL_DIR/scripts/revayat-novel.py pages accept \
-  --book $WORK/book.json --pages $WORK/pages --page 12
+SOURCE_PDF=$($PY -c "import json,sys;print(json.load(open(sys.argv[1]))['reference_pdf'])"   $WORK/pages/manifest.json)
 ```
 
-`accept` refuses unless the page has actually passed its gates — it reads the
-evidence rather than taking your word for it, so a page cannot be marked done
-by asserting that it is.
+
+One page at a time, in this order. Each command needs what the one before it
+produced, so a step taken early simply refuses:
+
+```bash
+P=12   # whatever `pages next` just named
+
+# 3. fold the translation into the book
+$PY $SKILL_DIR/scripts/revayat-novel.py pages merge \
+  --book $WORK/book.json --pages $WORK/pages --page $P --glossary $WORK/glossary.json
+
+# 4. lay that one page out on its own
+$PY $SKILL_DIR/scripts/revayat-novel.py pages preview \
+  --book $WORK/book.json --pages $WORK/pages --page $P
+
+# 5. compare it with the source page
+$PY $SKILL_DIR/scripts/revayat-novel.py render-qa \
+  --book $WORK/book.json --work $WORK --page $P \
+  --docx $WORK/previews/page-0012.docx --source-pdf $SOURCE_PDF
+
+# 6. look at the two images (step 8 says what to look for)
+$PY $SKILL_DIR/scripts/revayat-novel.py pages review \
+  --pages $WORK/pages --page $P \
+  --answer figure-placement=yes --answer script-integrity=yes \
+  --answer no-source-language=yes --answer hierarchy=yes \
+  --answer reads-as-a-book=yes --note "what you saw"
+
+# 7. only now
+$PY $SKILL_DIR/scripts/revayat-novel.py pages accept \
+  --book $WORK/book.json --pages $WORK/pages --page $P
+```
+
+Then `pages next` again, until it says there is nothing left.
+
+**Step 4 is not optional and step 5 will do it for you if you skip it** — leave
+`--docx` off and `render-qa` builds the preview itself. The explicit command is
+there for when you want to open the page in Word and look at it yourself.
+
+**The preview is one source page, laid out alone.** It is emphatically not the
+whole book: Persian reflows, so source page 12 does not become the book's page
+12, and by the middle of a novel the drift is several pages. Checking the book's
+twelfth sheet against page 12's expectations reports a correct page as missing
+all its text and carrying its neighbour's. The preview is set with the
+production builder — same styles, fonts, RTL, image sizing, heading logic — so
+what you are looking at is the real typesetting of real content.
+
+A page whose Persian runs longer than its English comes out as two sheets. That
+is ordinary, both are kept as `renders/target/page-0012.png` and
+`page-0012-2.png`, and QA reads all of them.
+
+`accept` refuses unless every gate has actually passed — it reads the evidence
+rather than taking your word for it, so a page cannot be marked done by
+asserting that it is. It wants four things: Persian in the book for every unit
+the page sent out, a render QA pass on the run record, a report that still says
+so, and a current visual review.
 
 Rebuilding is safe and never throws a translation away. A page whose source
 text has changed since it was last cut is listed under `invalidated` — those,
@@ -366,30 +419,14 @@ $PY $SKILL_DIR/scripts/revayat-novel.py qa check \
   --book $WORK/book.json --assets $WORK/assets --glossary $WORK/glossary.json
 ```
 
-### If you took the page route, look at each page before accepting it
+### What render-qa asks of a page
+
+You ran this inside the page loop in step 4; this is what it was asking.
 
 Every other gate here reads the IR, and a page can be right in the IR and wrong
 on the page: a picture that slid to the far side of a break, a paragraph Word
 set left-to-right because a style lost its `w:bidi`, a caption clipped off the
 trim, a page that came out blank because the build failed halfway.
-
-```bash
-# The source PDF is whichever one this run was read from: the book's own for a
-# born-digital PDF, the OCR'd copy for a scan. The manifest recorded it — take
-# it from there rather than naming a file that may not exist.
-SOURCE_PDF=$($PY -c "import json,sys;print(json.load(open(sys.argv[1]))['reference_pdf'])" \
-  $WORK/pages/manifest.json)
-
-$PY $SKILL_DIR/scripts/revayat-novel.py render-qa \
-  --book $WORK/book.json --work $WORK --page 12 \
-  --docx $WORK/book.docx --source-pdf $SOURCE_PDF
-```
-
-`--docx` is how the translated page gets laid out at all: without it there is
-nothing to compare the source against, and the report comes back `unverified`
-rather than passing. Word does the laying out on Windows and LibreOffice
-elsewhere; the report records which one ran, because the two do not paginate
-identically.
 
 It writes `renders/source/page-0012.png`, `renders/target/page-0012.png` and
 `qa/pages/page-0012.json`, then compares them **structurally**. Do not expect
@@ -398,6 +435,25 @@ direction, so the line breaks, the line count and often the page count differ.
 What must hold is that every block is present once, nothing is clipped or
 outside the margins, the illustrations are the same ones in the same order at
 the same aspect ratio, and the paragraphs are right-to-left.
+
+Two things it deliberately does **not** read off the rendered image, because
+measurement showed the image lies about both:
+
+- **Whether the Persian is there.** PyMuPDF's Arabic-script readback drops the
+  zero-width non-joiner and transposes letters — measured, `بالا` came back as
+  `باال`. Every paragraph of a perfectly set page read as missing. So the text
+  is checked against the document's own XML, and only geometry comes from the
+  render. Hand it a PDF with no `--docx` and neither question is asked: Persian
+  text presence comes back as `text-unverified` — a warning saying so, never a
+  pass — and direction is not judged at all.
+- **Whether the paragraphs are right-to-left.** Same reason, same evidence. The
+  render-based version of this check reported four of ten paragraphs
+  left-to-right on a document whose every paragraph carries `w:bidi`, so it was
+  removed rather than loosened; `w:bidi` in the file is the setting Word obeys,
+  and its findings are folded into the page report.
+
+Word does the laying out on Windows and LibreOffice elsewhere; the report
+records which one ran, because the two do not paginate identically.
 
 ### Then look at the two images yourself
 
@@ -411,7 +467,9 @@ None of that is in `book.json`; it is on the page, which is why both images
 were written.
 
 **Open `renders/source/page-0012.png` and `renders/target/page-0012.png` and
-look at them side by side.** Then answer all five, and mean it:
+look at them side by side.** If the Persian ran onto a second sheet there is a
+`page-0012-2.png` beside them; look at that too. Then answer all five, and mean
+it — the command is step 6 of the page loop:
 
 | Question | What you are looking for |
 | --- | --- |
@@ -420,14 +478,6 @@ look at them side by side.** Then answer all five, and mean it:
 | `no-source-language` | is everything that should be Persian actually Persian, captions and headings included? |
 | `hierarchy` | do headings still read as headings, and dialogue as dialogue? |
 | `reads-as-a-book` | even margins, an even colour of type, no line crushed or stretched to fit |
-
-```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py pages review \
-  --pages $WORK/pages --page 12 \
-  --answer figure-placement=yes --answer script-integrity=yes \
-  --answer no-source-language=yes --answer hierarchy=yes \
-  --answer reads-as-a-book=yes --note "what you saw, in your own words"
-```
 
 All five are required: an unanswered question is not a question nobody minded,
 so a partial answer sheet is refused and nothing is written. Answer `no` where
@@ -440,9 +490,9 @@ exists. `pages accept` will not take a page without a current one.
 
 A page that fails is re-translated and re-rendered on its own — `--max-attempts`
 bounds the retries so a page that cannot be fixed stops rather than looping.
-Accept a page only when its report is clean, and run the whole-document check
-again after assembly, because a page that passed alone can still regress when
-the book is put together.
+Accept a page only when its report is clean, and run the whole-document check in
+step 9 after assembly: a page that passed alone can still regress once the book
+is put together, and that check asks the one question no page can.
 
 **Do not build while `"ok"` is false.** Fix by error code:
 
@@ -484,11 +534,51 @@ list in `references/docx-and-ooxml.md`.
 
 ## Step 9 — Verify and report
 
+**Two checks, and the file is not ready until both pass.** They ask different
+questions of different things, and neither one can answer the other's.
+
 ```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py qa docx --file out/book.fa.docx --book $WORK/book.json
+# 1. the package: OOXML, footnotes, bookmarks, image bytes, the TOC field
+$PY $SKILL_DIR/scripts/revayat-novel.py qa docx \
+  --file out/book.fa.docx --book $WORK/book.json
+
+# 2. the finished book, rendered and looked at
+$PY $SKILL_DIR/scripts/revayat-novel.py doc-qa check \
+  --book $WORK/book.json --work $WORK --docx out/book.fa.docx
 ```
 
-If `"ok": false`, fix it before telling the user the file is ready.
+`qa docx` reads the file's structure. It cannot see a page, so it cannot see a
+plate that assembly pushed across a break, a heading stranded as the last line
+on a page, or a paragraph that is in the package and not on any page.
+
+`doc-qa check` renders the whole book and asks, per page, whether anything runs
+off the trim, whether a hole opened, whether text landed on a plate — and then
+asks the *whole render* the one question no single page can answer: **is every
+translated block in the book exactly once, and every illustration, in order, at
+its own shape.**
+
+Accepting pages one at a time does not cover this. Each page was checked against
+a document that did not exist yet; the material ahead of it has moved since.
+
+It comes back `unverified` — not passed — until somebody has looked at the
+rendered pages, which are kept as `renders/final/pages/page-NNNN.png`. Open
+them, then:
+
+```bash
+$PY $SKILL_DIR/scripts/revayat-novel.py doc-qa review --work $WORK \
+  --answer figure-placement=yes --answer script-integrity=yes \
+  --answer no-source-language=yes --answer hierarchy=yes \
+  --answer reads-as-a-book=yes --note "what you saw"
+```
+
+The same five questions as a page review, asked of the book. The verdict is
+bound to the render it was made from, so rebuilding the document makes it stale
+and `doc-qa check` goes back to `unverified`. That is the intended behaviour: a
+review of a document that no longer exists is worse than no review.
+
+**Do not tell the user the file is ready while either check is `false` or
+`unverified`.** `unverified` is not a soft pass — it means the question was
+never answered.
 
 Then report: where the file is, how many chapters, images and footnotes it has,
 anything QA flagged that you chose not to act on, and this limitation —
