@@ -67,6 +67,44 @@ gave no physical size — EPUB is reflowable and has none — pixels are convert
 at 96 DPI. Anything wider than the text block is scaled down with its aspect
 ratio preserved.
 
+**Sections, and the running heads on them.** A DOCX that changes page size,
+orientation or margins partway through arrives as `book["sections"]`, each entry
+naming the block it opens at, and the builder emits a real `w:sectPr` for each.
+`book["page"]` still reports the first section's geometry, which is what the rest
+of the pipeline reads.
+
+A section carries the heads and feet the author wrote, as pieces:
+
+```json
+{"headers": {"default": {"paragraphs": [
+    {"align": "center", "pieces": [
+        {"id": "rh0001", "text": "Pride and Prejudice", "target": null},
+        {"tab": true},
+        {"field": " PAGE "}]}]}},
+ "footers": {}}
+```
+
+Only the slots a section *defines* appear — `default`, `first`, `even` — and a
+missing one inherits from the section before, exactly as Word resolves it.
+
+**The heads are translated, not copied.** Each piece with prose becomes an
+ordinary worksheet unit (`rhNNNN`, kind `header` or `footer`), so it goes out
+through the same `@@ id kind` protocol as the body, is checked by `falint`, and
+is counted by `qa check` — which reports `untranslated-running-head` for one
+that never came back. A tab and a `PAGE` field are layout, not language, so a
+translator is never shown either.
+
+An untranslated head is **left off the page**, and the builder warns. It is not
+copied through in English: a running head prints on every page, and an English
+title across a Persian one is worse than no running head at all. That judgement
+is why these were dropped wholesale before; the answer was to carry them in
+Persian rather than to drop them.
+
+**The generated page number yields to the author's.** `--page-numbers` exists
+because most sources have no foot of their own. When the first section brings
+one, the generated number is not added — two things where the author put one is
+not fidelity, and the author's foot may well be a page number already.
+
 **Structure.** `Heading 1`–`Heading 6` styles, `Quote` for block quotes,
 `Caption` for captions, `List Bullet` / `List Number` for lists, `Title` and
 `Subtitle` for the front matter. Page size and margins come from `book.page`.

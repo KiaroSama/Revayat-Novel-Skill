@@ -692,6 +692,7 @@ def untranslated(book: dict[str, Any], unit_ids: list[str]) -> list[str]:
     """The units of a page the book still holds no Persian for."""
     blocks = ir.blocks_by_id(book)
     notes = {note["id"]: note for note in book.get("footnotes", [])}
+    running = ir.running_heads(book)
     missing: list[str] = []
     # A segment is transport: the book has never heard of `b00042#2` and would
     # report it missing from a page that is complete.
@@ -701,6 +702,8 @@ def untranslated(book: dict[str, Any], unit_ids: list[str]) -> list[str]:
             filled = bool((block.get("target_alt") or "").strip())
         elif unit_id in notes:
             filled = bool((notes[unit_id].get("target") or "").strip())
+        elif unit_id in running:
+            filled = bool((running[unit_id].get("target") or "").strip())
         else:
             block = blocks.get(unit_id) or {}
             filled = bool((block.get("target") or "").strip())

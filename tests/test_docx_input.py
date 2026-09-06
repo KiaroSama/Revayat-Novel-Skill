@@ -473,7 +473,8 @@ def test_a_merge_is_reported_so_a_reviewer_knows_to_look(tmp_path):
 
 # --------------------------------------------------------------------------- #
 # The rest of what a Word file carries: link targets, notes kept at the back,
-# and the running heads this pipeline deliberately does not copy.
+# and the running heads. What those become is `tests/test_running_heads.py`;
+# here they only have to reach the IR at all, and stop being called dropped.
 # --------------------------------------------------------------------------- #
 
 def _note_part(document, kind: str, entries: dict[str, str]) -> None:
@@ -587,12 +588,12 @@ def test_a_footnote_and_an_endnote_numbered_the_same_are_two_notes(tmp_path):
     assert len(anchors) == 2, "both notes were anchored to the same sentence"
 
 
-def test_running_heads_are_reported_rather_than_silently_dropped(tmp_path):
-    """The Persian edition generates its own; the source's are not copied.
+def test_a_running_head_reaches_the_ir_and_is_no_longer_called_dropped(tmp_path):
+    """It used to be counted and discarded; now it is carried and translated.
 
-    That is a decision, not an oversight — a running head reading the English
-    title on a Persian page is worse than none. It still has to be *said*, or
-    the next reader assumes the source had none.
+    The reasoning behind the old warning is intact — an English title on a
+    Persian page is worse than none — and is served by translating the head
+    rather than by throwing it away. Saying it was dropped would now be a lie.
     """
     document = Document()
     document.add_paragraph("Body text under a running head.")
@@ -601,9 +602,11 @@ def test_running_heads_are_reported_rather_than_silently_dropped(tmp_path):
     document.save(str(destination))
 
     book = read_docx(str(destination), tmp_path / "assets")
-    warned = {w["kind"]: w for w in (book["source"].get("docx_warnings") or [])}
-    assert "running-heads-dropped" in warned
-    assert warned["running-heads-dropped"]["count"] >= 1
+    heads = {piece["text"] for _, _, piece, _ in ir.iter_running_pieces(book)}
+    assert heads == {"The English Title"}
+
+    kinds = {w["kind"] for w in (book["source"].get("docx_warnings") or [])}
+    assert "running-heads-dropped" not in kinds
 
 
 def test_a_document_with_no_links_or_heads_warns_about_neither(tmp_path):
@@ -615,4 +618,6 @@ def test_a_document_with_no_links_or_heads_warns_about_neither(tmp_path):
 
     book = read_docx(str(destination), tmp_path / "assets")
     kinds = {w["kind"] for w in (book["source"].get("docx_warnings") or [])}
-    assert not kinds & {"hyperlinks-kept-as-metadata", "running-heads-dropped"}
+    assert not kinds & {"hyperlinks-kept-as-metadata"}
+    assert not any(kind.startswith("running-head") for kind in kinds)
+    assert not list(ir.iter_running_pieces(book))

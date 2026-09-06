@@ -20,6 +20,18 @@ Schema (``book.json``)::
 
 Every block has ``id`` and ``type``. Text-bearing blocks carry ``text`` (source,
 with inline markup) and ``target`` (translation, ``None`` until translated).
+
+A section additionally carries the running heads and feet the author wrote::
+
+    {"headers": {"default": {"paragraphs": [
+        {"align": "center", "pieces": [
+            {"id": "rh0001", "text": "Pride and Prejudice", "target": null},
+            {"tab": true},
+            {"field": " PAGE "}]}]}},
+     "footers": {}}
+
+Only the slots a section *defines* appear; a missing one is inherited from the
+section before, in the IR exactly as it is in Word.
 """
 
 from __future__ import annotations
@@ -45,6 +57,18 @@ TEXT_TYPES = frozenset(
 )
 #: Every block type the builder knows how to render.
 BLOCK_TYPES = TEXT_TYPES | frozenset({"image", "pagebreak", "separator"})
+
+#: The three running-head slots Word keeps per section, in the order it lists
+#: them. A section names only the ones it defines and inherits the rest.
+RUNNING_SLOTS = ("default", "first", "even")
+#: ``(worksheet kind, section key)`` for the two ends of the page. The kind is
+#: what a translator sees beside the id, so it says which end this line sits at.
+RUNNING_PARTS = (("header", "headers"), ("footer", "footers"))
+#: How python-docx names each slot, given the part. The reader and the builder
+#: resolve a slot through this one table, so a book cannot be read out of a
+#: header the builder would then write somewhere else.
+RUNNING_ACCESSOR = {"default": "{part}", "first": "first_page_{part}",
+                    "even": "even_page_{part}"}
 
 
 # --------------------------------------------------------------------------- #
@@ -232,6 +256,34 @@ def blocks_by_id(book: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {b["id"]: b for b in book.get("blocks", [])}
 
 
+def iter_running_pieces(
+    book: dict[str, Any],
+) -> Iterator[tuple[str, str, dict[str, Any], dict[str, Any]]]:
+    """``(unit id, kind, piece, section)`` for each translatable running head.
+
+    Only the pieces that carry an id, which are the ones with prose in them: a
+    page-number field and the tab in front of it are laid out with the words,
+    not translated with them, so a translator is never shown either.
+    """
+    for section in book.get("sections") or []:
+        for kind, key in RUNNING_PARTS:
+            part_of_section = section.get(key) or {}
+            for slot in RUNNING_SLOTS:
+                for paragraph in (part_of_section.get(slot) or {}).get("paragraphs") or []:
+                    for piece in paragraph.get("pieces") or []:
+                        if piece.get("id"):
+                            yield piece["id"], kind, piece, section
+
+
+def running_heads(book: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """``unit id -> piece`` — the lookup merge writes a translation into.
+
+    The counterpart of :func:`blocks_by_id` for the two lines the reader meets
+    before and after the prose on every page.
+    """
+    return {unit_id: piece for unit_id, _, piece, _ in iter_running_pieces(book)}
+
+
 def validate_book(book: dict[str, Any]) -> list[str]:
     """Structural self-check. Returns human-readable problems (empty == good)."""
     problems: list[str] = []
@@ -263,6 +315,16 @@ def validate_book(book: dict[str, Any]) -> list[str]:
         footnote_ids.add(note_id)
         if note.get("anchor_block") and note["anchor_block"] not in seen:
             problems.append(f"footnote {note_id}: anchor block {note['anchor_block']} not found")
+
+    # A repeated running-head id is the "silently disappeared" shape: merge
+    # resolves an id to one piece, so the second one's translation lands on the
+    # first and the head it was written for prints in the source language.
+    running: set[str] = set()
+    for unit_id, _, _, section in iter_running_pieces(book):
+        if unit_id in running:
+            problems.append(f"running head {unit_id}: duplicate id "
+                            f"(section {section.get('index')})")
+        running.add(unit_id)
 
     for block in iter_text_blocks(book):
         for side in ("text", "target"):

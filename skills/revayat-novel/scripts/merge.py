@@ -109,6 +109,7 @@ def apply_units(book: dict[str, Any], units: dict[str, str]) -> dict[str, Any]:
     """Write translations onto the book. Returns a report of what landed."""
     blocks = ir.blocks_by_id(book)
     notes = {note["id"]: note for note in book.get("footnotes", [])}
+    running = ir.running_heads(book)
     applied, unknown, blank = [], [], []
 
     for unit_id, value in units.items():
@@ -125,6 +126,8 @@ def apply_units(book: dict[str, Any], units: dict[str, str]) -> dict[str, Any]:
             block["target_alt"] = text
         elif unit_id in notes:
             notes[unit_id]["target"] = text
+        elif unit_id in running:
+            running[unit_id]["target"] = text
         elif unit_id in blocks and blocks[unit_id]["type"] in ir.TEXT_TYPES:
             blocks[unit_id]["target"] = text
         else:
