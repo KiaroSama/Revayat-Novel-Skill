@@ -43,6 +43,7 @@ tests/              pytest; fixtures are generated, never committed
 | `glossary.py` | name candidates, term tables, drift checking |
 | `chunk.py` | worksheets by character budget; owns the `@@` header format |
 | `pagerun.py` | the page lifecycle: one job per source page, and the gates a page must clear |
+| `pagecli.py` | the `pages` command line; `pagerun.main` forwards here |
 | `segments.py` | one unit longer than the whole budget, cut reversibly |
 | `merge.py` | worksheets back into the IR, with named failures |
 | `falint.py` | Persian typography lint and fix |
