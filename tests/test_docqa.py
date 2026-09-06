@@ -32,6 +32,7 @@ import pytest
 import bookir as ir
 import docqa
 import pagecheck
+import qa
 import review
 import wordrender
 from build_docx import Builder, add_arguments
@@ -505,3 +506,127 @@ def test_a_page_at_a_size_no_section_declares_is_still_reported(tmp_path):
     assert any(page["ok"] for page in after["per_page"]), (
         "only the resized section is wrong; the rest of the book is not"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Section order, not only section membership
+# --------------------------------------------------------------------------- #
+
+def _page_sizes(docx: Path) -> list[str]:
+    """Every `w:pgSz` in the built document, in document order."""
+    import re
+
+    with zipfile.ZipFile(docx) as archive:
+        body = archive.read("word/document.xml").decode("utf-8")
+    return re.findall(r"<w:pgSz [^>]*/>", body)
+
+
+def _rewrite_page_sizes(docx: Path, destination: Path,
+                        sizes: list[str]) -> Path:
+    """Put a different ordered list of `w:pgSz` into the same document.
+
+    Every element is one the book genuinely declares — the whole point is that
+    each page is individually a legal size, so nearest-geometry matching, which
+    only ever asks whether a page belongs to the allowed set, cannot see it.
+    """
+    import re
+
+    with zipfile.ZipFile(docx) as archive:
+        parts = {name: archive.read(name) for name in archive.namelist()}
+    body = parts["word/document.xml"].decode("utf-8")
+    replacement = iter(sizes)
+    body = re.sub(r"<w:pgSz [^>]*/>", lambda _: next(replacement), body)
+    parts["word/document.xml"] = body.encode("utf-8")
+
+    with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as out:
+        for name, blob in parts.items():
+            out.writestr(name, blob)
+    return destination
+
+
+def test_valid_section_sizes_in_the_wrong_order_are_caught(tmp_path):
+    """A, C, B out of every size the book declares, and none of them wrong.
+
+    This is what nearest-geometry matching cannot see and never claimed to:
+    each page is measured against the declared shape it is closest to, so a
+    document whose sections came out in the wrong order is three runs of
+    perfectly legal pages. The package knows the order; the paper does not.
+    """
+    pytest.importorskip("pymupdf")
+    book_path = _sectioned_book(tmp_path)
+    docx = _built(tmp_path, book_path)
+
+    sizes = _page_sizes(docx)
+    assert len(sizes) == 3, f"the fixture changed shape: {sizes}"
+    swapped = _rewrite_page_sizes(docx, tmp_path / "swapped.docx",
+                                  [sizes[0], sizes[2], sizes[1]])
+
+    after = _laid_out(tmp_path, book_path, swapped)
+    codes = {finding["code"] for finding in after["findings"]}
+    assert {"section-size", "section-order"} & codes, (
+        f"sections B and C swapped and nothing objected: {after['findings']}")
+    assert after["ok"] is False
+
+
+def test_a_duplicated_section_with_one_omitted_is_caught(tmp_path):
+    """A, B, B: every size declared, one section silently gone."""
+    pytest.importorskip("pymupdf")
+    book_path = _sectioned_book(tmp_path)
+    docx = _built(tmp_path, book_path)
+
+    sizes = _page_sizes(docx)
+    doubled = _rewrite_page_sizes(docx, tmp_path / "doubled.docx",
+                                  [sizes[0], sizes[1], sizes[1]])
+
+    after = _laid_out(tmp_path, book_path, doubled)
+    codes = {finding["code"] for finding in after["findings"]}
+    assert {"section-size", "section-order", "section-property"} & codes, (
+        f"a section was duplicated and another lost, unreported: "
+        f"{after['findings']}")
+    assert after["ok"] is False
+
+
+def test_the_built_section_count_is_compared_with_the_book(tmp_path):
+    """One `sectPr` more or fewer than the book declares is a defect.
+
+    Checked at the package rather than on the paper, because a dropped section
+    break does not necessarily change any page's size — it changes which pages
+    belong to which section, and that is invisible once rendered.
+    """
+    book_path = _sectioned_book(tmp_path)
+    docx = _built(tmp_path, book_path)
+
+    book = ir.load_book(book_path)
+    book["sections"] = book["sections"] + [dict(book["sections"][0])]
+
+    report = qa.Report()
+    docqa.check_section_package(docx, book, report)
+    codes = {finding["code"] for finding in report.summary()["findings"]}
+    assert "section-count" in codes, report.summary()["findings"]
+
+
+def test_the_render_walk_accepts_what_it_genuinely_cannot_tell_apart(tmp_path):
+    """The order check must not invent failures where the paper is ambiguous.
+
+    Repeated pages inside one section, and adjacent sections of the same trim,
+    are indistinguishable on paper and legal. A gate that reported either would
+    fail every ordinary book, which is the way this kind of check usually dies.
+    """
+    book = ir.load_book(_sectioned_book(tmp_path))
+    declared = docqa.declared_sections(book)
+    assert len(declared) == 3
+
+    def codes(order: list[int]) -> set[str]:
+        views = [{"width_pt": declared[i]["width_pt"],
+                  "height_pt": declared[i]["height_pt"]} for i in order]
+        report = qa.Report()
+        docqa.check_section_order(views, declared, report)
+        return {finding["code"] for finding in report.summary()["findings"]}
+
+    assert codes([0, 1, 2]) == set(), "the correct order was reported"
+    assert codes([0, 0, 0, 1, 1, 2, 2, 2]) == set(), (
+        "several pages inside each section were reported as an order defect")
+    assert codes([0, 1]) == set(), "a book that stops early is not out of order"
+    assert "section-order" in codes([0, 2, 1]), (
+        "the rendered pages went back to an earlier section's shape and the "
+        "walk did not object")

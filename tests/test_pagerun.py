@@ -1209,3 +1209,249 @@ def test_the_documented_loop_previews_the_page_it_is_on_not_page_twelve(tmp_path
         "ترجمهٔ b00002" in pagecheck.document_text(used), (
             "the preview does not contain page 2's translation"
         )
+
+
+def test_a_crop_that_moves_changes_the_page_a_reader_sees(tmp_path):
+    """The escape `page.rect` cannot see, because it normalises the origin.
+
+    Two files, one content stream, one 400x600 rect, one rotation — and crop
+    boxes at x=0 and x=50. `page.rect` reports `(0, 0, 400, 600)` for both,
+    which is why hashing width and height alone let a visibly different page
+    through. Measured before the fix: identical fingerprints, different pixels.
+    """
+    pymupdf = pytest.importorskip("pymupdf")
+
+    def make(path: Path, crop, media=(500, 600)) -> Path:
+        doc = pymupdf.open()
+        page = doc.new_page(width=media[0], height=media[1])
+        page.insert_text((60, 100), "Identical prose.", fontsize=11, fontname="helv")
+        page.set_cropbox(pymupdf.Rect(*crop))
+        doc.save(str(path))
+        doc.close()
+        return path
+
+    left = make(tmp_path / "left.pdf", (0, 0, 400, 600))
+    moved = make(tmp_path / "moved.pdf", (50, 0, 450, 600))
+
+    def seen(path: Path) -> bytes:
+        document = pymupdf.open(str(path))
+        try:
+            return document[0].get_pixmap(dpi=72).samples
+        finally:
+            document.close()
+
+    with pymupdf.open(str(left)) as a, pymupdf.open(str(moved)) as b:
+        assert a[0].rect.width == b[0].rect.width
+        assert a[0].rect.height == b[0].rect.height
+        assert a[0].rotation == b[0].rotation
+
+    assert seen(left) != seen(moved), (
+        "the fixture is wrong: these two are supposed to render differently"
+    )
+    assert pagerun.page_fingerprint(left, 1) != pagerun.page_fingerprint(moved, 1), (
+        "a crop box moved across the media left the fingerprint unchanged — an "
+        "accepted page can now change visibly and stay accepted"
+    )
+
+    # A media box widened under an unchanged crop is the other half of the pair.
+    wider = make(tmp_path / "wider.pdf", (0, 0, 400, 600), media=(700, 600))
+    assert pagerun.page_fingerprint(wider, 1) != pagerun.page_fingerprint(left, 1), (
+        "a changed media box left the fingerprint unchanged"
+    )
+
+
+def test_an_annotation_drawn_over_a_page_is_part_of_it(tmp_path):
+    """Annotations are not in the content stream, and they are on the paper.
+
+    Found while proving the crop-box fix, by asking what else renders without
+    touching a stream. A highlight left on a scan measured the same stream hash
+    and different pixels — the same escape, through another door.
+    """
+    pymupdf = pytest.importorskip("pymupdf")
+
+    def make(path: Path, *, highlight: bool) -> Path:
+        doc = pymupdf.open()
+        page = doc.new_page(width=400, height=600)
+        page.insert_text((60, 100), "Identical prose.", fontsize=11, fontname="helv")
+        if highlight:
+            page.add_highlight_annot(pymupdf.Rect(55, 85, 300, 108))
+        doc.save(str(path))
+        doc.close()
+        return path
+
+    plain = make(tmp_path / "plain.pdf", highlight=False)
+    noted = make(tmp_path / "noted.pdf", highlight=True)
+
+    def streams(path: Path) -> bytes:
+        document = pymupdf.open(str(path))
+        try:
+            page = document[0]
+            return b"".join(document.xref_stream(x) or b""
+                            for x in page.get_contents())
+        finally:
+            document.close()
+
+    assert streams(plain) == streams(noted), (
+        "the fixture is wrong: the highlight was supposed to leave the content "
+        "stream alone, which is the whole point of the test"
+    )
+    assert pagerun.page_fingerprint(plain, 1) != pagerun.page_fingerprint(noted, 1), (
+        "an annotation drawn over the page left the fingerprint unchanged"
+    )
+
+
+def test_a_moved_crop_invalidates_its_own_page_and_no_other(tmp_path):
+    """Local damage stays local: the point of a per-page identity.
+
+    A source identity that changes for every page whenever one page changes is
+    the failure this whole design exists to avoid — it throws away a resumable
+    run's progress on every rebuild.
+    """
+    pymupdf = pytest.importorskip("pymupdf")
+    path = tmp_path / "book.pdf"
+
+    def make(second_crop) -> Path:
+        doc = pymupdf.open()
+        for index, crop in enumerate((None, second_crop, None)):
+            page = doc.new_page(width=500, height=600)
+            page.insert_text((60, 100), f"Page {index + 1}.", fontsize=11,
+                             fontname="helv")
+            page.set_cropbox(pymupdf.Rect(*(crop or (0, 0, 400, 600))))
+        if path.exists():
+            path.unlink()
+        doc.save(str(path))
+        doc.close()
+        return path
+
+    make(None)
+    before = [pagerun.page_fingerprint(path, n) for n in (1, 2, 3)]
+    make((50, 0, 450, 600))
+    after = [pagerun.page_fingerprint(path, n) for n in (1, 2, 3)]
+
+    assert after[1] != before[1], "the page whose crop moved was not invalidated"
+    assert [after[0], after[2]] == [before[0], before[2]], (
+        f"a change to page 2 invalidated its neighbours too: {before} -> {after}"
+    )
+
+
+def _translated_pdf_run(tmp_path: Path, png: Path) -> tuple[Path, Path, Path]:
+    """A real PDF book, built into pages, with every page's Persian in place."""
+    pdf = _odd_pdf(tmp_path / "source.pdf", png)
+    book = _book_from_pdf(pdf, 3)
+    for block in book["blocks"]:
+        block["target"] = f"ترجمهٔ {block['id']} با طول کافی برای آزمون."
+    book_path = _save(book, tmp_path)
+    pagerun.build(book_path, tmp_path / "pages")
+    return pdf, book_path, tmp_path / "pages"
+
+
+def test_render_qa_finds_the_source_page_without_being_told_where_it_is(
+        tmp_path, sample_png):
+    """The README route: `render-qa --book --work --page N` and nothing else.
+
+    Both READMEs tell the reader to run exactly that and then compare
+    `renders/source/page-0001.png` with the target — while `--source-pdf` was
+    optional and omitted, so the source PNG the instruction names was never
+    written. The manifest has known where that page lives all along.
+    """
+    pytest.importorskip("pymupdf")
+    _, book_path, pages = _translated_pdf_run(tmp_path, sample_png)
+
+    written = renderqa.check(tmp_path, book_path, 2)
+
+    source = written.get("renders", {}).get("source", "")
+    assert source, (
+        f"no source render was produced for the documented command: {written}")
+    assert (tmp_path / source).exists(), f"{source} was named but not written"
+    assert written["source_evidence"] == source
+    assert written.get("renders", {}).get("target_sheets"), "no target sheets"
+    assert pages.name == "pages"
+
+
+def test_a_source_page_that_went_missing_leaves_the_page_unverified(
+        tmp_path, sample_png):
+    """Losing one side of the comparison is "we could not look", never a pass."""
+    pytest.importorskip("pymupdf")
+    _, book_path, pages = _translated_pdf_run(tmp_path, sample_png)
+
+    one_page = pages / _job(pagerun.load_manifest(pages), 2)["source_pdf"]
+    assert one_page.exists()
+    one_page.unlink()
+
+    written = renderqa.check(tmp_path, book_path, 2)
+    assert written["ok"] is False and written["verified"] is False, (
+        f"a page with no source render came back verified: {written}")
+    assert written.get("unverified"), "nothing said why it could not be checked"
+    assert "source" in written["unverified"], written["unverified"]
+
+
+def test_a_pdf_page_cannot_be_accepted_on_target_evidence_alone(
+        tmp_path, sample_png):
+    """The hole this closes, and the two halves of closing it.
+
+    Reachable before because `--source-pdf` was optional: hand `check` a target
+    PDF and no source, every deterministic gate reads the target so they all
+    pass, the review is filed against target sheets only, and `accept` took it.
+    The page reached `accepted` having never been set beside the page it was
+    translated from.
+
+    Both halves are asserted here. There is no longer a target-only route for a
+    PDF page - handing over a target still renders the source, because the
+    manifest is asked rather than the caller. And when the source genuinely
+    cannot be produced, the report that results is refused by review and by
+    accept rather than passed.
+    """
+    pytest.importorskip("pymupdf")
+    _, book_path, pages = _translated_pdf_run(tmp_path, sample_png)
+
+    built = preview.build(book_path, 2, tmp_path / "only-target.docx",
+                          assets=tmp_path / "assets")
+    if not built["ok"]:
+        pytest.skip(f"no converter here: {built['detail']}")
+    target = renderqa.render_docx(tmp_path / "only-target.docx",
+                                  tmp_path / "renders" / "preview")
+
+    handed = renderqa.check(tmp_path, book_path, 2, target_pdf=target)
+    assert handed.get("source_evidence"), (
+        "handing over a target still has to render the source: the old route "
+        "in was exactly this call with --source-pdf left off")
+    assert pagerun.missing_source_render(pages, 2) is None
+
+    # Now the case the gate is for: the source cannot be produced at all.
+    (pages / _job(pagerun.load_manifest(pages), 2)["source_pdf"]).unlink()
+    written = renderqa.check(tmp_path, book_path, 2, target_pdf=target)
+    assert not written.get("source_evidence"), written
+
+    refused = pagerun.missing_source_render(pages, 2)
+    assert refused and refused["refused"] == "no-source-render", (
+        f"a report with no source render was not refused: {refused}")
+
+    review.record(tmp_path, 2, {name: True for name in review.QUESTIONS},
+                  note="claims to have compared them")
+    taken = pagerun.accept(book_path, pages, 2)
+    assert taken["ok"] is False, f"accepted with no source render: {taken}"
+    assert taken["refused"] in {"no-source-render", "not-qa-passed",
+                                "render-qa-failed"}, taken
+
+
+def test_the_page_loop_still_reaches_accepted_with_both_sides_present(
+        tmp_path, sample_png):
+    """The gate has to let the correct case through, or it is just an outage."""
+    pytest.importorskip("pymupdf")
+    _, book_path, pages = _translated_pdf_run(tmp_path, sample_png)
+
+    written = renderqa.check(tmp_path, book_path, 1)
+    if not written.get("verified"):
+        pytest.skip(f"no converter here: {written.get('unverified')}")
+    assert written["source_evidence"], "both sides were present; source missing"
+    assert pagerun.missing_source_render(pages, 1) is None
+
+    review.record(tmp_path, 1, {name: True for name in review.QUESTIONS},
+                  note="looked at both")
+    taken = pagerun.accept(book_path, pages, 1)
+    if not written["ok"]:
+        # The fixture's odd trims can fail a geometric check; the point here is
+        # only that the source gate is not what stopped it.
+        assert taken.get("refused") != "no-source-render", taken
+    else:
+        assert taken["ok"], f"a page with both sides was not accepted: {taken}"
