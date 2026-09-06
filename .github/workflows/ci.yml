@@ -79,6 +79,56 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: python tests/e2e_pipeline.py
 
+  # The matrix above runs on bare runners, so every test that needs LibreOffice,
+  # Tesseract, Ghostscript or OCRmyPDF skips itself there — by design, because a
+  # missing tool is not a defect. But six green jobs full of skips prove nothing
+  # about the code those skips cover, and the skipped set is not small: the whole
+  # render-and-accept path and the whole OCR tier. This job installs the tools
+  # and runs the same suite, so that code is executed somewhere on every push.
+  full-coverage:
+    name: nothing skipped (ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: skills/revayat-novel/requirements.txt
+
+      - name: Install the tools the other jobs go without
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libreoffice-writer tesseract-ocr tesseract-ocr-fas ghostscript
+          python -m pip install --upgrade pip
+          python -m pip install -r skills/revayat-novel/requirements.txt ocrmypdf
+
+      - name: Every one of them is really on PATH
+        run: |
+          soffice --version
+          tesseract --version | head -1
+          tesseract --list-langs | grep -qx fas
+          gs --version
+          ocrmypdf --version
+
+      # A skip here is the hole this job exists to close, so it fails the build.
+      # Without this the job could install nothing, skip everything and go green
+      # exactly like the jobs it is meant to cover for.
+      - name: The full suite, where a skip is a failure
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          set -o pipefail
+          python -m pytest tests -q --timeout=600 -rs | tee suite.log
+          if grep -qE '[0-9]+ skipped' suite.log; then
+            echo "::error::a test skipped on the job whose whole purpose is that none do"
+            grep -E '^SKIPPED' suite.log || true
+            exit 1
+          fi
+
   install:
     name: installer (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
