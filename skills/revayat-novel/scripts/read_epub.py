@@ -16,7 +16,7 @@ import re
 import zipfile
 from pathlib import Path
 from typing import Any, Iterable
-from urllib.parse import unquote, urldefrag
+from urllib.parse import unquote, urldefrag, urlsplit
 from xml.etree import ElementTree
 
 from bs4 import BeautifulSoup, NavigableString, Tag
@@ -136,6 +136,91 @@ def _markup(node: Tag, footnote_marks: dict[int, str]) -> str:
     return text.strip()
 
 
+def _link_target(href: str, warn) -> str | None:
+    """What an EPUB href means once the book is one Word document, or ``None``.
+
+    The spine is a single book, so a link into another spine document is an
+    *internal* link the moment the documents are concatenated: only its fragment
+    survives the move, and `#sec2` is the whole of what it meant. An absolute
+    URL is carried as it stands. A link to a whole document with no fragment has
+    nothing to point at once the file boundaries are gone, so it is dropped —
+    said out loud, because a target that vanishes silently is the failure this
+    reader keeps being fixed for.
+    """
+    href = (href or "").strip()
+    if not href:
+        return None
+    if urlsplit(href).scheme:      # http, https, mailto, tel …
+        return href
+    fragment = urldefrag(href).fragment
+    if fragment:
+        return f"#{fragment}"
+    warn("link-to-a-whole-document", f"{href!r} points at a spine document "
+         f"rather than a place in one; there is no such boundary in the "
+         f"finished book, so the words stay and the link does not")
+    return None
+
+
+def _links(node: Tag, warn) -> list[dict[str, str]]:
+    """The links in this block, as ``{"text", "href"}``.
+
+    Note links are already footnotes by the time this runs — `_harvest_footnotes`
+    replaced them with tokens — so anything still here is an ordinary link.
+    """
+    found: list[dict[str, str]] = []
+    for tag in node.find_all("a"):
+        if _is_note_link(tag):
+            continue
+        text = re.sub(r"\s+", " ", tag.get_text()).strip()
+        target = _link_target(tag.get("href") or "", warn)
+        if text and target:
+            found.append({"text": text, "href": target})
+    return found
+
+
+def _anchors(node: Tag) -> list[str]:
+    """Every id this block carries, its own first."""
+    names = [node.get("id")] if node.get("id") else []
+    names += [tag.get("id") for tag in node.find_all(id=True)]
+    return [name for name in dict.fromkeys(names) if name]
+
+
+def _prose(node: Tag, marks: dict[int, str], warn) -> tuple[str, dict[str, Any]]:
+    """A block's markup, plus the link and anchor context that belongs to it.
+
+    One helper because the six places that emit prose must all carry it — a
+    call site that forgets is a paragraph whose links are silently gone, which
+    is exactly how the targets were lost in the first place.
+    """
+    text = _markup(node, marks)
+    extra: dict[str, Any] = {}
+    links = _links(node, warn)
+    if links:
+        extra["links"] = links
+    anchors = _anchors(node)
+    if anchors:
+        extra["bookmarks"] = anchors
+    return text, extra
+
+
+def _settle_anchors(book: dict[str, Any], wanted: set[str]) -> None:
+    """Keep only the anchors something actually links to, each on one block.
+
+    A book is full of ids nothing points at — every generated section wrapper
+    has one — and carrying them all would open a bookmark per paragraph in the
+    Persian edition for no reader's benefit. Claiming each name once matters
+    too: the same id opened twice sends every link to the first, silently.
+    """
+    claimed: set[str] = set()
+    for block in book.get("blocks", []):
+        names = [name for name in (block.get("bookmarks") or ())
+                 if name in wanted and name not in claimed]
+        claimed.update(names)
+        if names:
+            block["bookmarks"] = names
+        else:
+            block.pop("bookmarks", None)
+
 def _is_note_link(tag: Tag) -> bool:
     epub_type = (tag.get("epub:type") or tag.get("type") or "").lower()
     if "noteref" in epub_type:
@@ -188,7 +273,16 @@ def read_epub(
         blocks: list[dict[str, Any]] = []
         footnotes: list[dict[str, Any]] = []
         seen_assets: dict[str, str] = {}
+        warnings: list[dict[str, Any]] = []
         counter = 0
+
+        def warn(kind: str, detail: str) -> None:
+            """Say once what could not be carried, with a count."""
+            for entry in warnings:
+                if entry["kind"] == kind:
+                    entry["count"] += 1
+                    return
+            warnings.append({"kind": kind, "count": 1, "detail": detail})
 
         def add(block_type: str, **fields: Any) -> dict[str, Any]:
             nonlocal counter
@@ -211,11 +305,32 @@ def read_epub(
             if doc_index > 1:
                 add("pagebreak", page=doc_index, soft=False)
             _walk(body, add, archive, doc_path, asset_dir, seen_assets,
-                  footnote_marks, doc_index)
+                  footnote_marks, doc_index, warn)
 
         book["blocks"] = [b for b in blocks if _keep(b)]
         book["footnotes"] = [f for f in footnotes if f["text"]]
         _drop_orphan_footnote_tokens(book)
+
+        # Anchors are settled once every document has been read, because a link
+        # in chapter 1 can point into chapter 9 and neither knows about the
+        # other while it is being parsed.
+        wanted = {link["href"][1:]
+                  for block in book["blocks"]
+                  for link in (block.get("links") or [])
+                  if link["href"].startswith("#")}
+        _settle_anchors(book, wanted)
+
+        carried = sum(len(b.get("links") or []) for b in book["blocks"])
+        if carried:
+            warnings.append({
+                "kind": "hyperlinks-kept-as-metadata", "count": carried,
+                "detail": "link text is in the prose and each target is on its "
+                          "block as `links`; the builder puts a live link back "
+                          "only where the translation kept the display phrase "
+                          "word for word, and names every one it could not",
+            })
+        if warnings:
+            book["source"]["epub_warnings"] = warnings
         return book
     finally:
         archive.close()
@@ -260,7 +375,7 @@ def _harvest_footnotes(soup: BeautifulSoup, footnotes: list[dict[str, Any]],
 
 def _walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
           asset_dir: Path, seen: dict[str, str], marks: dict[int, str],
-          page: int) -> None:
+          page: int, warn=lambda *a: None) -> None:
     for child in node.children:
         if not isinstance(child, Tag) or child.name in SKIP_TAGS:
             continue
@@ -273,32 +388,36 @@ def _walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
             add("separator", page=page)
             continue
         if name in HEADINGS:
-            text = _markup(child, marks)
+            text, extra = _prose(child, marks, warn)
             if text:
-                add("heading", page=page, level=HEADINGS[name], text=text)
+                add("heading", page=page, level=HEADINGS[name], text=text,
+                    **extra)
             continue
         if name in {"p", "figcaption", "dt", "dd", "td", "th"}:
             if child.find("img"):
-                _emit_mixed(child, add, archive, doc_path, asset_dir, seen, marks, page)
+                _emit_mixed(child, add, archive, doc_path, asset_dir, seen,
+                            marks, page, warn)
                 continue
-            text = _markup(child, marks)
+            text, extra = _prose(child, marks, warn)
             if text:
                 kind = "caption" if name == "figcaption" else "paragraph"
-                add(kind, page=page, text=text)
+                add(kind, page=page, text=text, **extra)
             continue
         if name == "blockquote":
-            _walk_quote(child, add, marks, page)
+            _walk_quote(child, add, marks, page, warn)
             continue
         if name == "li":
-            text = _markup(child, marks)
+            text, extra = _prose(child, marks, warn)
             if text:
-                add("listitem", page=page, level=1, ordered=_ordered(child), text=text)
+                add("listitem", page=page, level=1, ordered=_ordered(child),
+                    text=text, **extra)
             continue
         # Container element: recurse.
-        _walk(child, add, archive, doc_path, asset_dir, seen, marks, page)
+        _walk(child, add, archive, doc_path, asset_dir, seen, marks, page, warn)
 
 
-def _emit_mixed(node: Tag, add, archive, doc_path, asset_dir, seen, marks, page) -> None:
+def _emit_mixed(node: Tag, add, archive, doc_path, asset_dir, seen, marks,
+                page, warn=lambda *a: None) -> None:
     """A paragraph that also holds an image — emit both, in document order."""
     for child in node.children:
         if isinstance(child, Tag) and child.name in {"img", "image"}:
@@ -306,17 +425,18 @@ def _emit_mixed(node: Tag, add, archive, doc_path, asset_dir, seen, marks, page)
     stripped = BeautifulSoup(str(node), "html.parser")
     for image in stripped.find_all(["img", "image"]):
         image.decompose()
-    text = _markup(stripped, marks)
+    text, extra = _prose(stripped, marks, warn)
     if text:
-        add("paragraph", page=page, text=text)
+        add("paragraph", page=page, text=text, **extra)
 
 
-def _walk_quote(node: Tag, add, marks: dict[int, str], page: int) -> None:
+def _walk_quote(node: Tag, add, marks: dict[int, str], page: int,
+                warn=lambda *a: None) -> None:
     paragraphs = node.find_all("p", recursive=False) or [node]
     for paragraph in paragraphs:
-        text = _markup(paragraph, marks)
+        text, extra = _prose(paragraph, marks, warn)
         if text:
-            add("blockquote", page=page, text=text)
+            add("blockquote", page=page, text=text, **extra)
 
 
 def _ordered(item: Tag) -> bool:

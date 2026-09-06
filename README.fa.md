@@ -112,17 +112,35 @@ sudo apt install ghostscript               # Debian/Ubuntu
 
 ```bash
 S=skills/revayat-novel/scripts
+# ‏$PY همان مفسری است که دارید: python3 روی مک و لینوکس، python یا py -3 روی
+# ویندوز، که معمولاً python3 ندارد.
 
-python $S/revayat-novel.py extract book.pdf --out work/
-python $S/revayat-novel.py glossary scan --book work/book.json --out work/glossary.json
+$PY $S/revayat-novel.py extract book.pdf --out work/
+$PY $S/revayat-novel.py glossary scan --book work/book.json --out work/glossary.json
 #   … نام‌های فارسی را در work/glossary.json پر کنید …
-python $S/revayat-novel.py chunk build --book work/book.json --out work/chunks --glossary work/glossary.json
-#   … work/chunks/chunkNNNN.md را ترجمه و در out_chunkNNNN.md بنویسید …
-python $S/revayat-novel.py merge  --book work/book.json --chunks work/chunks
-python $S/revayat-novel.py falint fix --book work/book.json
-python $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
-python $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
-python $S/revayat-novel.py qa     docx --file out/book.fa.docx --book work/book.json
+
+# ‏PDF صفحه‌به‌صفحه بریده می‌شود — یک کار برای هر صفحهٔ مبدأ، تا هر کدام با
+# صفحه‌ای که از آن آمده مقایسه شود. ‏EPUB و DOCX و متن ساده صفحه ندارند و
+# به‌جایش `chunk build --out work/chunks` می‌گیرند.
+$PY $S/revayat-novel.py pages build --book work/book.json --out work/pages --glossary work/glossary.json
+
+# سپس برای هر صفحه: work/pages/pageNNNN.md را ترجمه و در out_pageNNNN.md بنویسید، بعد
+$PY $S/revayat-novel.py pages     merge   --book work/book.json --pages work/pages --page 1 --glossary work/glossary.json
+$PY $S/revayat-novel.py pages     preview --book work/book.json --pages work/pages --page 1
+$PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1 --docx work/previews/page-0001.docx
+#   … renders/source/page-0001.png را کنار renders/target/page-0001.png ببینید …
+$PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
+$PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
+
+$PY $S/revayat-novel.py falint fix   --book work/book.json
+$PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
+$PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
+
+# دو دروازهٔ پایانی؛ تا هر دو سبز نشوند فایل آماده نیست: یکی بستهٔ فایل،
+# یکی کتاب نهایی که رندر و نگاه شده است.
+$PY $S/revayat-novel.py qa     docx  --file out/book.fa.docx --book work/book.json
+$PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
+$PY $S/revayat-novel.py doc-qa review --work work --answer …
 ```
 
 </div>
