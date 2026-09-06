@@ -849,3 +849,204 @@ def test_a_real_pdf_page_run_owns_the_split_paragraph_once(tmp_path, sample_pdf)
     home = [entry for entry in manifest["chunks"] if block["id"] in entry["unit_ids"]]
     assert len(home) == 1
     assert home[0]["page"] == block["page"]
+
+
+# --------------------------------------------------------------------------- #
+# One paragraph bigger than the whole budget
+# --------------------------------------------------------------------------- #
+
+def test_a_single_oversized_paragraph_never_asks_for_a_bigger_budget(tmp_path):
+    """The refusal this replaces was correct and useless.
+
+    Raising `--budget` to fit the one paragraph that overflowed raises it for
+    every job on the run — which is the context-limit failure the budget exists
+    to prevent, arrived at by following the error message.
+    """
+    import merge as mg
+
+    long_one = ("A very long paragraph that keeps going and going and shows no "
+                "sign at all of stopping any time soon. ") * 60
+    book = ir.new_book()
+    book["blocks"] = [
+        ir.make_block("paragraph", 1, page=1, text="A short opening line."),
+        ir.make_block("paragraph", 2, page=1, text=long_one),
+        ir.make_block("paragraph", 3, page=1, text="A short closing line."),
+    ]
+    book_path = _save(book, tmp_path)
+    pages = tmp_path / "pages"
+
+    budget = 3000
+    manifest = pagerun.build(book_path, pages, budget=budget)
+
+    assert manifest["pages"] == 1
+    assert len(manifest["chunks"]) > 1, "the page was not split at all"
+    for entry in manifest["chunks"]:
+        worksheet = (pages / entry["file"]).read_text(encoding="utf-8")
+        assert len(worksheet) <= budget, (
+            f"{entry['file']} is {len(worksheet)} characters against a "
+            f"{budget} budget — that is the payload a model would receive"
+        )
+
+    # Every unit answered verbatim, the way a translator would return it. Read
+    # back with the real parser: a worksheet's own instructions mention
+    # `@@ headers`, and a hand-rolled reader takes that line for a header.
+    for entry in manifest["chunks"]:
+        given = mg.parse_worksheet(
+            (pages / entry["file"]).read_text(encoding="utf-8"))
+        reply = "".join("@@ {0} para\n{1}\n".format(unit_id, given[unit_id])
+                        for unit_id in entry["unit_ids"])
+        ir.write_text(pages / entry["output"], reply)
+
+    merged = pagerun.merge_page(book_path, pages, 1)
+    assert merged["ok"], merged
+
+    after = ir.load_book(book_path)
+    blocks = {block["id"]: block for block in after["blocks"]}
+    assert len(after["blocks"]) == 3, "the book gained or lost a block"
+    assert blocks["b00001"]["target"] == "A short opening line."
+    assert blocks["b00003"]["target"] == "A short closing line."
+    # Word for word, in order. The space the cut fell on is normalised to one:
+    # a reply arrives stripped, so the original separator is not recoverable
+    # and `segments.rejoin` says so rather than pretending.
+    assert blocks["b00002"]["target"].split() == long_one.split(), (
+        "the paragraph did not come back whole"
+    )
+
+
+def test_a_segmented_page_is_complete_once_every_part_is_answered(tmp_path):
+    """`untranslated` must ask the book about the block, not about a segment.
+
+    The book has never heard of `b00002#2`; asking it would report the unit
+    missing from a page whose every word is translated, and `accept` would
+    refuse for ever.
+    """
+    import merge as mg
+
+    long_one = ("Another long paragraph, of the kind that runs past any "
+                "sensible worksheet budget on its own. ") * 60
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, page=1, text=long_one)]
+    book_path = _save(book, tmp_path)
+    pages = tmp_path / "pages"
+    manifest = pagerun.build(book_path, pages, budget=3000)
+
+    unit_ids = [u for entry in manifest["chunks"] for u in entry["unit_ids"]]
+    assert any("#" in unit_id for unit_id in unit_ids), "nothing was segmented"
+    assert pagerun.untranslated(ir.load_book(book_path), unit_ids) == ["b00001"]
+
+    for entry in manifest["chunks"]:
+        given = mg.parse_worksheet(
+            (pages / entry["file"]).read_text(encoding="utf-8"))
+        ir.write_text(pages / entry["output"],
+                      "".join("@@ {0} para\n{1}\n".format(u, given[u])
+                              for u in entry["unit_ids"]))
+    assert pagerun.merge_page(book_path, pages, 1)["ok"]
+
+    assert pagerun.untranslated(ir.load_book(book_path), unit_ids) == [], (
+        "a page whose every segment is answered still reads as untranslated"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# The documented workflow, executed in the documented order
+# --------------------------------------------------------------------------- #
+
+def test_the_documented_page_loop_runs_in_order_with_nothing_missing(tmp_path,
+                                                                     capsys):
+    """Every command finds what the one before it left, and refuses if run early.
+
+    This is the failure the loop was rewritten for: `SKILL.md` used to put
+    `accept` immediately after `merge`, before the QA and review it depends on,
+    and told the reader to hand render-qa a `$WORK/book.docx` that no documented
+    command ever produced. Following it literally could not work.
+    """
+    pytest.importorskip("pymupdf")
+    book_path = _one_page_book(tmp_path)
+    pages = tmp_path / "pages"
+    page = ["--page", "1"]
+    at = ["--book", str(book_path), "--pages", str(pages)]
+
+    assert pagerun.main(["build", "--book", str(book_path), "--out", str(pages)]) == 0
+    capsys.readouterr()
+
+    # 1 — next names the worksheet, and it is on disk.
+    assert pagerun.main(["next", "--pages", str(pages)]) == 0
+    upcoming = json.loads(capsys.readouterr().out)
+    assert Path(upcoming["worksheet"]).exists(), (
+        "next named a worksheet nobody wrote")
+
+    # 2 — the translator answers it.
+    ir.write_text(Path(upcoming["output"]), f"@@ b00001 para\n{TARGET}\n")
+
+    # 3 — merge, before which accept must refuse.
+    assert pagerun.main(["accept", *at, *page]) == 2
+    assert json.loads(capsys.readouterr().out)["refused"] == "not-merged"
+    assert pagerun.main(["merge", *at, *page]) == 0
+    capsys.readouterr()
+
+    # 4 — the preview, which is the artefact step 5 consumes.
+    assert pagerun.main(["preview", *at, *page]) == 0
+    made = json.loads(capsys.readouterr().out)
+    preview_docx = Path(made["output"])
+    assert preview_docx.exists(), "preview reported a file it did not write"
+
+    # 5 — render QA, handed exactly that file.
+    written = renderqa.check(tmp_path, book_path, 1, docx=preview_docx)
+    if not written.get("verified"):
+        pytest.skip(f"nothing here lays a document out: {written['unverified']}")
+    assert written["ok"], written["findings"]
+    for name in written["renders"]["target_sheets"]:
+        assert (tmp_path / name).exists(), f"{name} was reported, not written"
+
+    # 6 — the review, before which accept must still refuse.
+    assert pagerun.main(["accept", *at, *page]) == 2
+    assert json.loads(capsys.readouterr().out)["refused"] == "not-reviewed"
+    assert pagerun.main(["review", "--pages", str(pages), *page,
+                         *[f"--answer={name}=yes" for name in review.QUESTIONS]]) == 0
+    capsys.readouterr()
+
+    # 7 — and only now.
+    assert pagerun.main(["accept", *at, *page]) == 0
+    assert json.loads(capsys.readouterr().out)["state"] == "accepted"
+    assert pagerun.status(pages)["next"] is None
+
+
+def test_page_qa_is_unaffected_by_how_far_the_book_has_reflowed(tmp_path):
+    """Source page 2 is checked as itself, not as the finished book's page 2.
+
+    Page 1 here carries far more Persian than English, which is ordinary and is
+    exactly what moves everything after it. Rendered as a whole book, source
+    page 2's material would be several sheets further on; the old check looked
+    at the book's second sheet and would have found page 1's overflow there —
+    reporting page 2's blocks missing and page 1's as unexpected.
+    """
+    pytest.importorskip("pymupdf")
+    # Varied on purpose: forty copies of one sentence would trip
+    # `text-duplicated`, which would be the check working correctly on a fixture
+    # that does not resemble prose.
+    swollen = " ".join(
+        f"بند شماره {n} به فارسی بسیار بلندتر از اصل "
+        f"انگلیسی آن است و همین هر چه را که پس از آن می‌آید جابه‌جا می‌کند."
+        for n in range(1, 41))
+    own = "بند کوتاه صفحهٔ دوم که باید همان‌جا بماند و جابه‌جا نشود."
+
+    book = ir.new_book()
+    first = ir.make_block("paragraph", 1, page=1, text="A short English source line.")
+    first["target"] = swollen
+    second = ir.make_block("paragraph", 2, page=2, text="The second page's line.")
+    second["target"] = own
+    book["blocks"] = [first, second]
+    book_path = _save(book, tmp_path)
+
+    written = renderqa.check(tmp_path, book_path, 2)
+    if not written.get("verified"):
+        pytest.skip(f"nothing here lays a document out: {written['unverified']}")
+
+    assert written["ok"], written["findings"]
+    assert written["counts"]["expected_blocks"] == 1, (
+        "page 2 owns one block; anything else means the preview carried page 1"
+    )
+    # And page 1, whose Persian runs long, is still judged on all of its sheets.
+    first_page = renderqa.check(tmp_path, book_path, 1)
+    assert first_page["ok"], first_page["findings"]
+    assert first_page["sheets"] >= 1
