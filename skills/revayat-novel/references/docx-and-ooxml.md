@@ -70,8 +70,10 @@ ratio preserved.
 **Sections, and the running heads on them.** A DOCX that changes page size,
 orientation or margins partway through arrives as `book["sections"]`, each entry
 naming the block it opens at, and the builder emits a real `w:sectPr` for each.
-`book["page"]` still reports the first section's geometry, which is what the rest
-of the pipeline reads.
+`book["page"]` still reports the first section's geometry, which is what a stage
+with no page in hand reads. Final render QA does not: it resolves each rendered
+page to the section that page belongs to, so a landscape section 3 is measured
+against section 3's own setup rather than reported as a page-size failure.
 
 A section carries the heads and feet the author wrote, as pieces:
 
