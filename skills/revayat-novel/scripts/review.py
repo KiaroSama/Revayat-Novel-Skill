@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import bookir as ir
 import runstate
@@ -61,6 +61,32 @@ QUESTIONS: dict[str, str] = {
 #: quietly become a pass.
 YES = {"yes", "y", "true", "ok", "pass"}
 NO = {"no", "n", "false", "bad", "fail"}
+
+
+#: What a missing file contributes to an evidence digest. A render that was
+#: never written is a *different* state from one that was, and both differ from
+#: one that changed - so it takes part in the digest rather than being skipped.
+ABSENT = "absent"
+
+
+def evidence_digest(paths: Iterable[Path]) -> str:
+    """One digest over an ordered set of files: the evidence a reviewer saw.
+
+    Ordered, and the order is part of it: sheet 1 and sheet 2 swapping is a
+    different document even when the bytes are the same two files. Each entry
+    contributes its *name* as well as its content, so a render appearing under
+    a new name is a change too.
+
+    A page that reflows onto two sheets has two of them, and binding a review to
+    only the first is how a reviewer's "yes" survives a change to everything
+    they were not shown. Pass the source render and every target sheet.
+    """
+    lines = []
+    for path in paths:
+        path = Path(path)
+        digest = ir.sha256_file(path) if path.exists() else ABSENT
+        lines.append(f"{path.name}:{digest}")
+    return ir.sha256_bytes("\n".join(lines).encode("utf-8"))
 
 
 def review_path(work_dir: Path, page: int | str) -> Path:
