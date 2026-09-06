@@ -246,7 +246,7 @@ def expectations(book: dict[str, Any], page: int) -> dict[str, Any]:
 
     return {
         "page": page,
-        "setup": pagerun.geometry(book, job["block_ids"], lookup),
+        "setup": pagerun.geometry(book, job["block_ids"], lookup, page),
         "texts": texts,
         "images": images,
         "translatable": translatable,

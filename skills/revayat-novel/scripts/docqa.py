@@ -14,7 +14,10 @@ module is shaped to avoid.
 the body, no hole where text should be, no text on a plate. Ownership by source
 page does not survive assembly — Persian reflows, so the book's page 12 is not
 source page 12 — and *any* check that compares final page N with source page N
-is wrong here by construction.
+is wrong here by construction. The same reflow moves every section boundary
+with it, so a rendered page is judged against the declared geometry it is
+nearest to rather than one the book only holds for its opening section; see
+`setup_for` for what that catches and what it does not.
 
 **Across the whole render, about content.** Every translated block the IR holds
 appears in the finished document exactly once, and every illustration appears,
@@ -23,10 +26,14 @@ a single page cannot, and it is the one that catches a block assembly dropped.
 
 The rendered pages are kept as PNGs because the last gate is a person looking at
 them, and a review is only worth anything while it is bound to what it describes
-— the same rule `review` applies per page, applied to the book. Here the binding
-is the **.docx**, not the render: Word stamps a PDF with the moment it made it,
-so two renders of one unchanged book differ and a review bound there would be
-stale the instant it was filed.
+— the same rule `review` applies per page, applied to the book. The binding is
+those **page images**, in order: they are what the reviewer saw, and one
+unchanged .docx lays out differently under a font fallback, a different backend
+or a newer renderer. The rendered PDF's own bytes are no use for it — Word
+stamps one with the moment it made it, so two renders of one unchanged book
+differ and a review bound there would be stale the instant it was filed. The
+.docx hash stays in the report as provenance: it says which document these pages
+are of, which is a different question from what was looked at.
 """
 
 from __future__ import annotations
@@ -119,6 +126,47 @@ def check_completeness(views: list[dict[str, Any]], expected: dict[str, Any],
                                         if pagecheck.is_illustration(i)))
 
 
+def page_setups(book: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every page geometry the finished book may legitimately show.
+
+    ``book["page"]`` first, because that is the geometry the builder sets the
+    opening section to. Every later section brings its own size, orientation
+    and margins, so a book with a landscape plate or a different trim partway
+    through has more than one right answer to "how big is a page", and judging
+    all of them against the first one reports the correct ones as failures.
+    """
+    setups = [dict(book.get("page") or ir.default_page_setup())]
+    setups += [dict(record) for record in (book.get("sections") or [])]
+    return setups
+
+
+def setup_for(target: dict[str, Any],
+              setups: list[dict[str, Any]]) -> dict[str, Any]:
+    """The declared geometry to judge this rendered page against.
+
+    A rendered page cannot be traced back to the section that produced it.
+    Persian reflows, so the book's page N is not source page N and every
+    section boundary moves with it; a mapping by page order would be a guess
+    presented as a fact. What *is* known is the set of geometries the book
+    declares, so a page is judged against the declared one it is nearest to.
+
+    **What that catches:** a page at a size no section asked for — what a lost,
+    duplicated or corrupted section break looks like from the outside.
+    **What it does not:** a page of the right size that belongs to the wrong
+    section. Two sections sharing a trim are indistinguishable here, and this
+    does not pretend otherwise.
+
+    Nearest rather than matching, so a page that matches nothing is still
+    measured against the geometry it most nearly is: `_check_page_size` then
+    fires with the closest declared size in its message rather than whichever
+    one happens to be first.
+    """
+    width, height = float(target["width_pt"]), float(target["height_pt"])
+    return min(setups, key=lambda setup: (
+        abs(width - float(setup.get("width_pt") or 0.0))
+        + abs(height - float(setup.get("height_pt") or 0.0))))
+
+
 def check_assembled_page(target: dict[str, Any], setup: dict[str, Any],
                          unit: str) -> qa.Report:
     """The checks that still mean something once the book is assembled.
@@ -172,25 +220,28 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
                           f"PyMuPDF may not be installed",
         })
 
-    setup = book.get("page", ir.default_page_setup())
+    setups = page_setups(book)
     views: list[dict[str, Any]] = []
     pages: list[dict[str, Any]] = []
     findings: list[dict[str, Any]] = []
     sheets: list[str] = []
+    # Every sheet the book should have, whether or not one could be written. A
+    # page missing from the evidence is a state of its own, not a gap to skip.
+    pngs = [page_png(work_dir, index + 1) for index in range(total)]
 
     for index in range(total):
         view = pagecheck.page_view(rendered, index)
         views.append(view)
-        summary = check_assembled_page(view, setup, f"page{index + 1:04d}").summary()
+        summary = check_assembled_page(view, setup_for(view, setups),
+                                       f"page{index + 1:04d}").summary()
         pages.append({"page": index + 1, "ok": summary["ok"],
                       "errors": summary["errors"], "warnings": summary["warnings"]})
         for finding in summary["findings"]:
             findings.append({"page": index + 1, **finding})
         # Persisted, not thrown away: the last gate is a person looking at these,
         # and a review of pages nobody kept cannot be re-read or re-checked.
-        png = page_png(work_dir, index + 1)
-        if pagecheck.render_png(rendered, index, png, dpi) is not None:
-            sheets.append(str(png.relative_to(work_dir).as_posix()))
+        if pagecheck.render_png(rendered, index, pngs[index], dpi) is not None:
+            sheets.append(str(pngs[index].relative_to(work_dir).as_posix()))
 
     whole = qa.Report()
     check_completeness(views, document_expectations(book), whole,
@@ -200,7 +251,13 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
     findings += pagecheck.check_direction_in_document(docx)
 
     subject = ir.sha256_file(docx)
-    seen = review.verdict(work_dir, review.DOCUMENT, render=subject)
+    # The review is bound to the sheets, not to the .docx. The document's bytes
+    # say which book this is; they do not say what the reviewer saw, and the
+    # same file lays out differently under a font fallback, another backend or
+    # a newer renderer. A sheet that could not be written takes part as absent,
+    # so a render that half succeeded is not the evidence one that succeeded is.
+    visual = review.evidence_digest(pngs)
+    seen = review.verdict(work_dir, review.DOCUMENT, render=visual)
     if not seen["ok"]:
         # A gate nobody ran must never read as a gate that passed. The document
         # is not failed for want of a review — it is *unverified*, which is a
@@ -217,6 +274,7 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
             "per_page": pages,
             "counts": global_summary.get("counts", {}),
             "document_sha256": subject,
+            "visual_render_sha256": visual,
             "detail": f"the assembled document rendered and was measured, but "
                       f"nobody has looked at it: {seen['detail']}",
         })
@@ -232,17 +290,22 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
         "per_page": pages,
         "counts": global_summary.get("counts", {}),
         "document_sha256": subject,
+        "visual_render_sha256": visual,
         "reviewed": seen.get("render_sha256", "")[:12],
     })
 
 
-def document_hash(work_dir: Path) -> str:
-    """The identity a final review is bound to: the .docx it was made from.
+def visual_hash(work_dir: Path) -> str:
+    """The identity a final review is bound to: the sheets that were looked at.
 
-    The *document*, not the render. Word stamps a PDF with the moment it made
-    it, so laying one unchanged book out twice produces two different files —
-    binding the review to that would make every review stale the instant it was
-    filed, and a gate nobody can ever satisfy is a gate that gets removed.
+    Not the .docx, which is provenance and not evidence: one document lays out
+    differently under a font fallback, another rendering backend or a newer
+    renderer, and a review bound to its bytes would survive a change to
+    everything the reviewer saw. Not the rendered PDF either — Word stamps one
+    with the moment it made it, so laying one unchanged book out twice produces
+    two different files, and a gate nobody can ever satisfy is a gate that gets
+    removed. The page images are the one artefact that is stable across a
+    re-render of the same document and moves when the layout does.
 
     Read back from the report so the order is the documented one: check, look
     at the pages it kept, then review what you looked at.
@@ -252,7 +315,7 @@ def document_hash(work_dir: Path) -> str:
         return ""
     try:
         return json.loads(report.read_text(encoding="utf-8")).get(
-            "document_sha256", "")
+            "visual_render_sha256", "")
     except (OSError, json.JSONDecodeError):
         return ""
 
@@ -301,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
                              ensure_ascii=False, indent=1))
             return 2
         filed = review.record(work, review.DOCUMENT, answers, note=args.note,
-                              render=document_hash(work))
+                              render=visual_hash(work))
         print(json.dumps(filed, ensure_ascii=False, indent=1))
         return 0 if filed["ok"] else 2
 

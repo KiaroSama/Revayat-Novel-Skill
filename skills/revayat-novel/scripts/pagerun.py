@@ -161,13 +161,22 @@ def _union(boxes: list[list[float]]) -> list[float]:
 
 
 def geometry(book: dict[str, Any], block_ids: list[str],
-             lookup: dict[str, dict[str, Any]]) -> dict[str, Any]:
+             lookup: dict[str, dict[str, Any]],
+             page: int | None = None) -> dict[str, Any]:
     """Page setup plus the box the page's own content actually occupies.
 
-    The setup is the book's; ``text_bbox`` is measured, and it is what the
-    render check compares the translated page against.
+    ``text_bbox`` is measured, and it is what the render check compares the
+    translated page against. The setup is the book's *unless this page has its
+    own* - a landscape plate or a differently trimmed page is laid out on its
+    own paper, not on the book's average.
     """
     setup: dict[str, Any] = dict(book.get("page") or ir.default_page_setup())
+    # `book["page"]` is the *dominant* geometry, which is the right default and
+    # the wrong answer for the landscape map or the differently trimmed front
+    # matter. The census lists every page that disagrees; a preview built from
+    # the dominant setup would lay such a page out on paper it was never on.
+    own = ((book.get("source") or {}).get("page_geometry") or {}).get("pages") or {}
+    setup.update(own.get(str(page)) or {})
     boxes = [lookup[i]["bbox"] for i in block_ids
              if i in lookup and lookup[i].get("bbox")]
     if boxes:
@@ -300,22 +309,83 @@ def render_worksheet(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def source_digest(units: list[tuple[str, str, str]]) -> str:
-    """Identity of the source side of one page.
+def source_digest(units: list[tuple[str, str, str]], *,
+                  page_pdf: str = "", setup: dict[str, Any] | None = None) -> str:
+    """Identity of the source side of one page — everything a reviewer saw.
 
     The source only, for the same reason ``chunk.source_digest`` is: merge
     writes the Persian back into the same book, and a page whose translation
     landed must not read as a page whose source moved.
+
+    **The prose is not the whole source.** A page can change visually while
+    every translatable word stays identical: the illustration is replaced, the
+    trim changes, the scan is re-made at another rotation. Keyed on the text
+    alone, such a page stays ``accepted`` carrying a review of an image that no
+    longer exists — the reviewer's "yes" outliving the thing it was about.
+
+    So `page_fingerprint` goes in - the page's own bytes in the source, covering
+    the picture, the boxes and the rotation in one - and the page-local geometry
+    with it.
+    Both are per page, so a new plate on page 7 invalidates page 7 and nothing
+    else. ``text_bbox`` is deliberately excluded: it is *measured* from the
+    blocks, so it is a consequence of the prose and not an input to it.
     """
-    return ir.sha256_bytes(
-        "\n".join(f"{unit_id}\x00{text}" for unit_id, _, text in units)
-        .encode("utf-8")
-    )
+    parts = [
+        "\n".join(f"{unit_id}\x00{text}" for unit_id, _, text in units),
+        page_pdf,
+        json.dumps({k: v for k, v in sorted((setup or {}).items())
+                    if k != "text_bbox"}, ensure_ascii=False, sort_keys=True),
+    ]
+    return ir.sha256_bytes("\x1e".join(parts).encode("utf-8"))
 
 
 # --------------------------------------------------------------------------- #
 # The source page itself
 # --------------------------------------------------------------------------- #
+
+def page_fingerprint(pdf_path: Path, page: int) -> str:
+    """What one source page *looks like*, as a reproducible identity.
+
+    Deliberately not the hash of the split one-page PDF, which was the obvious
+    choice and is wrong: PyMuPDF stamps what it writes, so splitting one
+    unchanged source three times produced three different hashes. Measured.
+    Keying a page on that would invalidate every page of the book on every
+    rebuild - a resumable run that throws away all its progress each time, which
+    is worse than the bug it was meant to catch.
+
+    So the page's own bytes *in the source* are hashed instead: its content
+    streams, the data of every image it draws, and its box and rotation. That
+    changes exactly when the page changes - a replaced plate, a new trim, a
+    re-scan at another angle - and not otherwise.
+    """
+    try:
+        import pymupdf  # noqa: PLC0415  (only a PDF book ever reaches here)
+    except ImportError:
+        return ""
+    try:
+        document = pymupdf.open(str(pdf_path))
+    except Exception:
+        return ""
+    try:
+        if not 1 <= page <= document.page_count:
+            return ""
+        sheet = document[page - 1]
+        parts = [f"{sheet.rect.width:.2f}x{sheet.rect.height:.2f}"
+                 f"@{getattr(sheet, 'rotation', 0) or 0}".encode("utf-8")]
+        for xref in sheet.get_contents():
+            parts.append(document.xref_stream(xref) or b"")
+        # Sorted by xref so the order is the file's, not the traversal's.
+        for image in sorted(sheet.get_images(full=True)):
+            try:
+                parts.append(document.extract_image(image[0])["image"])
+            except Exception:
+                # An image we cannot extract still took part in the page; a
+                # marker keeps it in the identity rather than silently out.
+                parts.append(b"unreadable-image")
+        return ir.sha256_bytes(b"\x1e".join(parts))
+    finally:
+        document.close()
+
 
 def reference_pdf(book: dict[str, Any], book_path: Path) -> Path | None:
     """The PDF this book was actually read from, or ``None`` for a non-PDF.
@@ -465,7 +535,7 @@ def build(
             unit for unit in chunking.translatable_units(book, job["block_ids"])
             if unit[1] != "footnote" or unit[0] in owned_notes
         ]
-        job["geometry"] = geometry(book, job["block_ids"], lookup)
+        job["geometry"] = geometry(book, job["block_ids"], lookup, job["page"])
         job["ocr"] = ocr_state(job["block_ids"], lookup)
         previous_tail, next_head = neighbour_context(book, jobs, index,
                                                      neighbour_chars)
@@ -518,7 +588,10 @@ def build(
 
     for job, units, fitted in plan:
         page = job["page"]
-        digest = source_digest(units)
+        digest = source_digest(
+            units,
+            page_pdf=(page_fingerprint(reference, page) if reference else ""),
+            setup=job.get("geometry"))
         if state.note_page_source(page, digest):
             manifest["invalidated"].append(page)
         # The worksheet is on disk, so the page has been cut out of the book.
@@ -812,148 +885,21 @@ def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
+#
+# The command line lives in `pagecli`; these two names stay here because the
+# stage dispatcher and every test reach for `pagerun.main`. Imported inside the
+# functions because `pagecli` imports this module.
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    sub = parser.add_subparsers(dest="action", required=True)
+    import pagecli  # noqa: PLC0415
 
-    p_build = sub.add_parser("build", help="one worksheet per source page")
-    p_build.add_argument("--book", required=True)
-    p_build.add_argument("--out", required=True, help="page worksheet directory")
-    p_build.add_argument("--glossary", default=None)
-    p_build.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
-                         help="worksheet characters one job may carry; a page "
-                              "over it is split into jobs that fit, never "
-                              "truncated")
-    p_build.add_argument("--neighbour-chars", type=int, default=NEIGHBOUR_CHARS,
-                         help="hard maximum context characters per side")
-
-    p_status = sub.add_parser("status", help="where every page stands")
-    p_status.add_argument("--pages", required=True)
-
-    p_next = sub.add_parser("next", help="the first page that is not accepted")
-    p_next.add_argument("--pages", required=True)
-
-    p_merge = sub.add_parser("merge", help="fold one page's answers into the book")
-    p_merge.add_argument("--book", required=True)
-    p_merge.add_argument("--pages", required=True)
-    p_merge.add_argument("--page", type=int, required=True)
-    p_merge.add_argument("--glossary", default=None)
-
-    p_preview = sub.add_parser(
-        "preview", help="lay this page out on its own, to be looked at")
-    p_preview.add_argument("--book", required=True)
-    p_preview.add_argument("--pages", required=True)
-    p_preview.add_argument("--page", type=int, required=True)
-    p_preview.add_argument("--assets", default=None,
-                           help="asset directory (default: <book dir>/assets)")
-    p_preview.add_argument("--out", default=None,
-                           help="where to write it (default: "
-                                "<work>/previews/page-NNNN.docx)")
-
-    p_review = sub.add_parser(
-        "review", help="file what a reviewer saw on the rendered page")
-    p_review.add_argument("--pages", required=True)
-    p_review.add_argument("--page", type=int, required=True)
-    p_review.add_argument(
-        "--answer", action="append", default=[], metavar="ID=yes|no",
-        help="one per question: " + ", ".join(sorted(page_review.QUESTIONS)))
-    p_review.add_argument("--note", default="",
-                          help="what was wrong, in the reviewer's own words")
-
-    p_accept = sub.add_parser(
-        "accept", help="finish a page whose gates have all actually passed")
-    p_accept.add_argument("--book", required=True)
-    p_accept.add_argument("--pages", required=True)
-    p_accept.add_argument("--page", type=int, required=True)
+    pagecli.add_arguments(parser)
 
 
 def main(argv: list[str] | None = None) -> int:
-    ir.use_utf8_stdio()
-    parser = argparse.ArgumentParser(prog="revayat-novel pages",
-                                     description=__doc__)
-    add_arguments(parser)
-    args = parser.parse_args(argv)
+    import pagecli  # noqa: PLC0415
 
-    if args.action == "build":
-        try:
-            manifest = build(
-                Path(args.book), Path(args.out),
-                glossary_path=Path(args.glossary) if args.glossary else None,
-                budget=args.budget,
-                neighbour_chars=args.neighbour_chars,
-            )
-        except (OverBudget, SourceCollision) as refusal:
-            print(json.dumps({
-                "ok": False,
-                "refused": ("over-budget" if isinstance(refusal, OverBudget)
-                            else "source-directory-in-use"),
-                "detail": str(refusal),
-            }, ensure_ascii=False, indent=1))
-            return 2
-        print(json.dumps({
-            "pages": manifest["pages"],
-            "jobs": len(manifest["chunks"]),
-            "units": sum(c["units"] for c in manifest["chunks"]),
-            "source_chars": sum(c["source_chars"] for c in manifest["chunks"]),
-            "split": manifest["split"],
-            "orphaned": manifest["orphaned"],
-            "invalidated": manifest["invalidated"],
-            "reference_pdf": manifest["reference_pdf"],
-            "dir": args.out,
-        }, ensure_ascii=False, indent=1))
-        return 0
-
-    if args.action == "status":
-        progress = status(Path(args.pages))
-        print(json.dumps({k: v for k, v in progress.items() if k != "pages"},
-                         ensure_ascii=False, indent=1))
-        return 0
-
-    if args.action == "merge":
-        report = merge_page(
-            Path(args.book), Path(args.pages), args.page,
-            glossary_path=Path(args.glossary) if args.glossary else None,
-        )
-        print(json.dumps(report, ensure_ascii=False, indent=1))
-        return 0 if report["ok"] else 1
-
-    if args.action == "preview":
-        # Imported here, not at the top: `preview` reaches back into this module
-        # for page ownership, so at module level the two would be a cycle.
-        import preview as page_preview  # noqa: PLC0415
-
-        work = Path(args.pages).parent
-        out = (Path(args.out) if args.out
-               else page_preview.preview_path(work, args.page))
-        made = page_preview.build(
-            Path(args.book), args.page, out,
-            assets=Path(args.assets) if args.assets else None)
-        print(json.dumps(made, ensure_ascii=False, indent=1))
-        return 0 if made["ok"] else 2
-
-    if args.action == "review":
-        try:
-            answers = dict(page_review.parse_answer(item) for item in args.answer)
-        except ValueError as wrong:
-            print(json.dumps({"ok": False, "refused": "bad-answer",
-                              "detail": str(wrong),
-                              "questions": page_review.QUESTIONS},
-                             ensure_ascii=False, indent=1))
-            return 2
-        filed = page_review.record(Path(args.pages).parent, args.page, answers,
-                                   note=args.note)
-        print(json.dumps(filed, ensure_ascii=False, indent=1))
-        return 0 if filed["ok"] else 2
-
-    if args.action == "accept":
-        outcome = accept(Path(args.book), Path(args.pages), args.page)
-        print(json.dumps(outcome, ensure_ascii=False, indent=1))
-        return 0 if outcome["ok"] else 2
-
-    upcoming = next_page(Path(args.pages))
-    print(json.dumps(upcoming or {"next": None, "detail": "every page accepted"},
-                     ensure_ascii=False, indent=1))
-    return 0
+    return pagecli.main(argv)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,9 @@ from pathlib import Path
 import pytest
 
 import bookir as ir
+import pagecheck
 import pagerun
+import preview
 import renderqa
 import review
 import runstate
@@ -1050,3 +1052,160 @@ def test_page_qa_is_unaffected_by_how_far_the_book_has_reflowed(tmp_path):
     first_page = renderqa.check(tmp_path, book_path, 1)
     assert first_page["ok"], first_page["findings"]
     assert first_page["sheets"] >= 1
+
+
+# --------------------------------------------------------------------------- #
+# A page's source is more than its prose
+# --------------------------------------------------------------------------- #
+
+def _mixed_pdf(path: Path) -> Path:
+    """Three pages, three shapes: portrait, landscape, and a wider trim.
+
+    A real book has these — a map, a plate, a differently trimmed front matter
+    leaf — and every one of them is a page the run has to lay out on its own
+    paper rather than on the book's average.
+    """
+    pymupdf = pytest.importorskip("pymupdf")
+    doc = pymupdf.open()
+    for width, height, text in ((396, 612, "The portrait page of ordinary prose."),
+                                (612, 396, "The landscape plate and its caption."),
+                                (468, 612, "A wider leaf, trimmed differently.")):
+        page = doc.new_page(width=width, height=height)
+        page.insert_text((60, 100), text, fontsize=11, fontname="helv")
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+def test_each_source_page_is_laid_out_on_its_own_paper(tmp_path):
+    """`book["page"]` is the dominant shape and the wrong paper for the rest.
+
+    A preview built from the dominant setup puts the landscape plate on a
+    portrait sheet, and then render QA reports the page it just mis-built.
+    """
+    pytest.importorskip("pymupdf")
+    from read_pdf import read_pdf
+
+    book = read_pdf(str(_mixed_pdf(tmp_path / "mixed.pdf")), tmp_path / "assets")
+    book_path = _save(book, tmp_path)
+    lookup = ir.blocks_by_id(book)
+    owners = {job["page"]: job for job in pagerun.owners(book)}
+
+    shapes = {page: (round(g["width_pt"]), round(g["height_pt"]))
+              for page, job in owners.items()
+              for g in [pagerun.geometry(book, job["block_ids"], lookup, page)]}
+
+    assert shapes[1] == (396, 612), shapes
+    assert shapes[2] == (612, 396), (
+        f"the landscape page came back as {shapes[2]} — it was given the "
+        f"book's dominant portrait geometry"
+    )
+    assert shapes[3] == (468, 612), shapes
+
+    # And the preview a reviewer actually looks at uses it.
+    only = preview.page_book(book, 2)
+    assert (round(only["page"]["width_pt"]), round(only["page"]["height_pt"])) \
+        == (612, 396)
+
+
+def test_a_new_illustration_invalidates_the_page_it_is_on(tmp_path):
+    """Prose unchanged, picture replaced: the accepted page must not survive.
+
+    This is the shape that made the gate worth widening. Every translatable
+    word is identical, so a text-only digest reports nothing — and the page
+    keeps an `accepted` state carrying a visual review of an image that is no
+    longer in the book.
+    """
+    pymupdf = pytest.importorskip("pymupdf")
+    from read_pdf import read_pdf
+
+    def paint(path: Path, colour: tuple[float, float, float]) -> Path:
+        doc = pymupdf.open()
+        page = doc.new_page(width=396, height=612)
+        page.insert_text((60, 100), "The prose that never changes at all.",
+                         fontsize=11, fontname="helv")
+        page.draw_rect(pymupdf.Rect(60, 200, 300, 400), color=colour, fill=colour)
+        doc.save(str(path))
+        doc.close()
+        return path
+
+    source = paint(tmp_path / "book.pdf", (1, 0, 0))
+    book_path = _save(read_pdf(str(source), tmp_path / "assets"), tmp_path)
+    pages = tmp_path / "pages"
+
+    assert pagerun.build(book_path, pages)["invalidated"] == []
+    assert pagerun.build(book_path, pages)["invalidated"] == [], (
+        "an unchanged book invalidated itself on rebuild — every page of every "
+        "run would be thrown away and re-translated"
+    )
+    _mark(tmp_path, 1, "accepted")
+
+    paint(source, (0, 0, 1))          # same words, same file, new picture
+    assert pagerun.build(book_path, pages)["invalidated"] == [1], (
+        "the picture changed and the page was not invalidated — an accepted "
+        "page still carries a review of an image the book no longer has"
+    )
+
+
+def test_a_page_fingerprint_is_reproducible(tmp_path):
+    """The property the whole invalidation rests on.
+
+    The obvious identity — the hash of the split one-page PDF — is not
+    reproducible: PyMuPDF stamps what it writes, and splitting one unchanged
+    source three times measured three different hashes. Keying a page on that
+    invalidates the entire book on every rebuild.
+    """
+    pymupdf = pytest.importorskip("pymupdf")
+
+    def make(path: Path, width: int = 396, colour=(1, 0, 0)) -> Path:
+        doc = pymupdf.open()
+        page = doc.new_page(width=width, height=612)
+        page.insert_text((60, 100), "Identical prose.", fontsize=11, fontname="helv")
+        page.draw_rect(pymupdf.Rect(60, 200, 300, 400), color=colour, fill=colour)
+        doc.save(str(path))
+        doc.close()
+        return path
+
+    same = pagerun.page_fingerprint(make(tmp_path / "a.pdf"), 1)
+    assert same, "no fingerprint at all"
+    assert pagerun.page_fingerprint(make(tmp_path / "b.pdf"), 1) == same, (
+        "two identical sources fingerprinted differently — every rebuild would "
+        "invalidate every page"
+    )
+    assert pagerun.page_fingerprint(make(tmp_path / "c.pdf", colour=(0, 0, 1)), 1)         != same, "a repainted plate did not change the fingerprint"
+    assert pagerun.page_fingerprint(make(tmp_path / "d.pdf", width=612), 1) != same,         "a different trim did not change the fingerprint"
+
+
+def test_the_documented_loop_previews_the_page_it_is_on_not_page_twelve(tmp_path):
+    """Run the loop on a page that is not the example, and follow the artefact.
+
+    The loop's example sets `P=12`. A `page-0012.docx` hard-coded beside `$P`
+    reads as consistent and sends every other page's QA at page 12's preview —
+    or at nothing, on a book with fewer pages. Only executing it on another page
+    catches that; a parser sees a valid command line either way.
+    """
+    pytest.importorskip("pymupdf")
+    book = _book([_prose(1, "First page"), _prose(2, "Second page")])
+    for block in book["blocks"]:
+        block["target"] = f"ترجمهٔ {block['id']} با طول کافی برای آزمون."
+    book_path = _save(book, tmp_path)
+    pages = tmp_path / "pages"
+    pagerun.build(book_path, pages)
+
+    written = renderqa.check(tmp_path, book_path, 2)
+    if not written.get("verified"):
+        pytest.skip(f"nothing here lays a document out: {written['unverified']}")
+
+    used = Path(written["preview"])
+    assert used.name == "page-0002.docx", (
+        f"page 2's QA consumed {used.name} — the preview belongs to another page"
+    )
+    assert used.exists()
+    assert written["counts"]["expected_blocks"] == 1, (
+        "page 2 owns one block; more means the preview carried page 1 as well"
+    )
+    # And the artefact it built is page 2's own, not a leftover.
+    assert "b00002" in pagecheck.document_text(used) or \
+        "ترجمهٔ b00002" in pagecheck.document_text(used), (
+            "the preview does not contain page 2's translation"
+        )
