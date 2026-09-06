@@ -174,6 +174,16 @@ Spine order is authoritative. Footnotes are recovered from
 note body pulled from the element the link points at and its leading `1.`
 stripped — Word numbers footnotes itself.
 
+An ordinary link's target travels on its block as `links`, the same field the
+DOCX reader fills, so one place in the builder rebuilds both. The spine is one
+book, so a link into another spine document is an *internal* link once the
+documents are concatenated: `c2.xhtml#later` becomes `#later`, and the anchor it
+points at is carried on the block that owns it. Only the anchors something
+actually links to are kept — a book is full of ids nothing points at. A link to
+a whole document with no fragment has nothing to point at once the file
+boundaries are gone; the words stay, the target does not, and
+`link-to-a-whole-document` in `book["source"]["epub_warnings"]` says so.
+
 DOCX input reads paragraphs, runs and styles through python-docx, and reads
 `word/footnotes.xml` and `word/endnotes.xml` directly because python-docx has
 no API for either. Section breaks travel as `book["sections"]`, each entry
