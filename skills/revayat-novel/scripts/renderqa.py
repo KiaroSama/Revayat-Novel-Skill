@@ -282,6 +282,12 @@ def check(
             "verified": False,
             "unverified": unverified,
             "attempts": attempts,
+            # Recorded even here, and especially here. A page whose *target*
+            # could not be laid out may still have had its source rendered, and
+            # a downstream gate reading this report has to be able to tell that
+            # apart from a page with no source at all — otherwise a missing
+            # converter is reported as a missing source page.
+            "source_evidence": renders.get("source", ""),
             "renders": renders,
             "detail": f"page {page} was not checked: {unverified}. It is "
                       f"unverified, not passed.",

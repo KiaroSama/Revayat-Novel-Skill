@@ -1363,9 +1363,12 @@ def test_render_qa_finds_the_source_page_without_being_told_where_it_is(
     assert source, (
         f"no source render was produced for the documented command: {written}")
     assert (tmp_path / source).exists(), f"{source} was named but not written"
-    assert written["source_evidence"] == source
-    assert written.get("renders", {}).get("target_sheets"), "no target sheets"
+    assert written.get("source_evidence") == source, (
+        "the source was rendered but the report did not name it; a gate reading "
+        "this cannot tell a missing converter from a missing source page")
     assert pages.name == "pages"
+    if written.get("verified"):
+        assert written["renders"].get("target_sheets"), "no target sheets"
 
 
 def test_a_source_page_that_went_missing_leaves_the_page_unverified(
@@ -1408,8 +1411,11 @@ def test_a_pdf_page_cannot_be_accepted_on_target_evidence_alone(
                           assets=tmp_path / "assets")
     if not built["ok"]:
         pytest.skip(f"no converter here: {built['detail']}")
-    target = renderqa.render_docx(tmp_path / "only-target.docx",
-                                  tmp_path / "renders" / "preview")
+    try:
+        target = renderqa.render_docx(tmp_path / "only-target.docx",
+                                      tmp_path / "renders" / "preview")
+    except renderqa.RenderError as error:
+        pytest.skip(f"nothing here can lay a document out: {error}")
 
     handed = renderqa.check(tmp_path, book_path, 2, target_pdf=target)
     assert handed.get("source_evidence"), (
