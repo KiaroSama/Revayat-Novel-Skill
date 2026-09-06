@@ -165,10 +165,16 @@ class Builder:
 
         # Book layout goes into the styles, not onto each paragraph, so the
         # whole document can be restyled from one place afterwards.
-        self.layout = layout.apply(
-            self.document, section, layout.Profile.from_options(self.options),
-            rtl=self.options.rtl,
-        )
+        profile = layout.Profile.from_options(self.options)
+        # The generated page number exists because the source had no foot of its
+        # own. A section that brought one keeps it — writing both would put two
+        # things where the author put one, and the author's may well be a page
+        # number already.
+        first = self.sections[0] if self.sections else {}
+        profile.page_numbers = profile.page_numbers and not first.get("footers")
+        self.layout = layout.apply(self.document, section, profile,
+                                   rtl=self.options.rtl)
+        self.running_heads(section, first)
         ooxml.request_field_update(self.document)
 
     @property
@@ -362,6 +368,97 @@ class Builder:
 
         ooxml.set_section_rtl(section, self.options.rtl)
         layout.apply_section(section, layout.Profile.from_options(self.options))
+        self.running_heads(section, record)
+
+    # -- running heads and feet --------------------------------------------- #
+
+    def running_heads(self, section, record: dict[str, Any]) -> None:
+        """Put back the running heads and feet this section defined, in Persian.
+
+        Only the slots the source defined: one it inherited is left linked, so
+        the Persian edition inherits it from the same place rather than
+        repeating it. Nothing here can put a running head on a page the source
+        left bare — the reader carried a slot only where Word was showing it.
+        """
+        # Measured off the section as built, so a landscape plate's running head
+        # spreads across the landscape page rather than across the prose pages'.
+        sizes = [section.page_width, section.left_margin, section.right_margin]
+        width = (max(72.0, sizes[0].pt - sizes[1].pt - sizes[2].pt)
+                 if all(sizes) else self.text_width_pt)
+
+        # Set rather than merely turned on, and only for a book that carries the
+        # answer: `add_section` clones the section before it, so a leftover
+        # `w:titlePg` would put the first section's opening head on the first
+        # page of every section after it. A book without sections leaves the
+        # switch alone, because a --template may have set it deliberately.
+        if "different_first_page" in record:
+            section.different_first_page_header_footer = bool(
+                record["different_first_page"])
+
+        for part, key in ir.RUNNING_PARTS:
+            defined = record.get(key) or {}
+            for slot in ir.RUNNING_SLOTS:
+                body = defined.get(slot)
+                if not body:
+                    continue
+                container = getattr(
+                    section, ir.RUNNING_ACCESSOR[slot].format(part=part), None)
+                if container is None:
+                    continue
+                container.is_linked_to_previous = False
+                if slot == "even":
+                    self.document.settings.odd_and_even_pages_header_footer = True
+                self._running_body(container, body, part, width)
+
+    def _running_body(self, container, body: dict[str, Any], part: str,
+                      width_pt: float) -> None:
+        """One header or footer, written over the empty one Word just made.
+
+        The property order is the schema's, not a preference: ``w:tabs`` has to
+        precede the ``w:bidi`` that :func:`ooxml.set_paragraph_rtl` appends, and
+        ``w:jc`` has to follow it, so direction is set before either.
+        """
+        style = "Header" if part == "header" else "Footer"
+        style = style if _has_style(self.document, style) else "Normal"
+        existing = list(container.paragraphs)
+
+        for index, line in enumerate(body.get("paragraphs") or []):
+            paragraph = (existing[index] if index < len(existing)
+                         else container.add_paragraph())
+            for run in list(paragraph.runs):
+                run._r.getparent().remove(run._r)
+
+            paragraph.style = style
+            ooxml.set_paragraph_rtl(paragraph, self.options.rtl)
+            pieces = line.get("pieces") or []
+            if any(piece.get("tab") for piece in pieces):
+                ooxml.set_running_tab_stops(paragraph, width_pt)
+            for piece in pieces:
+                if piece.get("tab"):
+                    ooxml.add_tab(paragraph, rtl=self.options.rtl)
+                elif piece.get("field"):
+                    ooxml.add_field(paragraph, piece["field"], rtl=self.options.rtl)
+                else:
+                    self._running_text(paragraph, piece, part)
+            if line.get("align"):
+                ooxml.set_paragraph_alignment(paragraph, line["align"])
+
+    def _running_text(self, paragraph, piece: dict[str, Any], part: str) -> None:
+        """The author's own words, or nothing at all.
+
+        Never the source's. A running head reading the English title across a
+        Persian page is worse than no running head — that judgement is why these
+        used to be dropped wholesale, and it still decides what happens when one
+        of them comes back untranslated.
+        """
+        target = (piece.get("target") or "").strip()
+        if not target:
+            self.warnings.append(
+                f"running {part} {piece['id']} is untranslated and was left "
+                f"out: {ir.plain_text(piece.get('text') or '')[:60]!r}"
+            )
+            return
+        self.write_markup(paragraph, target)
 
     def body(self) -> None:
         first_heading = True
