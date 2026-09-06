@@ -12,6 +12,7 @@ Schema (``book.json``)::
       "source": {"path", "sha256", "format", "pages"},
       "meta":   {"title", "author", "lang_source", "lang_target", "title_target"},
       "page":   {"width_pt", "height_pt", "margin_*_pt"},
+      "sections": [ ... ],   # DOCX only; "page" is section 0's geometry
       "blocks": [ ... ],
       "footnotes": [ ... ],
       "stats":  {...}

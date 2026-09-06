@@ -263,7 +263,17 @@ def test_a_docx_goes_through_the_whole_pipeline(imported, tmp_path):
     destination = tmp_path / "from-docx.fa.docx"
     report = Builder(book, assets, options).build(destination)
 
-    assert report["warning_count"] == 0, report["warnings"]
+    # The only thing left to warn about is a link the builder could not put
+    # back, and the stub above translates the linked phrase away exactly as a
+    # real translator would. Derived from the book rather than stated, so a
+    # second unrelated warning still fails this.
+    unplaceable = [link for block in book["blocks"]
+                   for link in (block.get("links") or [])
+                   if link["text"] not in (block.get("target") or "")]
+    assert report["warning_count"] == len(unplaceable), report["warnings"]
+    for link in unplaceable:
+        assert any(link["text"] in w and link["href"] in w
+                   for w in report["warnings"]), report["warnings"]
     assert report["footnotes"] == 1
     assert report["headings"] == 2
 

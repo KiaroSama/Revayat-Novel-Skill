@@ -7,8 +7,9 @@ throw geometry away and then try to guess it back.
 
 What the reader gets: real ``Heading N`` styles with bookmarks, a TOC field
 whose entries are clickable, Word-native footnotes at the foot of the page,
-pictures at their original size and aspect, right-to-left paragraphs with Latin
-names left-to-right inside them, and selectable, editable Persian text.
+pictures at their original size and aspect, the source's own section breaks and
+page geometry, right-to-left paragraphs with Latin names left-to-right inside
+them, and selectable, editable Persian text.
 
 The honest limit: Word reflows. A Persian paragraph is rarely the same length as
 its English original, so page-for-page identity with the source PDF is not
@@ -22,11 +23,12 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
 
 from docx import Document
-from docx.enum.section import WD_SECTION_START
+from docx.enum.section import WD_ORIENT, WD_SECTION_START
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.shared import Pt
 
@@ -46,6 +48,33 @@ _STYLE_BY_TYPE = {
     "caption": "Caption",
     "verse": "Normal",
 }
+
+
+def _cut_links(text: str, pending: dict[str, str]) -> list[tuple[str, str | None]]:
+    """Split ``text`` into ``(fragment, href_or_None)`` at each surviving phrase.
+
+    A phrase is consumed the first time it is found, so a link is placed once
+    and ``pending`` is left holding exactly the links that could not be placed.
+    """
+    if not pending:
+        return [(text, None)]
+
+    found = sorted((at, at + len(display), display)
+                   for display in pending
+                   if (at := text.find(display)) >= 0)
+
+    pieces: list[tuple[str, str | None]] = []
+    cursor = 0
+    for start, end, display in found:
+        if start < cursor:      # two phrases overlap; the earlier one wins
+            continue
+        if start > cursor:
+            pieces.append((text[cursor:start], None))
+        pieces.append((text[start:end], pending.pop(display)))
+        cursor = end
+    if cursor < len(text):
+        pieces.append((text[cursor:], None))
+    return pieces
 
 
 def split_by_script(text: str) -> list[tuple[str, bool]]:
@@ -90,6 +119,16 @@ class Builder:
         self.used_notes: set[str] = set()
         self.warnings: list[str] = []
         self.toc_entries: list[tuple[str, str, int]] = []
+        self.sections = book.get("sections") or []
+        # Sections after the first, keyed by the block each one opens at. The
+        # first needs no break: it is the document python-docx starts with.
+        self.section_at = {record["start_block"]: record
+                           for record in self.sections[1:]
+                           if record.get("start_block")}
+        # Every in-document anchor the book can actually land on. A link to one
+        # that was not carried is a dead link, and the package gate refuses it.
+        self.anchors = {name for block in book.get("blocks", [])
+                        for name in (block.get("bookmarks") or ())}
 
     # -- document furniture ------------------------------------------------- #
 
@@ -102,6 +141,11 @@ class Builder:
         section.bottom_margin = Pt(page["margin_bottom_pt"])
         section.left_margin = Pt(page["margin_inner_pt"])
         section.right_margin = Pt(page["margin_outer_pt"])
+        # The size and margins still come from `book["page"]`, which is the
+        # first section's geometry and the knob everything downstream reads.
+        # Orientation has nowhere else to live, so it comes from the record.
+        if self.sections:
+            _set_orientation(section, self.sections[0])
         ooxml.set_section_rtl(section, self.options.rtl)
 
         ooxml.set_document_defaults(
@@ -144,8 +188,10 @@ class Builder:
             paragraph.alignment = align
         return paragraph
 
-    def write_markup(self, paragraph, markup: str) -> None:
+    def write_markup(self, paragraph, markup: str,
+                     links: list[dict[str, str]] | None = None) -> None:
         """Emit one marked-up string as correctly-directioned Word runs."""
+        pending = self._placeable_links(markup, links)
         for span in ir.parse_markup(markup):
             note_id = span.get("footnote")
             if note_id:
@@ -154,8 +200,65 @@ class Builder:
             if span["verbatim"]:
                 self._run(paragraph, span["text"], span, latin=True)
                 continue
-            for chunk, is_latin in split_by_script(span["text"]):
-                self._run(paragraph, chunk, span, latin=is_latin)
+            for fragment, href in _cut_links(span["text"], pending):
+                first = len(paragraph._p)
+                for chunk, is_latin in split_by_script(fragment):
+                    self._run(paragraph, chunk, span, latin=is_latin)
+                if href:
+                    ooxml.hyperlink_from(paragraph, first, href)
+
+        # Whatever is left was findable in the block's prose but not inside any
+        # one span of it, so the phrase straddles an emphasis run or a footnote
+        # marker and there is no single stretch of text to put the link on.
+        for display, href in pending.items():
+            self.warnings.append(
+                f"link {display!r} -> {href} left as plain text: the phrase is "
+                f"split across emphasis or a footnote marker"
+            )
+
+    def _placeable_links(self, markup: str,
+                         links: list[dict[str, str]] | None) -> dict[str, str]:
+        """The links that can be put back, and a warning naming each that cannot.
+
+        A translator is never shown a URL, so a link can only be re-attached
+        where its display phrase survived translation *word for word* — a name,
+        a title, a number, an address written out as text. Ordinary prose does
+        not survive that way, and is not supposed to: the words a link sat on
+        stop existing the moment the sentence becomes Persian. So the hit rate
+        here is low by design, and every miss is named rather than counted.
+        """
+        if not links:
+            return {}
+        prose = ir.plain_text(markup)
+        shared = Counter((link.get("text") or "").strip() for link in links)
+        placeable: dict[str, str] = {}
+
+        for link in links:
+            display = (link.get("text") or "").strip()
+            href = (link.get("href") or "").strip()
+            occurrences = prose.count(display) if display else 0
+            if not display or not href:
+                reason = "the link has no display text or no target"
+            elif shared[display] > 1:
+                reason = "two links carry these same words and nothing tells them apart"
+            elif occurrences == 0:
+                reason = "the translation does not contain the phrase"
+            elif occurrences > 1:
+                reason = "the phrase appears more than once in the translation"
+            elif href.startswith("#") and href[1:] not in self.anchors:
+                reason = "the anchor it points at was not carried into the book"
+            else:
+                placeable[display] = href
+                continue
+            self.warnings.append(
+                f"link {display!r} -> {href} left as plain text: {reason}"
+            )
+        return placeable
+
+    def _place_bookmarks(self, paragraph, block: dict[str, Any]) -> None:
+        """Re-open the source's own anchors, so a preserved link lands somewhere."""
+        for name in block.get("bookmarks") or ():
+            self.bookmarks.wrap(paragraph, name)
 
     def _run(self, paragraph, text: str, span: dict[str, Any], *, latin: bool):
         if not text:
@@ -230,6 +333,36 @@ class Builder:
             text = ir.plain_text(block.get("target") or block.get("text") or "")
             self.toc_entries.append((anchor, text.strip(), level))
 
+    def start_section(self, record: dict[str, Any]) -> None:
+        """Open a Word section here, so the source's own page setup resumes.
+
+        The layout profile is re-applied rather than copied from the source:
+        gutter, mirrored margins and header/footer distances are house style
+        set from the command line, exactly as they are for the first section,
+        and a book whose sections disagreed about them would otherwise change
+        binding halfway through. The record keeps the source's values either
+        way, so nothing is lost by not using them here.
+        """
+        try:
+            start = WD_SECTION_START.from_xml(record.get("start_type") or "nextPage")
+        except ValueError:      # a hand-edited book.json; a new page is the safe read
+            start = WD_SECTION_START.NEW_PAGE
+        section = self.document.add_section(start)
+
+        for field, attribute in (("width_pt", "page_width"),
+                                 ("height_pt", "page_height"),
+                                 ("margin_top_pt", "top_margin"),
+                                 ("margin_bottom_pt", "bottom_margin"),
+                                 ("margin_inner_pt", "left_margin"),
+                                 ("margin_outer_pt", "right_margin")):
+            value = record.get(field)
+            if value:
+                setattr(section, attribute, Pt(float(value)))
+        _set_orientation(section, record)
+
+        ooxml.set_section_rtl(section, self.options.rtl)
+        layout.apply_section(section, layout.Profile.from_options(self.options))
+
     def body(self) -> None:
         first_heading = True
         blocks = self.book.get("blocks", [])
@@ -237,6 +370,12 @@ class Builder:
         while index < len(blocks):
             block = blocks[index]
             kind = block["type"]
+
+            # Before anything is written for this block: a section break sits
+            # in front of the block that opens the section, not after it.
+            record = self.section_at.get(block["id"])
+            if record is not None:
+                self.start_section(record)
 
             # A table arrives as a run of consecutive blocks carrying the same
             # `table` id, each tagged with its row and cell. Keeping them as
@@ -276,10 +415,11 @@ class Builder:
         ooxml.keep_with_next(paragraph)
         anchor = block.get("_anchor")
         text = self._text_of(block)
-        self.write_markup(paragraph, text)
+        self.write_markup(paragraph, text, block.get("links"))
         self._apply_source_size(paragraph, block)
         if anchor:
             self.bookmarks.wrap(paragraph, anchor, ir.plain_text(text))
+        self._place_bookmarks(paragraph, block)
 
     def _apply_source_size(self, paragraph, block: dict[str, Any]) -> None:
         """Reproduce the heading's size from the source book, when asked.
@@ -345,7 +485,9 @@ class Builder:
 
                 paragraph = cell.paragraphs[0]
                 ooxml.set_paragraph_rtl(paragraph, self.options.rtl)
-                self.write_markup(paragraph, self._text_of(block))
+                self.write_markup(paragraph, self._text_of(block),
+                                  block.get("links"))
+                self._place_bookmarks(paragraph, block)
 
         for block in stray:
             self._text_block(block)
@@ -369,7 +511,8 @@ class Builder:
             align = WD_ALIGN_PARAGRAPH.CENTER
 
         paragraph = self.paragraph(style, align=align)
-        self.write_markup(paragraph, text)
+        self.write_markup(paragraph, text, block.get("links"))
+        self._place_bookmarks(paragraph, block)
 
     def _text_of(self, block: dict[str, Any]) -> str:
         target = (block.get("target") or "").strip()
@@ -461,6 +604,18 @@ class Builder:
             "warnings": self.warnings[:40],
             "warning_count": len(self.warnings),
         }
+
+
+def _set_orientation(section, record: dict[str, Any]) -> None:
+    """``w:orient`` for a section, after its size has been set.
+
+    python-docx does not swap the page dimensions when the orientation is set,
+    which is what makes setting both safe: the width and height already say
+    which way round the page is, and this says which way the printer is told.
+    """
+    section.orientation = (WD_ORIENT.LANDSCAPE
+                           if record.get("orientation") == "landscape"
+                           else WD_ORIENT.PORTRAIT)
 
 
 def _has_style(document, name: str) -> bool:
