@@ -98,17 +98,35 @@ where you decide what each character is called in Persian.
 
 ```bash
 S=skills/revayat-novel/scripts
+# $PY is the interpreter you have: python3 on macOS/Linux, python or py -3 on
+# Windows, where python3 usually does not exist.
 
-python $S/revayat-novel.py extract book.pdf --out work/
-python $S/revayat-novel.py glossary scan --book work/book.json --out work/glossary.json
+$PY $S/revayat-novel.py extract book.pdf --out work/
+$PY $S/revayat-novel.py glossary scan --book work/book.json --out work/glossary.json
 #   … fill in the Persian names in work/glossary.json …
-python $S/revayat-novel.py chunk build --book work/book.json --out work/chunks --glossary work/glossary.json
-#   … translate work/chunks/chunkNNNN.md -> out_chunkNNNN.md …
-python $S/revayat-novel.py merge  --book work/book.json --chunks work/chunks
-python $S/revayat-novel.py falint fix --book work/book.json
-python $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
-python $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
-python $S/revayat-novel.py qa     docx --file out/book.fa.docx --book work/book.json
+
+# A PDF is cut by page — one job per source page, so each one can be checked
+# against the page it came from. EPUB, DOCX and plain text have no pages, and
+# take `chunk build --out work/chunks` instead.
+$PY $S/revayat-novel.py pages build --book work/book.json --out work/pages --glossary work/glossary.json
+
+# then, per page: translate work/pages/pageNNNN.md -> out_pageNNNN.md, and
+$PY $S/revayat-novel.py pages     merge   --book work/book.json --pages work/pages --page 1 --glossary work/glossary.json
+$PY $S/revayat-novel.py pages     preview --book work/book.json --pages work/pages --page 1
+$PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1 --docx work/previews/page-0001.docx
+#   … look at renders/source/page-0001.png beside renders/target/page-0001.png …
+$PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
+$PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
+
+$PY $S/revayat-novel.py falint fix   --book work/book.json
+$PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
+$PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
+
+# Two final gates, and the file is not ready until both pass: the package, and
+# the finished book rendered and looked at.
+$PY $S/revayat-novel.py qa     docx  --file out/book.fa.docx --book work/book.json
+$PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
+$PY $S/revayat-novel.py doc-qa review --work work --answer …
 ```
 
 ## How it works
