@@ -321,3 +321,35 @@ def test_the_final_review_loop_documents_the_second_check(skill_text):
         f"review`; the check has to run again *after* the review to consume it"
     )
     assert "again" in step_nine, "the second check is not called out as one"
+
+
+#: Every file that shows the whole run as a copyable command list. The READMEs
+#: are not "just documentation": they are the first thing a reader runs, and
+#: they drifted from SKILL.md on exactly the two points above — they still
+#: previewed a page by name and still stopped one `doc-qa check` short.
+WALKTHROUGHS = [SKILL.parents[2] / "README.md", SKILL.parents[2] / "README.fa.md"]
+
+
+@pytest.mark.parametrize("path", WALKTHROUGHS, ids=lambda p: p.name)
+def test_the_readme_walkthrough_agrees_with_the_skill(path: Path):
+    """A reader who follows the README must not end up somewhere else.
+
+    Both rules guarded above for SKILL.md, applied to the copyable walkthrough:
+    no command hands render QA a preview by filename, and the final review ends
+    on a `check` rather than on the `review` that leaves the book unverified.
+    """
+    text = path.read_text(encoding="utf-8")
+    commands = [line.strip() for line in text.splitlines()
+                if "revayat-novel.py" in line]
+
+    named = [line for line in commands if re.search(r"page-\d{4}\.(docx|pdf)", line)]
+    assert not named, (
+        f"{path.name} hands a page file by name; render-qa builds its own "
+        f"preview:\n  " + "\n  ".join(named))
+
+    checks = sum("doc-qa check" in line for line in commands)
+    reviews = sum("doc-qa review" in line for line in commands)
+    assert reviews >= 1, f"{path.name} never shows the final review"
+    assert checks >= reviews + 1, (
+        f"{path.name} shows {checks} `doc-qa check` and {reviews} `doc-qa "
+        f"review`; without the second check the book stays unverified")
