@@ -34,6 +34,13 @@ that with a SHA-256 recorded at extraction time.
 Physical geometry comes from `page.get_image_rects`, so a 4.2 cm illustration
 is placed at 4.2 cm rather than stretched to the text width.
 
+**Page geometry is a census, not one number.** `book["page"]` reports the
+dominant trim, and `book["source"]["page_geometry"]["pages"]` names every page
+that differs from it — a landscape plate, a rotated scan, a differently trimmed
+insert — keyed by page number, complete rather than sampled. The page route
+overlays that map, so an exceptional page is previewed and checked on its own
+paper instead of against the book's usual shape.
+
 ## When OCRmyPDF is not installed
 
 The error names the fix:
