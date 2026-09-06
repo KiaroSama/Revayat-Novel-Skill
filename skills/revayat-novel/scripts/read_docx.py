@@ -4,6 +4,10 @@ python-docx exposes paragraphs, runs and styles, but has no API for footnotes
 (verified against python-docx 1.2.0), so ``word/footnotes.xml`` is read
 straight off the package. Inline pictures are pulled from their relationship
 so the original bytes and the author's ``wp:extent`` both survive.
+
+Section breaks travel as ``book["sections"]``, each entry naming the block it
+opens at. ``book["page"]`` still reports the first section's geometry, exactly
+as it did when that was the only geometry the reader kept.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from docx import Document
+from docx.enum.section import WD_ORIENT
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml.ns import qn
 from docx.table import Table
@@ -136,6 +141,59 @@ def hyperlinks(paragraph: Paragraph) -> list[dict[str, str]]:
 def has_page_break(run: Run) -> bool:
     return any(node.get(qn("w:type")) == "page"
                for node in run._r.findall(qn("w:br")))
+
+
+def _pt(length) -> float | None:
+    """Points, rounded like the rest of the page setup; ``None`` when unset."""
+    return None if length is None else round(length.pt, 2)
+
+
+def section_geometry(section) -> dict[str, Any]:
+    """One ``w:sectPr`` as page setup, in the field names ``book["page"]`` uses.
+
+    The names match deliberately: the first section *is* ``book["page"]``, so
+    everything that already reads that key keeps working while the rest of the
+    sections travel beside it in the same shape.
+
+    ``start_type`` is kept as the raw XML token rather than an enum member so
+    the value survives a JSON round trip and goes back into the built document
+    unchanged.
+    """
+    start = section._sectPr.find(qn("w:type"))
+    token = start.get(qn("w:val")) if start is not None else None
+    return {
+        "start_type": token or "nextPage",   # Word's default when w:type is absent
+        "orientation": ("landscape" if section.orientation == WD_ORIENT.LANDSCAPE
+                        else "portrait"),
+        "width_pt": _pt(section.page_width),
+        "height_pt": _pt(section.page_height),
+        "margin_top_pt": _pt(section.top_margin),
+        "margin_bottom_pt": _pt(section.bottom_margin),
+        "margin_inner_pt": _pt(section.left_margin),
+        "margin_outer_pt": _pt(section.right_margin),
+        "gutter_pt": _pt(section.gutter),
+        "header_distance_pt": _pt(section.header_distance),
+        "footer_distance_pt": _pt(section.footer_distance),
+    }
+
+
+def ends_section(paragraph: Paragraph) -> bool:
+    """True when this paragraph carries the ``w:sectPr`` that closes a section.
+
+    A section's properties sit at its *end*, not its start: on the last
+    paragraph of the section for all but the last one, and on ``w:body`` for
+    that. So the block after this paragraph is the first of the next section.
+    """
+    properties = paragraph._p.find(qn("w:pPr"))
+    return properties is not None and properties.find(qn("w:sectPr")) is not None
+
+
+def _column_count(section) -> int:
+    columns = section._sectPr.find(qn("w:cols"))
+    try:
+        return max(1, int(columns.get(qn("w:num"))))
+    except (AttributeError, TypeError, ValueError):
+        return 1
 
 
 def _ilvl(element) -> int | None:
@@ -317,6 +375,16 @@ def read_docx(
     used_notes: set[str] = set()
     counter = 0
 
+    # Only the bookmarks an in-document link actually points at are carried.
+    # A Word file is full of `_GoBack` and `_Toc…` names nothing refers to, and
+    # every one of them would become a bookmark in the Persian edition for no
+    # reader's benefit — while an anchor whose destination was dropped is a
+    # dead link the package gate rightly refuses.
+    anchored = {node.get(qn("w:anchor"))
+                for node in document.element.body.iter(qn("w:hyperlink"))
+                if node.get(qn("w:anchor"))}
+    placed_anchors: set[str] = set()
+
     def add(block_type: str, **fields: Any) -> dict[str, Any]:
         nonlocal counter
         counter += 1
@@ -326,7 +394,27 @@ def read_docx(
 
     warnings: list[dict[str, Any]] = []
 
+    def keep_anchors(paragraph, first: int) -> None:
+        """File the paragraph's linked-to bookmarks on the block it became.
+
+        On the *first* block only. A paragraph split by a picture or a page
+        break becomes several blocks, and repeating the name on each one would
+        open the same bookmark two or three times — which Word resolves by
+        sending every link to the first, silently.
+        """
+        names = [name for node in paragraph._p.iter(qn("w:bookmarkStart"))
+                 if (name := node.get(qn("w:name"))) in anchored
+                 and name not in placed_anchors]
+        if not names:
+            return
+        block = next((b for b in blocks[first:] if b["type"] in ir.TEXT_TYPES), None)
+        if block is None:
+            return
+        block["bookmarks"] = names
+        placed_anchors.update(names)
+
     def read_paragraph(paragraph, **extra: Any) -> None:
+        first_block = len(blocks)
         spans: list[tuple[str, bool, bool]] = []
         pending_notes: list[str] = []
         # A link belongs to the prose of this paragraph, never to a picture
@@ -373,6 +461,7 @@ def read_docx(
 
         _flush(spans, pending_notes, paragraph, add, footnotes, used_notes,
                notes, prose)
+        keep_anchors(paragraph, first_block)
 
     def read_table(table, table_id: str, depth: int = 0) -> int:
         """One table's cells, each read exactly once. Returns the row count.
@@ -416,21 +505,47 @@ def read_docx(
     # paragraphs, so every table in the book — every cell of it — was dropped
     # without a word: not flagged, not empty, simply absent from the IR and
     # therefore from the translation and from the finished file.
+    #
+    # `section_starts` is where each section begins, as a count of blocks read
+    # so far: section 0 opens the book, and every later one opens right after
+    # the paragraph carrying the previous section's `w:sectPr`.
+    section_starts = [0]
     for index, item in enumerate(document.iter_inner_content()):
         if isinstance(item, Paragraph):
             read_paragraph(item)
+            if ends_section(item):
+                section_starts.append(len(blocks))
         elif isinstance(item, Table):
             read_table(item, f"t{index:04d}")
 
     book["blocks"] = blocks
     book["footnotes"] = footnotes
+
+    def start_block(number: int) -> str | None:
+        """The id of the first block of section ``number``.
+
+        ``None`` when the section holds no blocks at all — a document that ends
+        with a section break has a final section made of nothing, and there is
+        nothing in the built file for the break to sit before.
+        """
+        if number >= len(section_starts):
+            return None
+        at = section_starts[number]
+        return blocks[at]["id"] if at < len(blocks) else None
+
+    book["sections"] = [
+        {"index": number, "start_block": start_block(number),
+         **section_geometry(section)}
+        for number, section in enumerate(document.sections)
+    ]
     linked = sum(len(block.get("links") or []) for block in blocks)
     if linked:
         warnings.append({
             "kind": "hyperlinks-kept-as-metadata", "count": linked,
             "detail": "link text is in the prose and each target is on its "
-                      "block as `links`; the built document sets the words, "
-                      "not a clickable link",
+                      "block as `links`; the builder puts a live link back "
+                      "only where the translation kept the display phrase "
+                      "word for word, and names every one it could not",
         })
 
     running = sum(1 for relationship in document.part.rels.values()
@@ -442,11 +557,21 @@ def read_docx(
                       "built document generates its own from --page-numbers",
         })
 
-    if len(document.sections) > 1:
-        warnings.append({
-            "kind": "sections-collapsed", "count": len(document.sections),
-            "detail": "only the first section's page geometry is carried over",
-        })
+    # `sections-collapsed` used to be reported here. It said the truth at the
+    # time — only the first section's geometry was kept — and became a lie the
+    # moment `book["sections"]` started carrying every one of them. What is
+    # still genuinely dropped is named on its own below.
+    for record, section in zip(book["sections"], document.sections):
+        columns = _column_count(section)
+        if columns > 1:
+            warnings.append({
+                "kind": "section-columns-dropped", "section": record["index"],
+                "count": columns,
+                "detail": f"section {record['index']} is set in {columns} "
+                          f"columns; page size, orientation and margins are "
+                          f"carried but the Persian edition is set in one",
+            })
+
     if warnings:
         book["source"]["docx_warnings"] = warnings
     return book

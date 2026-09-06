@@ -23,6 +23,7 @@ from docx.oxml.ns import nsmap, qn
 
 W = nsmap["w"]
 _WNS = f'xmlns:w="{W}"'
+_RNS = f'xmlns:r="{nsmap["r"]}"'
 
 FOOTNOTE_TEXT_STYLE = "FootnoteText"
 FOOTNOTE_REF_STYLE = "FootnoteReference"
@@ -208,6 +209,42 @@ def add_internal_link(paragraph, anchor: str, text: str, *, rtl: bool = True,
         f'<w:t xml:space="preserve">{xml_text(text)}</w:t></w:r>'
         f"</w:hyperlink>"
     ))
+
+
+def hyperlink_from(paragraph, first: int, href: str, *,
+                   style: str = "Hyperlink") -> None:
+    """Move the runs added after position ``first`` into a real ``w:hyperlink``.
+
+    python-docx 1.2.0 can read a hyperlink but not create one. Writing the runs
+    a second time inside the element would mean repeating every direction, font
+    and emphasis decision the caller has already made — and a Persian link is
+    exactly the case where that matters, because the runs inside ``w:hyperlink``
+    need the same ``w:rtl`` treatment as the prose around them. So the caller
+    writes them normally and this moves them.
+
+    ``href`` beginning with ``#`` is an in-document anchor and needs no
+    relationship; anything else is external and gets one. The target is written
+    through unchanged.
+    """
+    moving = list(paragraph._p)[first:]
+    if not moving:
+        return      # an empty w:hyperlink is a link with nothing to click
+
+    if href.startswith("#"):
+        link = el("hyperlink", anchor=href[1:], history="1")
+    else:
+        rel_id = paragraph.part.relate_to(href, RT.HYPERLINK, is_external=True)
+        link = parse_xml(f'<w:hyperlink {_WNS} {_RNS} r:id="{rel_id}" '
+                         f'w:history="1"/>')
+
+    for node in moving:
+        paragraph._p.remove(node)
+        if style and node.tag == qn("w:r"):
+            # w:rStyle is the first child of w:rPr; the schema fixes that order,
+            # and Word rejects the part outright when it is wrong.
+            node.get_or_add_rPr().insert(0, el("rStyle", val=style))
+        link.append(node)
+    paragraph._p.append(link)
 
 
 def add_toc_field(paragraph, entries: Iterable[tuple[str, str, int]], *,
