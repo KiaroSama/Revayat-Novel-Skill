@@ -34,15 +34,28 @@ tests/              pytest; fixtures are generated, never committed
 | --- | --- |
 | `bookir.py` | Book IR schema, inline markup, atomic UTF-8 IO |
 | `read_pdf.py` | PDF via PyMuPDF: text, geometry, original image bytes |
-| `read_epub.py` | EPUB via zipfile + BeautifulSoup, including footnotes |
-| `read_docx.py` | DOCX via python-docx, plus raw XML for footnotes |
+| `read_epub.py` | EPUB via zipfile + BeautifulSoup: footnotes and link targets |
+| `read_docx.py` | DOCX via python-docx, plus raw XML for what it cannot reach: footnotes *and* endnotes, hyperlink targets, section breaks, running heads |
 | `extract.py` | format detection, OCR routing, MinerU/Markdown adapters |
+| `rasters.py` | cropping an illustration out of a scan's own pixels |
+| `ocr_sidecar.py` | per-word OCR confidence and boxes |
+| `scan_clean.py` | removing a colour watermark from a scan |
 | `glossary.py` | name candidates, term tables, drift checking |
-| `chunk.py` | chapter-aware worksheets; owns the `@@` header format |
+| `chunk.py` | worksheets by character budget; owns the `@@` header format |
+| `pagerun.py` | the page lifecycle: one job per source page, and the gates a page must clear |
+| `segments.py` | one unit longer than the whole budget, cut reversibly |
 | `merge.py` | worksheets back into the IR, with named failures |
 | `falint.py` | Persian typography lint and fix |
 | `qa.py` | deterministic gates over the IR and over the built package |
-| `ooxml.py` | footnotes, bookmarks, TOC field, bidi — what python-docx lacks |
+| `preview.py` | one source page laid out alone, with the production builder |
+| `pagecheck.py` | the measurements both render scopes share |
+| `renderqa.py` | one source page against its source page |
+| `docqa.py` | the finished book: per-page geometry plus global completeness |
+| `review.py` | the reviewer's five answers, per page or for the document |
+| `wordrender.py` | Word on Windows, LibreOffice elsewhere |
+| `runstate.py` | `pending → extracted → … → accepted`, per page |
+| `layout.py` | book layout into the styles, not onto each paragraph |
+| `ooxml.py` | footnotes, bookmarks, TOC field, bidi, hyperlinks — what python-docx lacks |
 | `build_docx.py` | IR to Word |
 | `revayat-novel.py` | CLI dispatcher and `doctor` |
 

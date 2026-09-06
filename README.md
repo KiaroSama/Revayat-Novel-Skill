@@ -174,8 +174,10 @@ the source PDF. Any tool promising both is producing uneditable text boxes.
 
 What *is* exact: image bytes, physical size and aspect; where each picture sits
 in the text; heading hierarchy and chapter breaks; bold and italic; footnote
-placement and numbering; chapter links; and selectable, searchable, editable
-Persian.
+placement and numbering — and endnotes, folded in as footnotes; the source's
+section breaks and their page geometry; hyperlink targets, rebuilt as live links
+wherever the translation kept the display phrase; the running heads, carried
+across in Persian; chapter links; and selectable, searchable, editable Persian.
 
 Two more limits worth knowing up front:
 
