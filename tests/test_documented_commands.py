@@ -177,6 +177,17 @@ def parse_only(stage: str, tokens: list[str]) -> None:
         ap.ArgumentParser.parse_args = real
 
 
+#: A documented command line is written for a shell, where `$P` and `$WORK` are
+#: values. Nothing expands them here, so a bare variable becomes `1` — which
+#: parses as a number *and* as a string, so a numeric flag is exercised rather
+#: than skipped — and one embedded in a path becomes an ordinary path segment.
+VARIABLE = re.compile(r"\$[A-Za-z_]\w*")
+
+
+def _as_a_shell_would(token: str) -> str:
+    return "1" if VARIABLE.fullmatch(token) else VARIABLE.sub("x", token)
+
+
 def test_every_documented_command_parses(commands, capsys):
     """Every flag in SKILL.md is one the stage receiving it actually accepts."""
     import shlex
@@ -186,7 +197,7 @@ def test_every_documented_command_parses(commands, capsys):
         if stage == "doctor":
             continue
         try:
-            parse_only(stage, shlex.split(rest))
+            parse_only(stage, [_as_a_shell_would(t) for t in shlex.split(rest)])
         except SystemExit:
             usage = capsys.readouterr().err.strip().splitlines()
             failures.append(f"{stage}{rest}\n    {usage[-1] if usage else 'rejected'}")
@@ -229,3 +240,47 @@ def test_no_documented_command_hard_codes_the_ocr_copy_as_the_source(skill_text)
         "take the source PDF from the manifest's reference_pdf:\n  "
         + "\n  ".join(offenders)
     )
+
+
+def test_the_metadata_does_not_demand_an_interpreter_windows_lacks():
+    """A hard `python3` requirement rejects the skill before it can run.
+
+    The body of SKILL.md resolves `$PY` per platform precisely because
+    `python3` is absent from most Windows installations. Declaring it in the
+    front matter as a required binary undoes that: a host that gates on
+    `requires.bins` refuses to load the skill, and the resolution logic that
+    would have found `python` or `py -3` never gets a chance.
+
+    There is no single name that is right everywhere — Linux may have only
+    `python3`, Windows usually only `python` — so the declaration is dropped
+    and `doctor` reports the interpreter it is actually running under.
+    """
+    import json
+
+    line = re.search(r"^metadata: (.+)$", SKILL.read_text(encoding="utf-8"), re.M)
+    assert line, "SKILL.md has no metadata line"
+    requires = json.loads(line.group(1)).get("requires", {})
+
+    assert "python3" not in json.dumps(requires), (
+        "the metadata demands `python3`, which most Windows installations do "
+        "not have; the skill would be rejected before step 1 could resolve $PY"
+    )
+    assert requires.get("pip"), "the pip requirements are what a host can act on"
+
+
+def test_every_front_matter_field_is_on_one_line():
+    """Several agents parse this with a line-oriented reader.
+
+    A wrapped `description:` or `metadata:` is not a formatting preference —
+    it is a field those readers see as truncated, or as a stray line they do
+    not recognise at all.
+    """
+    text = SKILL.read_text(encoding="utf-8")
+    assert text.startswith("---\n"), "SKILL.md does not open with front matter"
+    body = text.split("---\n", 2)[1]
+    for line in body.splitlines():
+        if not line.strip():
+            continue
+        assert re.match(r"^[a-zA-Z-]+:", line), (
+            f"front-matter line continues onto the next: {line[:60]!r}"
+        )
