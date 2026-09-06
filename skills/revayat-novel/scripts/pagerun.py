@@ -343,6 +343,56 @@ def source_digest(units: list[tuple[str, str, str]], *,
 # The source page itself
 # --------------------------------------------------------------------------- #
 
+#: Every page box PDF defines, in a fixed order. `page.rect` is not enough and
+#: not a substitute: it is the crop box *normalised to the origin*, so a crop
+#: box moved sideways across the media reports the identical rect. Measured -
+#: two files with one content stream, one 400x600 rect and crop boxes at x=0
+#: and x=50 rendered different pixels and hashed the same.
+PAGE_BOXES = ("mediabox", "cropbox", "trimbox", "bleedbox", "artbox")
+
+
+def _visible_page_parts(document: Any, sheet: Any) -> list[bytes]:
+    """What is drawn on one page, in the order a reader would see it change."""
+    parts = [f"@{getattr(sheet, 'rotation', 0) or 0}".encode("utf-8")]
+    for name in PAGE_BOXES:
+        box = getattr(sheet, name, None)
+        # A file that declares no trim box is a different state from one that
+        # declares a trim box equal to the media box, and both are recorded.
+        shape = "absent" if box is None else \
+            f"{box.x0:.2f},{box.y0:.2f},{box.x1:.2f},{box.y1:.2f}"
+        parts.append(f"{name}={shape}".encode("utf-8"))
+
+    for xref in sheet.get_contents():
+        parts.append(document.xref_stream(xref) or b"")
+
+    # Sorted by xref so the order is the file's, not the traversal's.
+    for image in sorted(sheet.get_images(full=True)):
+        try:
+            parts.append(document.extract_image(image[0])["image"])
+        except Exception:
+            # An image we cannot extract still took part in the page; a marker
+            # keeps it in the identity rather than silently out.
+            parts.append(b"unreadable-image")
+
+    # Annotations are not in the content stream. A highlight added over a
+    # paragraph changes the rendered page and nothing above it - measured, same
+    # stream hash, different pixels - so the object and its appearance join too.
+    for annotation in sheet.annots() or ():
+        xref = getattr(annotation, "xref", 0)
+        try:
+            parts.append((document.xref_object(xref) or "").encode("utf-8"))
+        except Exception:
+            parts.append(b"unreadable-annotation")
+        try:
+            kind, value = document.xref_get_key(xref, "AP/N")
+            if kind == "xref":
+                appearance = int(str(value).split()[0])
+                parts.append(document.xref_stream(appearance) or b"")
+        except Exception:
+            parts.append(b"unreadable-appearance")
+    return parts
+
+
 def page_fingerprint(pdf_path: Path, page: int) -> str:
     """What one source page *looks like*, as a reproducible identity.
 
@@ -353,10 +403,11 @@ def page_fingerprint(pdf_path: Path, page: int) -> str:
     rebuild - a resumable run that throws away all its progress each time, which
     is worse than the bug it was meant to catch.
 
-    So the page's own bytes *in the source* are hashed instead: its content
-    streams, the data of every image it draws, and its box and rotation. That
-    changes exactly when the page changes - a replaced plate, a new trim, a
-    re-scan at another angle - and not otherwise.
+    So the page's own bytes *in the source* are hashed instead: every page box
+    and the rotation, its content streams, the data of every image it draws, and
+    every annotation drawn over it. That changes exactly when the page changes -
+    a replaced plate, a new trim, a shifted crop, a re-scan at another angle, a
+    highlight someone left behind - and not otherwise.
     """
     try:
         import pymupdf  # noqa: PLC0415  (only a PDF book ever reaches here)
@@ -369,20 +420,8 @@ def page_fingerprint(pdf_path: Path, page: int) -> str:
     try:
         if not 1 <= page <= document.page_count:
             return ""
-        sheet = document[page - 1]
-        parts = [f"{sheet.rect.width:.2f}x{sheet.rect.height:.2f}"
-                 f"@{getattr(sheet, 'rotation', 0) or 0}".encode("utf-8")]
-        for xref in sheet.get_contents():
-            parts.append(document.xref_stream(xref) or b"")
-        # Sorted by xref so the order is the file's, not the traversal's.
-        for image in sorted(sheet.get_images(full=True)):
-            try:
-                parts.append(document.extract_image(image[0])["image"])
-            except Exception:
-                # An image we cannot extract still took part in the page; a
-                # marker keeps it in the identity rather than silently out.
-                parts.append(b"unreadable-image")
-        return ir.sha256_bytes(b"\x1e".join(parts))
+        return ir.sha256_bytes(
+            b"\x1e".join(_visible_page_parts(document, document[page - 1])))
     finally:
         document.close()
 
@@ -828,6 +867,36 @@ def _merge_problem(report: dict[str, Any]) -> str:
     return "merge failed"
 
 
+def missing_source_render(out_dir: Path, page: int) -> dict[str, Any] | None:
+    """``None`` when this page's source was rendered, a refusal when it was not.
+
+    Only a page the manifest gave a source PDF is asked: an EPUB or a DOCX book
+    has no source page and never will, and refusing those would gate a book on
+    evidence that cannot exist.
+    """
+    out_dir = Path(out_dir)
+    try:
+        entries = jobs_for(load_manifest(out_dir), page)
+    except (OSError, json.JSONDecodeError, KeyError):
+        return None
+    if not entries or not entries[0].get("source_pdf"):
+        return None
+
+    report_file = qa_report_path(out_dir.parent, page)
+    try:
+        report = json.loads(report_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"ok": False, "page": page, "refused": "no-render-qa",
+                "detail": f"there is no readable {report_file}; run render-qa "
+                          f"on page {page} first"}
+    if report.get("source_evidence"):
+        return None
+    return {"ok": False, "page": page, "refused": "no-source-render",
+            "detail": f"page {page} has a source page in the manifest but "
+                      f"{report_file} recorded no source render, so nothing "
+                      f"compared the translation with it; re-run render-qa"}
+
+
 def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
     """Finish one page — only once every gate it has to clear actually has.
 
@@ -870,6 +939,15 @@ def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
         return {"ok": False, "page": page, "refused": "render-qa-failed",
                 "detail": report.get("detail")
                           or f"{report_file} does not report a page that passed"}
+
+    # A PDF page is accepted by *comparison*, and a comparison needs both sides.
+    # Every check above this line reads the target alone, so without this a page
+    # whose source was never rendered clears all of them: the deterministic
+    # gates pass, the review is filed against target sheets only, and the page
+    # is accepted having never been set beside the page it came from.
+    blocked = missing_source_render(out_dir, page)
+    if blocked:
+        return blocked
 
     seen = page_review.verdict(out_dir.parent, page)
     if not seen["ok"]:

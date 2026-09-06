@@ -93,6 +93,47 @@ def report_path(work_dir: Path, page: int) -> Path:
     return work_dir / "qa" / "pages" / f"page-{page:04d}.json"
 
 
+#: Returned as the index when the manifest exists, describes a PDF book, and
+#: still names no source page. Distinct from "there is no manifest at all",
+#: which is an EPUB or a synthetic fixture and has no source page by nature.
+MISSING_MANIFEST_SOURCE = -1
+
+
+def source_evidence(work_dir: Path, pages_dir: Path | None, page: int,
+                    given: Path | None) -> tuple[Path | None, int]:
+    """Which file holds this page's source render, and which sheet of it.
+
+    Callers used to have to work this out: hand over the whole reference PDF
+    and remember that its page index is one less than the page number. Nobody
+    following the documented loop did, so `--source-pdf` was simply omitted and
+    the comparison quietly became one-sided. The manifest already knows - it
+    records a one-page PDF per page - so this reads it instead of asking.
+
+    ``(path, index)`` when there is one, ``(None, MISSING_MANIFEST_SOURCE)``
+    when a PDF book's manifest names none, and ``(None, 0)`` when the book has
+    no source pages at all and never should have.
+    """
+    if given is not None:
+        # An explicit file is the whole reference PDF unless it is one page.
+        given = Path(given)
+        return given, 0 if page_count(given) == 1 else page - 1
+
+    pages_dir = Path(pages_dir) if pages_dir else Path(work_dir) / "pages"
+    try:
+        manifest = json.loads((pages_dir / "manifest.json")
+                              .read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, 0          # no page run here: nothing was ever promised
+
+    if not (manifest.get("reference_pdf") or "").strip():
+        return None, 0          # an EPUB or DOCX book: there is no source page
+    for entry in manifest.get("chunks") or ():
+        if entry.get("page") == page and entry.get("source_pdf"):
+            # The split one-page PDF, so the index is always its only sheet.
+            return pages_dir / entry["source_pdf"], 0
+    return None, MISSING_MANIFEST_SOURCE
+
+
 def check(
     work_dir: Path,
     book_path: Path,
@@ -102,6 +143,7 @@ def check(
     target_image: Path | None = None,
     docx: Path | None = None,
     source_pdf: Path | None = None,
+    pages_dir: Path | None = None,
     dpi: int = DEFAULT_DPI,
     max_attempts: int = MAX_ATTEMPTS,
     timeout: float = wordrender.DEFAULT_TIMEOUT,
@@ -172,12 +214,21 @@ def check(
             conversion_failure = str(error)
 
     renders: dict[str, Any] = {}
-    if source_pdf is not None:
-        rendered = render_png(Path(source_pdf), page - 1,
-                              work_dir / "renders" / "source" / f"page-{page:04d}.png",
-                              dpi)
+    wanted, source_index = source_evidence(work_dir, pages_dir, page, source_pdf)
+    source_missing = ""
+    if wanted is not None:
+        rendered = (render_png(wanted, source_index,
+                               work_dir / "renders" / "source" / f"page-{page:04d}.png",
+                               dpi) if wanted.exists() else None)
         if rendered is not None:
             renders["source"] = str(rendered.relative_to(work_dir).as_posix())
+        else:
+            source_missing = (f"the source page for page {page} should be at "
+                              f"{wanted}, and it could not be rendered from "
+                              f"there")
+    elif source_index == MISSING_MANIFEST_SOURCE:
+        source_missing = (f"the page manifest names no source PDF for page "
+                          f"{page}, so there is nothing to compare against")
 
     target_png = work_dir / "renders" / "target" / f"page-{page:04d}.png"
     if target_image is not None and not Path(target_image).exists():
@@ -213,7 +264,13 @@ def check(
                        hashes={"render": evidence(work_dir, renders)})
 
     try:
-        unverified = _why_unverified(target_pdf, conversion_failure)
+        # A missing source page is "we could not look", exactly like a missing
+        # target. The whole gate is *comparison*: with one side absent there is
+        # nothing to compare, and the deterministic checks that would still run
+        # only ever describe the target. Letting them pass alone is how a page
+        # reaches `accepted` having never been set beside the page it came from.
+        unverified = source_missing or _why_unverified(target_pdf,
+                                                       conversion_failure)
         views = [] if unverified else views_of(Path(target_pdf))
         if not unverified and not views:
             unverified = f"{target_pdf} came back with no pages to read"
@@ -251,6 +308,9 @@ def check(
     written = _write(work_dir, page, {
         "verified": True,
         "attempts": attempts + (0 if outcome["ok"] else 1),
+        # Named rather than inferred from `renders`, so a gate downstream asks
+        # one question instead of re-deriving the answer from a file listing.
+        "source_evidence": renders.get("source", ""),
         "renders": renders,
         "preview": built_preview or str(docx or target_pdf or ""),
         "sheets": len(views),
@@ -352,7 +412,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
                              "building one. NOT the assembled book: source page "
                              "N is not the book's page N once Persian reflows")
     parser.add_argument("--source-pdf", default=None,
-                        help="rendered beside the translation for the reviewer")
+                        help="rendered beside the translation for the reviewer. Leave it off: the page manifest already names this page's "
+                             "own one-page source PDF, and resolving it here is what stops the comparison quietly becoming one-sided")
+    parser.add_argument("--pages", default=None,
+                        help="where `pages build` wrote its manifest (default: <work>/pages)")
     parser.add_argument("--dpi", type=int, default=DEFAULT_DPI)
     parser.add_argument("--max-attempts", type=int, default=MAX_ATTEMPTS)
 
@@ -370,6 +433,7 @@ def main(argv: list[str] | None = None) -> int:
         target_image=Path(args.target_image) if args.target_image else None,
         docx=Path(args.docx) if args.docx else None,
         source_pdf=Path(args.source_pdf) if args.source_pdf else None,
+        pages_dir=Path(args.pages) if args.pages else None,
         dpi=args.dpi,
         max_attempts=args.max_attempts,
     )
