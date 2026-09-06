@@ -112,8 +112,7 @@ $PY $S/revayat-novel.py pages build --book work/book.json --out work/pages --glo
 
 # then, per page: translate work/pages/pageNNNN.md -> out_pageNNNN.md, and
 $PY $S/revayat-novel.py pages     merge   --book work/book.json --pages work/pages --page 1 --glossary work/glossary.json
-$PY $S/revayat-novel.py pages     preview --book work/book.json --pages work/pages --page 1
-$PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1 --docx work/previews/page-0001.docx
+$PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1
 #   … look at renders/source/page-0001.png beside renders/target/page-0001.png …
 $PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
 $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
@@ -127,6 +126,7 @@ $PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --fo
 $PY $S/revayat-novel.py qa     docx  --file out/book.fa.docx --book work/book.json
 $PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
 $PY $S/revayat-novel.py doc-qa review --work work --answer …
+$PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
 ```
 
 ## How it works

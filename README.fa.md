@@ -126,8 +126,7 @@ $PY $S/revayat-novel.py pages build --book work/book.json --out work/pages --glo
 
 # سپس برای هر صفحه: work/pages/pageNNNN.md را ترجمه و در out_pageNNNN.md بنویسید، بعد
 $PY $S/revayat-novel.py pages     merge   --book work/book.json --pages work/pages --page 1 --glossary work/glossary.json
-$PY $S/revayat-novel.py pages     preview --book work/book.json --pages work/pages --page 1
-$PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1 --docx work/previews/page-0001.docx
+$PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1
 #   … renders/source/page-0001.png را کنار renders/target/page-0001.png ببینید …
 $PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
 $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
@@ -141,6 +140,7 @@ $PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --fo
 $PY $S/revayat-novel.py qa     docx  --file out/book.fa.docx --book work/book.json
 $PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
 $PY $S/revayat-novel.py doc-qa review --work work --answer …
+$PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
 ```
 
 </div>
