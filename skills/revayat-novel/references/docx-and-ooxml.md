@@ -71,9 +71,20 @@ ratio preserved.
 orientation or margins partway through arrives as `book["sections"]`, each entry
 naming the block it opens at, and the builder emits a real `w:sectPr` for each.
 `book["page"]` still reports the first section's geometry, which is what a stage
-with no page in hand reads. Final render QA does not: it resolves each rendered
-page to the section that page belongs to, so a landscape section 3 is measured
-against section 3's own setup rather than reported as a page-size failure.
+with no page in hand reads. Final render QA does not: it measures each rendered
+page against the declared geometry it is nearest to, so a landscape section 3 is
+not reported as a page-size failure.
+
+**Order is checked separately, and twice.** Nearest-geometry matching asks only
+whether a page's size is one the book allows, so sections that came out in the
+wrong order are three runs of individually legal pages and pass. `doc-qa`
+therefore also compares the built `w:sectPr` sequence with `book["sections"]` —
+count, ordered size, orientation, start type — and requires the rendered page
+shapes to be a walk *forward* through the declared sequence. The first sees a
+section duplicated while another is dropped, which leaves no trace on paper; the
+second sees a renderer that disagreed with its own package. Adjacent sections of
+the same trim, and repeated pages inside one section, are ambiguous by nature
+and pass.
 
 A section carries the heads and feet the author wrote, as pieces:
 

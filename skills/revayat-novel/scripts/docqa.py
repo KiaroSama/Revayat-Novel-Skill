@@ -19,6 +19,16 @@ with it, so a rendered page is judged against the declared geometry it is
 nearest to rather than one the book only holds for its opening section; see
 `setup_for` for what that catches and what it does not.
 
+**Section order, twice, because one reading cannot prove it.** Sizes in the
+wrong order are each individually legal, so page-by-page matching sees three
+runs of correct pages. `check_section_package` compares the built `w:sectPr`
+sequence with `book["sections"]` — count, ordered size, orientation, start type
+— and `check_section_order` requires the rendered shapes to be a walk *forward*
+through the declared sequence. The first can see a section duplicated while
+another is dropped, which leaves no trace on paper; the second can see a
+renderer that disagreed with its own package. Adjacent sections of one shape,
+and many pages inside one section, are ambiguous by nature and pass.
+
 **Across the whole render, about content.** Every translated block the IR holds
 appears in the finished document exactly once, and every illustration appears,
 in order, at its own shape. That is a question the assembled book can answer and
@@ -47,6 +57,7 @@ from typing import Any
 import bookir as ir
 import pagecheck
 import qa
+import read_docx
 import renderqa
 import review
 import wordrender
@@ -154,7 +165,14 @@ def setup_for(target: dict[str, Any],
     duplicated or corrupted section break looks like from the outside.
     **What it does not:** a page of the right size that belongs to the wrong
     section. Two sections sharing a trim are indistinguishable here, and this
-    does not pretend otherwise.
+    does not pretend otherwise. This function knows an ordered-compatible
+    *range*, never which section a page came from.
+
+    Order is therefore not this function's to prove and never was: sizes in the
+    wrong order are all individually legal, so nearest-geometry matching passes
+    A, C, B. `check_section_package` reads the built `w:sectPr` sequence and
+    `check_section_order` walks the rendered shapes forward through the declared
+    one; between them the order is checked from the XML and from the paper.
 
     Nearest rather than matching, so a page that matches nothing is still
     measured against the geometry it most nearly is: `_check_page_size` then
@@ -165,6 +183,127 @@ def setup_for(target: dict[str, Any],
     return min(setups, key=lambda setup: (
         abs(width - float(setup.get("width_pt") or 0.0))
         + abs(height - float(setup.get("height_pt") or 0.0))))
+
+
+#: How close two declared page sizes have to be to count as the same shape.
+#: Word stores twips and the reader rounds to points, so an exact comparison
+#: fails on arithmetic rather than on a defect.
+SECTION_TOLERANCE_PT = 1.0
+
+
+def _shape(setup: dict[str, Any]) -> tuple[float, float]:
+    return (round(float(setup.get("width_pt") or 0.0), 1),
+            round(float(setup.get("height_pt") or 0.0), 1))
+
+
+def _same_shape(one: dict[str, Any], other: dict[str, Any]) -> bool:
+    a, b = _shape(one), _shape(other)
+    return (abs(a[0] - b[0]) <= SECTION_TOLERANCE_PT
+            and abs(a[1] - b[1]) <= SECTION_TOLERANCE_PT)
+
+
+def check_section_package(docx: Path, book: dict[str, Any],
+                          report: qa.Report) -> list[dict[str, Any]]:
+    """Compare the built document's ``w:sectPr`` sequence with the book's.
+
+    The rendered pages cannot answer this. Two sections of the same trim are
+    indistinguishable on paper, so a document whose sections came out in the
+    wrong order, or with one duplicated and another dropped, renders as a
+    perfectly ordinary sequence of correctly sized pages. The package knows:
+    the sections are in it, in order, with their sizes and start types.
+
+    Returns the built sequence, so the render check below can walk the same one.
+    """
+    declared = book.get("sections") or []
+    try:
+        import docx as python_docx  # noqa: PLC0415
+        document = python_docx.Document(str(docx))
+        built = [read_docx.section_geometry(section)
+                 for section in document.sections]
+    except Exception as failure:
+        report.add(qa.WARNING, "section-package-unread", "document",
+                    f"the built document's sections could not be read back "
+                    f"({failure}); their order was not checked")
+        return []
+
+    if not declared:
+        return built
+    if len(built) != len(declared):
+        report.add(qa.ERROR, "section-count", "document",
+                     f"the book declares {len(declared)} sections and the "
+                     f"built document has {len(built)}; a section break was "
+                     f"lost or duplicated")
+        return built
+
+    for index, (want, got) in enumerate(zip(declared, built), start=1):
+        if not _same_shape(want, got):
+            report.add(qa.ERROR, "section-size", f"section{index:02d}",
+                         f"section {index} should be "
+                         f"{_shape(want)[0]:.0f}x{_shape(want)[1]:.0f}pt and is "
+                         f"{_shape(got)[0]:.0f}x{_shape(got)[1]:.0f}pt — the "
+                         f"right sizes in the wrong order look exactly like this")
+        for field in ("orientation", "start_type"):
+            if want.get(field) and got.get(field) != want.get(field):
+                report.add(qa.ERROR, "section-property", f"section{index:02d}",
+                             f"section {index} {field} is {got.get(field)!r}, "
+                             f"not the {want.get(field)!r} the book declares")
+    return built
+
+
+def declared_sections(book: dict[str, Any]) -> list[dict[str, Any]]:
+    """The section sequence the book says the finished document should have."""
+    return ([dict(record) for record in book["sections"]]
+            if book.get("sections")
+            else [dict(book.get("page") or ir.default_page_setup())])
+
+
+def check_section_order(views: list[dict[str, Any]],
+                        declared: list[dict[str, Any]],
+                        report: qa.Report) -> None:
+    """The rendered sizes must be a walk *forward* through the declared sections.
+
+    Nearest-geometry matching, on its own, judges each page against the set of
+    allowed shapes and never against their order — so A, C, B passes when A, B
+    and C are all declared. This asks the one question order makes available:
+    once the pages have moved on to a later section's shape, they may not go
+    back to an earlier, different one.
+
+    Measured against what the **book** declares, deliberately, and not against
+    what the package turned out to contain. Walking the built sequence would be
+    circular — the pages come from those sections, so they can never disagree
+    with them — and would only restate `check_section_package`. Against the
+    declared order it is a second, independent reading of the same defect: one
+    from the XML, one from the paper.
+
+    Permissive where the evidence is genuinely ambiguous. Adjacent sections of
+    the same shape are one run and cannot be told apart on paper; many pages
+    inside one section are ordinary. Only a backwards jump to a distinct earlier
+    shape is reported, because only that is provable here.
+    """
+    if len(declared) < 2 or not views:
+        return
+
+    reached = 0
+    for number, view in enumerate(views, start=1):
+        if _same_shape(view, declared[reached]):
+            continue
+        ahead = next((index for index in range(reached + 1, len(declared))
+                      if _same_shape(view, declared[index])), None)
+        if ahead is not None:
+            reached = ahead
+            continue
+        behind = next((index for index in range(reached)
+                       if _same_shape(view, declared[index])), None)
+        if behind is not None:
+            report.add(
+                qa.ERROR, "section-order", f"page{number:04d}",
+                f"page {number} is section {behind + 1}'s shape "
+                f"({_shape(view)[0]:.0f}x{_shape(view)[1]:.0f}pt) after the "
+                f"document had already reached section {reached + 1}; the "
+                f"sections came out in the wrong order")
+            reached = behind
+        # A shape belonging to no section at all is `_check_page_size`'s to
+        # report, and it already does; saying it twice helps nobody.
 
 
 def check_assembled_page(target: dict[str, Any], setup: dict[str, Any],
@@ -244,6 +383,8 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
             sheets.append(str(pngs[index].relative_to(work_dir).as_posix()))
 
     whole = qa.Report()
+    check_section_package(docx, book, whole)
+    check_section_order(views, declared_sections(book), whole)
     check_completeness(views, document_expectations(book), whole,
                        source=pagecheck.document_text(docx))
     global_summary = whole.summary()

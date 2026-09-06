@@ -83,6 +83,35 @@ def _line_text(line: dict[str, Any]) -> str:
 GEOMETRY_TOLERANCE_PT = 2.0
 
 
+#: The page boxes worth recording beside the effective size. `page.rect` is the
+#: crop box normalised to the origin, so it cannot show a crop moved sideways
+#: across the media - a change that alters the visible page. These can.
+GEOMETRY_BOXES = ("mediabox", "cropbox", "trimbox", "bleedbox", "artbox")
+
+
+def _page_boxes(page) -> dict[str, list[float]]:
+    """One page's declared boxes, for provenance and for debugging a mismatch.
+
+    Only boxes that differ from the crop box are kept: a book where every page
+    declares the same four identical boxes would otherwise carry five copies of
+    one rectangle for every page, and say nothing.
+    """
+    crop = getattr(page, "cropbox", None)
+    if crop is None:
+        return {}
+    drawn = {"cropbox": [round(v, 2) for v in (crop.x0, crop.y0, crop.x1, crop.y1)]}
+    for name in GEOMETRY_BOXES:
+        if name == "cropbox":
+            continue
+        box = getattr(page, name, None)
+        if box is None:
+            continue
+        shape = [round(v, 2) for v in (box.x0, box.y0, box.x1, box.y1)]
+        if shape != drawn["cropbox"]:
+            drawn[name] = shape
+    return drawn if len(drawn) > 1 else {}
+
+
 def _survey_geometry(doc, page_count: int) -> dict[str, Any]:
     """Census every page's size and rotation, not just the first one's.
 
@@ -93,12 +122,16 @@ def _survey_geometry(doc, page_count: int) -> dict[str, Any]:
     is visible rather than silently applied to every page.
     """
     shapes: dict[tuple[int, int, int], list[int]] = {}
+    boxes: dict[str, dict[str, list[float]]] = {}
     for index in range(page_count):
         page = doc[index]
         key = (int(round(page.rect.width / GEOMETRY_TOLERANCE_PT)),
                int(round(page.rect.height / GEOMETRY_TOLERANCE_PT)),
                int(getattr(page, "rotation", 0) or 0))
         shapes.setdefault(key, []).append(index + 1)
+        drawn = _page_boxes(page)
+        if drawn:
+            boxes[str(index + 1)] = drawn
 
     if not shapes:
         return {"width_pt": 396.0, "height_pt": 612.0, "uniform": True,
@@ -136,6 +169,7 @@ def _survey_geometry(doc, page_count: int) -> dict[str, Any]:
         )[:20],
         "variants": variants,
         "pages": exceptions,
+        "boxes": boxes,
     }
 
 

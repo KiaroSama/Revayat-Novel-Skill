@@ -146,6 +146,13 @@ def main(argv: list[str] | None = None) -> int:
                               "questions": page_review.QUESTIONS},
                              ensure_ascii=False, indent=1))
             return 2
+        # Refused here as well as at `accept`, because the reviewer is told to
+        # open a source PNG: filing answers about a page whose source was never
+        # rendered records a comparison that nobody could have made.
+        blocked = pagerun.missing_source_render(Path(args.pages), args.page)
+        if blocked:
+            print(json.dumps(blocked, ensure_ascii=False, indent=1))
+            return 2
         filed = page_review.record(Path(args.pages).parent, args.page, answers,
                                    note=args.note)
         print(json.dumps(filed, ensure_ascii=False, indent=1))

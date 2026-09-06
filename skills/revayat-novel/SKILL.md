@@ -238,13 +238,10 @@ so an interrupted run resumes where it stopped rather than from the beginning.
 
 ### The page loop
 
-The source PDF is whichever one this run was read from: the book's own for a
-born-digital PDF, the OCR'd copy for a scan. The manifest recorded it — take it
-from there rather than naming a file that may not exist.
-
-```bash
-SOURCE_PDF=$($PY -c "import json,sys;print(json.load(open(sys.argv[1]))['reference_pdf'])"   $WORK/pages/manifest.json)
-```
+The source page is resolved for you. `pages build` splits every source page into
+its own one-page PDF and records it in the manifest, and `render-qa` reads that
+— so there is no path to look up, no page-index arithmetic, and no way to leave
+the comparison one-sided by omitting a flag.
 
 
 One page at a time, in this order. Each command needs what the one before it
@@ -261,7 +258,7 @@ $PY $SKILL_DIR/scripts/revayat-novel.py pages merge \
 #    itself, so there is no filename to get right and no way to hand it the
 #    previous page's preview by mistake.
 $PY $SKILL_DIR/scripts/revayat-novel.py render-qa \
-  --book $WORK/book.json --work $WORK --page $P --source-pdf $SOURCE_PDF
+  --book $WORK/book.json --work $WORK --page $P
 
 # 5. look at the two images (step 8 says what to look for)
 $PY $SKILL_DIR/scripts/revayat-novel.py pages review \
@@ -280,6 +277,12 @@ Then `pages next` again, until it says there is nothing left.
 **Step 4 is not optional and step 5 will do it for you if you skip it** — leave
 `--docx` off and `render-qa` builds the preview itself. The explicit command is
 there for when you want to open the page in Word and look at it yourself.
+
+**A PDF page cannot be accepted on the translation alone.** If the source page
+cannot be rendered — the one-page PDF deleted, unreadable, never split — the
+report comes back `unverified`, and both `pages review` and `pages accept`
+refuse it. Every deterministic check reads the target, so all of them would
+pass on a page nobody ever set beside the page it came from.
 
 **The preview is one source page, laid out alone.** It is emphatically not the
 whole book: Persian reflows, so source page 12 does not become the book's page
