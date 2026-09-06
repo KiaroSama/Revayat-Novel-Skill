@@ -35,9 +35,15 @@ venv/
 .ruff_cache/
 
 # --- Revayat Novel working directories and outputs ---
+# A working directory holds a real book: the source PDF, every page of it, and
+# the whole translation. None of that may ever be committed. The patterns are
+# deliberately wider than the two names the docs happen to use, because the
+# second run of a real book is called `work2/` or `work-<title>/` and a rule
+# that only knows `work/` is a rule that fails on exactly the run that matters.
 *_revayat-novel/
-/work/
-/out/
+/work*/
+/out*/
+/run*/
 *.docx
 !templates/*.docx
 !tests/fixtures/*.docx
