@@ -359,6 +359,10 @@ at a time — the result is the same, only slower.
 > - Keep `**bold**`, `*italic*`, `` `verbatim` `` and `[[fn:…]]` exactly, around
 >   the equivalent Persian words. Do not add or remove any.
 > - Translate every unit fully. Never summarise or skip.
+> - A `header` or `footer` unit is a **running head**: the line the book prints
+>   at the top or bottom of every page, usually the title or the chapter. It is
+>   a label, not a sentence — keep it short, and do not add a full stop the
+>   source does not have.
 > - To add your own footnote: write `[[fn:tr-01]]` in the sentence and add a
 >   `@@ tr-01 footnote` block at the end with its text. Only for a genuine
 >   cultural reference or wordplay.
@@ -499,6 +503,7 @@ is put together, and that check asks the one question no page can.
 | Code | Meaning | Action |
 | --- | --- | --- |
 | `untranslated-block` | a block has no Persian | translate that chunk |
+| `untranslated-running-head` | a running head or foot has no Persian | translate that unit; it prints on every page |
 | `footnote-marker-lost` | a `[[fn:…]]` was dropped | re-run that chunk |
 | `footnote-marker-invented` | a marker points at nothing | re-run that chunk |
 | `possible-omission` | target far shorter than source | read it; usually a dropped clause |

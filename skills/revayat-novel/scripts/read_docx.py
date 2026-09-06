@@ -8,6 +8,11 @@ so the original bytes and the author's ``wp:extent`` both survive.
 Section breaks travel as ``book["sections"]``, each entry naming the block it
 opens at. ``book["page"]`` still reports the first section's geometry, exactly
 as it did when that was the only geometry the reader kept.
+
+Running heads and feet travel on the same records, as prose to be translated
+plus the fields and tabs laid out beside it. The author's own running head is
+what a Persian edition should show — in Persian; copying it across untranslated
+was never the alternative to dropping it.
 """
 
 from __future__ import annotations
@@ -194,6 +199,103 @@ def _column_count(section) -> int:
         return max(1, int(columns.get(qn("w:num"))))
     except (AttributeError, TypeError, ValueError):
         return 1
+
+
+def _alignment(paragraph: Paragraph) -> str | None:
+    """The paragraph's ``w:jc`` token, kept raw like ``start_type``.
+
+    Raw because Word reads ``left`` as *start* in a right-to-left paragraph, so
+    a running head the author pushed to the outside edge stays on the outside
+    edge in Persian without this having to know which edge that is.
+    """
+    properties = paragraph._p.find(qn("w:pPr"))
+    if properties is None:
+        return None
+    node = properties.find(qn("w:jc"))
+    return None if node is None else node.get(qn("w:val"))
+
+
+def _running_runs(paragraph: Paragraph, note) -> Iterator[Any]:
+    """Every ``w:r`` and ``w:fldSimple`` of one header paragraph, in order.
+
+    Descends into ``w:hyperlink`` for the same reason :func:`iter_runs` does —
+    the words inside one would otherwise vanish without a sound — but the target
+    cannot be rebuilt here, so each is named.
+    """
+    for node in paragraph._p:
+        if node.tag == qn("w:hyperlink"):
+            note("running-head-link-dropped",
+                 "the words are carried; a running head is not clickable in "
+                 "print and the target has nowhere on the page to live")
+            yield from (child for child in node
+                        if child.tag in (qn("w:r"), qn("w:fldSimple")))
+        elif node.tag in (qn("w:r"), qn("w:fldSimple")):
+            yield node
+
+
+def _running_pieces(paragraph: Paragraph, allocate, note) -> list[dict[str, Any]]:
+    """One header paragraph as prose, tabs and fields, in reading order.
+
+    Order is the whole content of a running head: "Chapter One → 7" and
+    "7 → Chapter One" are different pages. So a field cannot be collected into a
+    list beside the text and put back at a guess; it keeps its place in the line.
+
+    A field is carried as its instruction alone. Its *cached* result is whatever
+    Word last computed — for a ``STYLEREF`` that is the English chapter title,
+    which is precisely the thing that must not reach a Persian page — and the
+    built document already asks Word to recompute fields when it opens.
+    """
+    pieces: list[dict[str, Any]] = []
+    spans: list[tuple[str, bool, bool]] = []
+    depth = 0                 # nested fields: only the outermost is carried
+    in_result = False
+    instruction: list[str] = []
+
+    def flush() -> None:
+        text = ir.render_markup(spans).strip()
+        spans.clear()
+        if text:
+            pieces.append({"id": allocate(), "text": text, "target": None})
+
+    for node in _running_runs(paragraph, note):
+        if node.tag == qn("w:fldSimple"):
+            flush()
+            pieces.append({"field": node.get(qn("w:instr")) or ""})
+            continue
+
+        run = Run(node, paragraph)
+        if node.find(f".//{qn('w:drawing')}") is not None or \
+                node.find(f".//{qn('w:pict')}") is not None:
+            note("running-head-picture-dropped",
+                 "a picture in a running head is not carried; the words beside "
+                 "it are")
+
+        for child in node:
+            tag = child.tag
+            if tag == qn("w:fldChar"):
+                marker = child.get(qn("w:fldCharType"))
+                if marker == "begin":
+                    if depth == 0:
+                        flush()
+                        instruction, in_result = [], False
+                    depth += 1
+                elif marker == "separate":
+                    in_result = True
+                elif marker == "end":
+                    depth = max(0, depth - 1)
+                    if depth == 0:
+                        pieces.append({"field": "".join(instruction)})
+                        in_result = False
+            elif tag == qn("w:instrText") and depth and not in_result:
+                instruction.append(child.text or "")
+            elif tag == qn("w:t") and not depth:
+                bold, italic = _run_style(run)
+                spans.append((child.text or "", bold, italic))
+            elif tag == qn("w:tab") and not depth:
+                flush()
+                pieces.append({"tab": True})
+    flush()
+    return pieces
 
 
 def _ilvl(element) -> int | None:
@@ -393,6 +495,62 @@ def read_docx(
         return block
 
     warnings: list[dict[str, Any]] = []
+    running_count = 0
+
+    def running_of(section, index: int, even_and_odd: bool) -> dict[str, Any]:
+        """This section's own headers and feet, ``{"headers": …, "footers": …}``.
+
+        Only the slots Word actually *shows*: a first-page header the section
+        never turns on, or an even-page one the document does not ask for, is a
+        definition nobody sees, and carrying it would put a running head on the
+        Persian edition that the source never printed.
+        """
+        nonlocal running_count
+        slots = ["default"]
+        if section.different_first_page_header_footer:
+            slots.append("first")
+        if even_and_odd:
+            slots.append("even")
+
+        def allocate() -> str:
+            nonlocal running_count
+            running_count += 1
+            return f"rh{running_count:04d}"
+
+        # Carried rather than inferred from the slots below: a section may say
+        # "my first page is different" and still inherit the header that page
+        # shows, so the switch and the definition are two separate facts.
+        carried: dict[str, Any] = {
+            "different_first_page": bool(section.different_first_page_header_footer)}
+        for part, key in ir.RUNNING_PARTS:
+            found: dict[str, Any] = {}
+            for slot in slots:
+                container = getattr(
+                    section, ir.RUNNING_ACCESSOR[slot].format(part=part))
+                # Settled before the paragraphs are asked for: python-docx
+                # *creates* a definition for an inherited header the moment its
+                # content is read, which would turn "this section inherits" into
+                # "this section has an empty one of its own".
+                if container.is_linked_to_previous:
+                    continue
+                where = f"section {index} {part} ({slot})"
+                if container.tables:
+                    warnings.append({
+                        "kind": "running-head-table-dropped", "where": where,
+                        "detail": "a table in a running head is not carried; "
+                                  "its cells are laid out by the header itself "
+                                  "and the Persian edition sets one line",
+                    })
+                found[slot] = {"paragraphs": [
+                    {"align": _alignment(paragraph),
+                     "pieces": _running_pieces(
+                         paragraph, allocate,
+                         lambda kind, detail, where=where: warnings.append(
+                             {"kind": kind, "where": where, "detail": detail}))}
+                    for paragraph in container.paragraphs
+                ]}
+            carried[key] = found
+        return carried
 
     def keep_anchors(paragraph, first: int) -> None:
         """File the paragraph's linked-to bookmarks on the block it became.
@@ -533,9 +691,13 @@ def read_docx(
         at = section_starts[number]
         return blocks[at]["id"] if at < len(blocks) else None
 
+    # Word only prints an even-page header when the whole document says so, so
+    # the switch is read once here and every section is asked in its light.
+    even_and_odd = bool(document.settings.odd_and_even_pages_header_footer)
     book["sections"] = [
         {"index": number, "start_block": start_block(number),
-         **section_geometry(section)}
+         **section_geometry(section),
+         **running_of(section, number, even_and_odd)}
         for number, section in enumerate(document.sections)
     ]
     linked = sum(len(block.get("links") or []) for block in blocks)
@@ -548,15 +710,12 @@ def read_docx(
                       "word for word, and names every one it could not",
         })
 
-    running = sum(1 for relationship in document.part.rels.values()
-                  if relationship.reltype in (RT.HEADER, RT.FOOTER))
-    if running:
-        warnings.append({
-            "kind": "running-heads-dropped", "count": running,
-            "detail": "the source's headers and footers are not read; the "
-                      "built document generates its own from --page-numbers",
-        })
-
+    # `running-heads-dropped` used to be reported here, and the reasoning it
+    # carried still holds: an English running head on a Persian page is worse
+    # than none. Translating them answers it without throwing them away, so the
+    # warning is gone and what genuinely cannot be carried — a picture, a table,
+    # a link target — is named on its own above.
+    #
     # `sections-collapsed` used to be reported here. It said the truth at the
     # time — only the first section's geometry was kept — and became a lie the
     # moment `book["sections"]` started carrying every one of them. What is

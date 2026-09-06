@@ -240,6 +240,11 @@ def _targets(book: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any], str]]:
     for note in book.get("footnotes", []):
         if (note.get("target") or "").strip():
             yield note["id"], note, "target"
+    # A running head prints on every page, so a stray Latin quotation mark or an
+    # unconverted digit in one is the typographical error a reader meets most.
+    for unit_id, _, piece, _ in ir.iter_running_pieces(book):
+        if (piece.get("target") or "").strip():
+            yield unit_id, piece, "target"
 
 
 def fix_book(book: dict[str, Any], options: Options | None = None) -> dict[str, Any]:

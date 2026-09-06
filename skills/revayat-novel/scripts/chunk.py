@@ -130,6 +130,16 @@ def translatable_units(book: dict[str, Any], ids: list[str]) -> list[tuple[str, 
     for note in book.get("footnotes", []):
         if note["id"] in referenced and (note.get("text") or "").strip():
             units.append((note["id"], "footnote", note["text"]))
+
+    # A section's running heads ride with the chunk that opens the section, so
+    # the translator settles the head of a chapter while looking at the chapter.
+    # A section holding no blocks of its own has nowhere else to go than the
+    # first chunk, and an unreachable unit is one nobody can ever translate.
+    opening = book["blocks"][0]["id"] if book.get("blocks") else None
+    for unit_id, kind, piece, section in ir.iter_running_pieces(book):
+        anchor = section.get("start_block") or opening
+        if anchor in ids and (piece.get("text") or "").strip():
+            units.append((unit_id, kind, piece["text"]))
     return units
 
 

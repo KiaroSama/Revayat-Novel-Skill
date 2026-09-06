@@ -212,7 +212,7 @@ def add_internal_link(paragraph, anchor: str, text: str, *, rtl: bool = True,
 
 
 def hyperlink_from(paragraph, first: int, href: str, *,
-                   style: str = "Hyperlink") -> None:
+                   style: str = "Hyperlink") -> bool:
     """Move the runs added after position ``first`` into a real ``w:hyperlink``.
 
     python-docx 1.2.0 can read a hyperlink but not create one. Writing the runs
@@ -228,7 +228,7 @@ def hyperlink_from(paragraph, first: int, href: str, *,
     """
     moving = list(paragraph._p)[first:]
     if not moving:
-        return      # an empty w:hyperlink is a link with nothing to click
+        return False
 
     if href.startswith("#"):
         link = el("hyperlink", anchor=href[1:], history="1")
@@ -245,6 +245,7 @@ def hyperlink_from(paragraph, first: int, href: str, *,
             node.get_or_add_rPr().insert(0, el("rStyle", val=style))
         link.append(node)
     paragraph._p.append(link)
+    return True
 
 
 def add_toc_field(paragraph, entries: Iterable[tuple[str, str, int]], *,
@@ -415,6 +416,70 @@ def ensure_footnote_styles(document, *, persian_font: str, size_pt: float) -> No
             '<w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/>'
             '<w:u w:val="single"/></w:rPr></w:style>'
         ))
+
+
+# --------------------------------------------------------------------------- #
+# Running heads and feet
+# --------------------------------------------------------------------------- #
+
+def add_field(paragraph, instruction: str, *, rtl: bool = True) -> None:
+    """A live Word field — ``PAGE``, ``STYLEREF`` — with no cached result.
+
+    Empty on purpose. A field's cached result is whatever the source's Word last
+    computed, and for a ``STYLEREF`` that is the English chapter title: writing
+    it back would print the one thing a Persian running head must not carry,
+    until somebody happened to update fields. ``request_field_update`` asks Word
+    to recompute them the moment the document opens.
+    """
+    if not instruction.strip():
+        return          # a field with nothing to compute prints as an error
+    direction = '<w:rPr><w:rtl/><w:lang w:bidi="fa-IR"/></w:rPr>' if rtl else ""
+    for fragment in (
+        f'<w:r {_WNS}>{direction}<w:fldChar w:fldCharType="begin"/></w:r>',
+        f'<w:r {_WNS}>{direction}<w:instrText xml:space="preserve">'
+        f"{xml_text(instruction)}</w:instrText></w:r>",
+        f'<w:r {_WNS}>{direction}<w:fldChar w:fldCharType="separate"/></w:r>',
+        f'<w:r {_WNS}>{direction}<w:fldChar w:fldCharType="end"/></w:r>',
+    ):
+        paragraph._p.append(parse_xml(fragment))
+
+
+def add_tab(paragraph, *, rtl: bool = True) -> None:
+    """The tab that holds a running head's title apart from its page number."""
+    direction = "<w:rPr><w:rtl/></w:rPr>" if rtl else ""
+    paragraph._p.append(parse_xml(f"<w:r {_WNS}>{direction}<w:tab/></w:r>"))
+
+
+def set_running_tab_stops(paragraph, width_pt: float) -> None:
+    """Centre and far-edge tab stops across this page's text width.
+
+    Word's ``Header`` style carries stops measured for a US Letter text block.
+    On a وزیری page those sit off the paper, so a running head that separates
+    its title from its page number with a tab wraps onto a second line instead
+    of spreading across it.
+
+    Written through python-docx's own accessor rather than appended: ``w:pPr``
+    is an ordered sequence, and ``w:tabs`` belongs in front of the ``w:bidi``
+    that :func:`set_paragraph_rtl` puts at the end.
+    """
+    tabs = paragraph._p.get_or_add_pPr().get_or_add_tabs()
+    for existing in list(tabs):
+        tabs.remove(existing)
+    twentieths = int(round(width_pt * 20))
+    for alignment, position in (("center", twentieths // 2), ("right", twentieths)):
+        tabs.append(parse_xml(f'<w:tab {_WNS} w:val="{alignment}" '
+                              f'w:pos="{position}"/>'))
+
+
+def set_paragraph_alignment(paragraph, token: str) -> None:
+    """The source's own ``w:jc`` value, written back as the token it was.
+
+    Not ``paragraph.alignment``: python-docx's enum cannot express ``start`` or
+    ``end``, and those are exactly the values that mean "the outer edge" — which
+    is the left of a Persian page and the right of an English one. Keeping the
+    token is what lets a running head stay on the edge the author put it on.
+    """
+    paragraph._p.get_or_add_pPr().get_or_add_jc().set(qn("w:val"), token)
 
 
 # --------------------------------------------------------------------------- #

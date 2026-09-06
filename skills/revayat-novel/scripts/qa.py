@@ -132,10 +132,23 @@ def _check_coverage(book: dict[str, Any], report: Report, require_complete: bool
     were never translated" — the two look identical at the top of the list.
     Headings are counted apart from the rest because a book that lost only its
     headings still reads as 98% complete while its table of contents is empty.
+    The same reasoning counts running heads apart again: there are two of them
+    to a book and they print on every page, so they round to nothing in a
+    percentage and are the most visible line on the sheet.
     """
     severity = ERROR if require_complete else WARNING
     totals = {"headings": 0, "headings_translated": 0,
-              "paragraphs": 0, "paragraphs_translated": 0}
+              "paragraphs": 0, "paragraphs_translated": 0,
+              "running_heads": 0, "running_heads_translated": 0}
+    for unit_id, kind, piece, _ in ir.iter_running_pieces(book):
+        if not (piece.get("text") or "").strip():
+            continue
+        totals["running_heads"] += 1
+        if (piece.get("target") or "").strip():
+            totals["running_heads_translated"] += 1
+        else:
+            report.add(severity, "untranslated-running-head", unit_id,
+                       f"{kind}: {ir.plain_text(piece['text'])[:120]}")
     for block in ir.iter_text_blocks(book):
         if not (block.get("text") or "").strip():
             continue
