@@ -11,6 +11,13 @@ So the load-bearing test here is a mutation: take a document that passes, delete
 one visible paragraph from it, leave the geometry perfect, and require the check
 to fail. A completeness check that has only ever been seen to pass has not been
 shown to notice anything.
+
+Two more claims are proved the same way. The final review is bound to the
+**rendered sheets**, so a document whose bytes never changed but whose pages
+came out different makes the review stale — and going back to the pages the
+reviewer actually saw makes it current again. And a book of several sections is
+judged section by section, so a landscape plate is not reported as a wrong page
+size, while a page at a size no section declares still is.
 """
 
 from __future__ import annotations
@@ -65,7 +72,7 @@ def _reviewed(work_dir: Path) -> dict:
     """File a clean reviewer verdict against whatever was last rendered."""
     filed = review.record(work_dir, review.DOCUMENT,
                           dict.fromkeys(review.QUESTIONS, True),
-                          render=docqa.document_hash(work_dir))
+                          render=docqa.visual_hash(work_dir))
     assert filed["ok"], filed
     return filed
 
@@ -246,6 +253,43 @@ def test_a_final_review_does_not_survive_the_book_being_rebuilt(tmp_path):
     assert "rendered again" in after["unverified"]
 
 
+def test_a_review_does_not_survive_the_pages_coming_out_different(tmp_path):
+    """The .docx is evidence of *which book*, never of what the reviewer saw.
+
+    Same file, byte for byte, laid out to different sheets — which is what a
+    font fallback, a different backend or a newer renderer does to one
+    unchanged document. Bound to the .docx hash this passes, because nothing
+    the gate was looking at moved. Bound to the sheets it is stale, which is
+    the truth: the pages that were approved are not the pages that are there.
+
+    Then the second half, which is what makes it a digest rather than a
+    counter: render the sheets the reviewer actually saw again, and the same
+    review is current again without anybody re-filing it.
+    """
+    pytest.importorskip("pymupdf")
+    book_path = _book(tmp_path)
+    docx = _built(tmp_path, book_path)
+    passed = _laid_out(tmp_path, book_path, docx)
+    if not passed.get("verified"):
+        pytest.skip("nothing on this machine lays a document out")
+    assert passed["ok"] is True
+
+    coarser = docqa.check_document(tmp_path, book_path, docx, dpi=60)
+
+    assert coarser["document_sha256"] == passed["document_sha256"], (
+        "the document was not touched; only the pages made from it"
+    )
+    assert coarser["visual_render_sha256"] != passed["visual_render_sha256"]
+    assert coarser["verified"] is False
+    assert "rendered again" in coarser["unverified"]
+
+    again = docqa.check_document(tmp_path, book_path, docx)
+    assert again["visual_render_sha256"] == passed["visual_render_sha256"], (
+        "the same document rendered the same way is the same evidence"
+    )
+    assert again["verified"] is True and again["ok"] is True
+
+
 def test_a_document_that_cannot_be_laid_out_is_unverified_not_passed(
         monkeypatch, tmp_path):
     book_path = _book(tmp_path)
@@ -325,3 +369,139 @@ def test_the_cli_checks_and_reviews(tmp_path, capsys):
 
     assert docqa.main(arguments) == 0
     assert json.loads(capsys.readouterr().out)["ok"] is True
+
+
+# --------------------------------------------------------------------------- #
+# A book of more than one section
+# --------------------------------------------------------------------------- #
+
+MORE_PERSIAN = [
+    "باد از میان درختان می‌گذشت و صدای برگ‌ها تا ایوان می‌رسید.",
+    "او نامه را تا کرد و در جیب پالتوی خاکستری‌اش گذاشت.",
+    "تا غروب کسی از راه نرسید و چراغ‌های ده یکی‌یکی روشن شد.",
+]
+
+
+def _section(index: int, start: str, geometry: dict,
+             orientation: str = "portrait") -> dict:
+    """One `book["sections"]` record in the shape `read_docx` produces."""
+    return {"index": index, "start_block": start, "start_type": "nextPage",
+            "orientation": orientation, "gutter_pt": 0.0,
+            "header_distance_pt": 36.0, "footer_distance_pt": 36.0, **geometry}
+
+
+def _sectioned_book(tmp_path: Path) -> Path:
+    """Three sections: the house trim, a landscape plate, and a smaller trim.
+
+    Derived from `default_page_setup` rather than written out as numbers, so a
+    change to the house trim can never read as a rendering defect here — the
+    trap seven other tests already fell into once.
+    """
+    page = ir.default_page_setup()
+    landscape = {**page, "width_pt": page["height_pt"],
+                 "height_pt": page["width_pt"]}
+    smaller = {**page, "width_pt": round(page["width_pt"] * 0.75, 2),
+               "height_pt": round(page["height_pt"] * 0.75, 2)}
+
+    book = ir.new_book(lang_source="en", lang_target="fa-IR")
+    book["page"] = dict(page)
+    book["blocks"] = []
+    for index, target in enumerate(PERSIAN + MORE_PERSIAN, start=1):
+        block = ir.make_block("paragraph", index, page=1, bbox=[72, 90, 320, 140],
+                              text=f"An English paragraph number {index} here.")
+        block["target"] = target
+        book["blocks"].append(block)
+    book["sections"] = [
+        _section(0, "b00001", page),
+        _section(1, "b00003", landscape, orientation="landscape"),
+        _section(2, "b00005", smaller),
+    ]
+    path = tmp_path / "sectioned.json"
+    ir.save_book(book, path)
+    return path
+
+
+def test_the_geometry_a_page_is_judged_by_is_the_one_it_is_nearest(tmp_path):
+    """No render needed: the mapping itself, and what it admits it cannot do."""
+    setups = docqa.page_setups(ir.load_book(_sectioned_book(tmp_path)))
+    house, landscape, smaller = setups[1], setups[2], setups[3]
+
+    for wanted in (house, landscape, smaller):
+        view = {"width_pt": wanted["width_pt"], "height_pt": wanted["height_pt"]}
+        picked = docqa.setup_for(view, setups)
+        assert (picked["width_pt"], picked["height_pt"]) == (
+            wanted["width_pt"], wanted["height_pt"])
+
+    # A size nothing declares still gets the nearest one, so the page-size
+    # finding names the geometry the page most nearly is rather than whichever
+    # section happens to be first.
+    stray = {"width_pt": smaller["width_pt"] + 40, "height_pt": smaller["height_pt"]}
+    assert docqa.setup_for(stray, setups)["height_pt"] == smaller["height_pt"]
+
+
+def test_a_landscape_and_a_resized_section_are_not_reported_as_wrong_pages(tmp_path):
+    """The whole document, end to end, with three geometries in it.
+
+    Judged against the opening section alone, every page of the other two comes
+    back as a `page-size` error — a correct book failing, which is the shape of
+    defect that teaches a reader to stop reading the report.
+    """
+    pytest.importorskip("pymupdf")
+    book_path = _sectioned_book(tmp_path)
+    report = _laid_out(tmp_path, book_path, _built(tmp_path, book_path))
+
+    assert report["verified"] is True
+    assert report["findings"] == [], "a correctly assembled book reported nothing"
+    assert report["ok"] is True
+    assert report["pages"] >= 3, "one page per section at least"
+
+
+def _resized_section(docx: Path, destination: Path) -> Path:
+    """Give the landscape section a page size no section of the book declares.
+
+    The package is edited, not the book: the IR must go on saying what the
+    sections are, because the defect being modelled is a build that produced a
+    page nobody asked for.
+    """
+    import re
+
+    with zipfile.ZipFile(docx) as archive:
+        parts = {name: archive.read(name) for name in archive.namelist()}
+
+    body = parts["word/document.xml"].decode("utf-8")
+    landscape = re.findall(r'<w:pgSz [^>]*w:orient="landscape"[^>]*/>', body)
+    assert len(landscape) == 1, (
+        f"the fixture is not what this test assumes: {len(landscape)} landscape "
+        f"sections in the built document"
+    )
+    # 900x1200pt: nothing near any declared geometry, and larger than all of
+    # them, so the margins stay valid and the only thing wrong is the size.
+    parts["word/document.xml"] = body.replace(
+        landscape[0], '<w:pgSz w:w="18000" w:h="24000"/>').encode("utf-8")
+
+    with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as out:
+        for name, blob in parts.items():
+            out.writestr(name, blob)
+    return destination
+
+
+def test_a_page_at_a_size_no_section_declares_is_still_reported(tmp_path):
+    """The other half of the same claim, and the reason it is not a loosening.
+
+    Knowing more than one geometry is legitimate must not become accepting any
+    geometry at all. A page at a size the book never asked for is what a lost or
+    corrupted section break looks like from the outside, and it still fails.
+    """
+    pytest.importorskip("pymupdf")
+    book_path = _sectioned_book(tmp_path)
+    damaged = _resized_section(_built(tmp_path, book_path),
+                              tmp_path / "resized.docx")
+    after = _laid_out(tmp_path, book_path, damaged)
+
+    assert after["verified"] is True, "the damaged document still renders"
+    assert after["ok"] is False, "a page at an undeclared size passed"
+    wrong = [f for f in after["findings"] if f["code"] == "page-size"]
+    assert wrong, "the page-size check did not fire"
+    assert any(page["ok"] for page in after["per_page"]), (
+        "only the resized section is wrong; the rest of the book is not"
+    )

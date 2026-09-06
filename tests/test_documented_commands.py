@@ -284,3 +284,40 @@ def test_every_front_matter_field_is_on_one_line():
         assert re.match(r"^[a-zA-Z-]+:", line), (
             f"front-matter line continues onto the next: {line[:60]!r}"
         )
+
+
+def test_no_page_loop_command_names_a_sample_specific_file(skill_text):
+    """`$P` in one line and `page-0012` in the next is wrong for every page but 12.
+
+    The loop sets `P=12` as an example and passes `$P` to the page commands.
+    A hard-coded `page-0012.docx` beside it looked consistent and was a defect
+    an agent could only find by running the loop on page 13 and comparing the
+    wrong page.
+    """
+    executable = [line for line in skill_text.splitlines()
+                  if "revayat-novel.py" in line or line.strip().startswith("--")]
+    offenders = [line.strip() for line in executable
+                 if re.search(r"page-\d{4}\.(docx|pdf)", line)]
+    assert not offenders, (
+        "these lines name one page's file inside a loop that runs on all of "
+        "them:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_the_final_review_loop_documents_the_second_check(skill_text):
+    """`check` then `review` leaves the book unverified for ever.
+
+    The first `doc-qa check` is *expected* to come back unverified: it runs
+    before the review exists. The call that consumes the review and returns
+    `ok: true` is a second `check`, and an agent following two documented
+    commands would stop one short of a verified book.
+    """
+    step_nine = skill_text[skill_text.index("## Step 9"):]
+    checks = step_nine.count("doc-qa check")
+    reviews = step_nine.count("doc-qa review")
+    assert reviews >= 1, "step 9 never documents the review"
+    assert checks >= reviews + 1, (
+        f"step 9 documents {checks} `doc-qa check` and {reviews} `doc-qa "
+        f"review`; the check has to run again *after* the review to consume it"
+    )
+    assert "again" in step_nine, "the second check is not called out as one"

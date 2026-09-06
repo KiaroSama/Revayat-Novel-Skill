@@ -53,6 +53,7 @@ from typing import Any
 import bookir as ir
 import pagecheck
 import preview
+import review
 import qa
 import runstate
 import wordrender
@@ -71,6 +72,22 @@ class RenderError(RuntimeError):
 # --------------------------------------------------------------------------- #
 # Run one page
 # --------------------------------------------------------------------------- #
+
+def evidence(work_dir: Path, renders: dict[str, Any]) -> str:
+    """What the reviewer will actually be shown, as one identity.
+
+    The source render and **every** target sheet, in that order. Binding a
+    review to the first target PNG alone was a hole exactly the width of a page
+    that reflowed: sheet two could be re-rendered from different text and the
+    reviewer's "yes" would still stand, because nothing it was bound to had
+    moved. A page that runs to two sheets has two sheets of evidence.
+    """
+    paths = []
+    if renders.get("source"):
+        paths.append(Path(work_dir) / renders["source"])
+    paths += [Path(work_dir) / name for name in renders.get("target_sheets") or []]
+    return review.evidence_digest(paths)
+
 
 def report_path(work_dir: Path, page: int) -> Path:
     return work_dir / "qa" / "pages" / f"page-{page:04d}.json"
@@ -193,7 +210,7 @@ def check(
         # run that dies while judging must not come back reading `merged`, as
         # though the render had never happened.
         state.set_page(page, "rendered",
-                       hashes={"render": ir.sha256_file(target_png)})
+                       hashes={"render": evidence(work_dir, renders)})
 
     try:
         unverified = _why_unverified(target_pdf, conversion_failure)
@@ -248,7 +265,7 @@ def check(
         "qa": ir.sha256_file(report_path(work_dir, page)),
     }
     if sheets:
-        hashes["render"] = ir.sha256_file(target_png)
+        hashes["render"] = evidence(work_dir, renders)
     state.set_page(
         page, "qa_passed" if written["ok"] else "failed",
         hashes=hashes,

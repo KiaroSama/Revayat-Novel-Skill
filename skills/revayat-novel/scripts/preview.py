@@ -92,7 +92,7 @@ def page_book(book: dict[str, Any], page: int) -> dict[str, Any]:
     preview["footnotes"] = notes
     # The geometry this page was measured at, not the book's first page's - a
     # book with a different trim partway through is reported, not averaged.
-    preview["page"] = pagerun.geometry(book, job["block_ids"], lookup)
+    preview["page"] = pagerun.geometry(book, job["block_ids"], lookup, page)
     return preview
 
 

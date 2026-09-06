@@ -114,6 +114,18 @@ def _survey_geometry(doc, page_count: int) -> dict[str, Any]:
          "rotation": key[2], "pages": pages[:20], "page_count": len(pages)}
         for key, pages in sorted(shapes.items(), key=lambda item: -len(item[1]))
     ]
+    # Every page that is *not* the dominant shape, in full and untruncated.
+    # `variants` samples 20 pages each because it exists to be read by a person;
+    # this exists to be read by the page run, which lays each source page out on
+    # its own and must use that page's real trim and rotation. A sample would
+    # silently give page 137 the wrong paper.
+    exceptions = {
+        str(page): {"width_pt": round(key[0] * GEOMETRY_TOLERANCE_PT, 2),
+                    "height_pt": round(key[1] * GEOMETRY_TOLERANCE_PT, 2),
+                    "rotation": key[2]}
+        for key, pages in shapes.items() if key != dominant[0]
+        for page in pages
+    }
     return {
         "width_pt": round(width, 2),
         "height_pt": round(height, 2),
@@ -123,6 +135,7 @@ def _survey_geometry(doc, page_count: int) -> dict[str, Any]:
             page for key, pages in shapes.items() if key[2] for page in pages
         )[:20],
         "variants": variants,
+        "pages": exceptions,
     }
 
 

@@ -257,23 +257,20 @@ P=12   # whatever `pages next` just named
 $PY $SKILL_DIR/scripts/revayat-novel.py pages merge \
   --book $WORK/book.json --pages $WORK/pages --page $P --glossary $WORK/glossary.json
 
-# 4. lay that one page out on its own
-$PY $SKILL_DIR/scripts/revayat-novel.py pages preview \
-  --book $WORK/book.json --pages $WORK/pages --page $P
-
-# 5. compare it with the source page
+# 4. compare that page with its source page. render-qa lays the page out
+#    itself, so there is no filename to get right and no way to hand it the
+#    previous page's preview by mistake.
 $PY $SKILL_DIR/scripts/revayat-novel.py render-qa \
-  --book $WORK/book.json --work $WORK --page $P \
-  --docx $WORK/previews/page-0012.docx --source-pdf $SOURCE_PDF
+  --book $WORK/book.json --work $WORK --page $P --source-pdf $SOURCE_PDF
 
-# 6. look at the two images (step 8 says what to look for)
+# 5. look at the two images (step 8 says what to look for)
 $PY $SKILL_DIR/scripts/revayat-novel.py pages review \
   --pages $WORK/pages --page $P \
   --answer figure-placement=yes --answer script-integrity=yes \
   --answer no-source-language=yes --answer hierarchy=yes \
   --answer reads-as-a-book=yes --note "what you saw"
 
-# 7. only now
+# 6. only now
 $PY $SKILL_DIR/scripts/revayat-novel.py pages accept \
   --book $WORK/book.json --pages $WORK/pages --page $P
 ```
@@ -473,7 +470,7 @@ were written.
 **Open `renders/source/page-0012.png` and `renders/target/page-0012.png` and
 look at them side by side.** If the Persian ran onto a second sheet there is a
 `page-0012-2.png` beside them; look at that too. Then answer all five, and mean
-it — the command is step 6 of the page loop:
+it — the command is step 5 of the page loop:
 
 | Question | What you are looking for |
 | --- | --- |
@@ -576,8 +573,13 @@ $PY $SKILL_DIR/scripts/revayat-novel.py doc-qa review --work $WORK \
   --answer reads-as-a-book=yes --note "what you saw"
 ```
 
+**Then run `doc-qa check` one more time.** That second call is the one that
+consumes the review and comes back `ok: true, verified: true` — the first could
+not, because the review did not exist when it ran. Three commands, in this
+order: check, look and review, check again.
+
 The same five questions as a page review, asked of the book. The verdict is
-bound to the render it was made from, so rebuilding the document makes it stale
+bound to the pages it was made from, so rebuilding the document makes it stale
 and `doc-qa check` goes back to `unverified`. That is the intended behaviour: a
 review of a document that no longer exists is worse than no review.
 

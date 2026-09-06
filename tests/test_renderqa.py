@@ -655,3 +655,93 @@ def test_a_page_that_was_laid_out_says_so_even_when_judging_it_fails(tmp_path,
     record = runstate.RunState(tmp_path).page(1)
     assert record["state"] == "rendered"
     assert record["hashes"]["render"], "the render it kept is not identified"
+
+
+# --------------------------------------------------------------------------- #
+# A review is bound to everything the reviewer was shown
+# --------------------------------------------------------------------------- #
+
+def _two_sheet_pdf(path: Path, first: str, second: str) -> Path:
+    pymupdf = pytest.importorskip("pymupdf")
+    doc = pymupdf.open()
+    for text in (first, second):
+        page = doc.new_page(width=SETUP["width_pt"], height=SETUP["height_pt"])
+        page.insert_text((100, 150), text, fontsize=11, fontname="helv")
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+def test_the_review_identity_covers_every_target_sheet(tmp_path):
+    """A page that reflows onto two sheets has two sheets of evidence.
+
+    Binding to the first PNG alone left a hole exactly the width of the
+    overflow: sheet two could be re-rendered from different text and the
+    reviewer's `yes` would still stand, because nothing it was bound to moved.
+    """
+    pytest.importorskip("pymupdf")
+    book_path = _latin_book(tmp_path, "A line that fits on the first sheet.")
+    two = _two_sheet_pdf(tmp_path / "two.pdf",
+                         "A line that fits on the first sheet.", "The overflow.")
+
+    renderqa.check(tmp_path, book_path, 1, target_pdf=two)
+    before = runstate.RunState(tmp_path).page(1)["hashes"]["render"]
+    assert len(json.loads(renderqa.report_path(tmp_path, 1).read_text(
+        encoding="utf-8"))["renders"]["target_sheets"]) == 2
+
+    # Change ONLY the second sheet. The first is byte-identical.
+    changed = _two_sheet_pdf(tmp_path / "changed.pdf",
+                             "A line that fits on the first sheet.",
+                             "A completely different overflow.")
+    renderqa.check(tmp_path, book_path, 1, target_pdf=changed)
+    after = runstate.RunState(tmp_path).page(1)["hashes"]["render"]
+
+    assert before != after, (
+        "the second sheet changed and the review identity did not — a review "
+        "made before this would still read as current"
+    )
+
+
+def test_the_review_identity_covers_the_source_render(tmp_path):
+    """The reviewer compares two images. Changing one of them is a change."""
+    pytest.importorskip("pymupdf")
+    book_path = _latin_book(tmp_path, "The translated line.")
+    target = _pdf_page(tmp_path / "target.pdf", [("The translated line.", 60, 100)])
+    first = _pdf_page(tmp_path / "s1.pdf", [("An English source line.", 54, 100)])
+    second = _pdf_page(tmp_path / "s2.pdf", [("A different source line.", 54, 100)])
+
+    renderqa.check(tmp_path, book_path, 1, target_pdf=target, source_pdf=first)
+    before = runstate.RunState(tmp_path).page(1)["hashes"]["render"]
+    renderqa.check(tmp_path, book_path, 1, target_pdf=target, source_pdf=second)
+    after = runstate.RunState(tmp_path).page(1)["hashes"]["render"]
+
+    assert before != after, "the source page changed under the reviewer's eyes"
+
+
+def test_identical_evidence_keeps_a_review_current(tmp_path):
+    """The mirror: re-running QA over an unchanged page must not invalidate it.
+
+    Without this, the digest could be `random()` and the two tests above would
+    still pass — and every review would go stale on every re-run.
+    """
+    pytest.importorskip("pymupdf")
+    book_path = _latin_book(tmp_path, "The translated line.")
+    target = _pdf_page(tmp_path / "target.pdf", [("The translated line.", 60, 100)])
+    source = _pdf_page(tmp_path / "source.pdf", [("An English source line.", 54, 100)])
+
+    renderqa.check(tmp_path, book_path, 1, target_pdf=target, source_pdf=source)
+    before = runstate.RunState(tmp_path).page(1)["hashes"]["render"]
+    renderqa.check(tmp_path, book_path, 1, target_pdf=target, source_pdf=source)
+
+    assert runstate.RunState(tmp_path).page(1)["hashes"]["render"] == before
+
+
+def test_a_one_sheet_page_still_has_an_identity(tmp_path):
+    """The ordinary case, unchanged: one sheet, one stable digest."""
+    pytest.importorskip("pymupdf")
+    book_path = _latin_book(tmp_path, "The translated line.")
+    target = _pdf_page(tmp_path / "target.pdf", [("The translated line.", 60, 100)])
+
+    written = renderqa.check(tmp_path, book_path, 1, target_pdf=target)
+    assert written["renders"]["target_sheets"] == [written["renders"]["target"]]
+    assert runstate.RunState(tmp_path).page(1)["hashes"]["render"]
