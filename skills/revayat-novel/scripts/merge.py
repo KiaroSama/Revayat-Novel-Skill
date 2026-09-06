@@ -16,6 +16,7 @@ from typing import Any
 
 import bookir as ir
 import glossary as gl
+import segments
 from chunk import HEADER, TRANSLATOR_NOTE
 
 
@@ -154,6 +155,9 @@ def merge(
         "blank_units": {},
     }
 
+    replies: dict[str, str] = {}
+    rewrites: list[tuple[list[str], dict[str, str]]] = []
+
     for entry in manifest["chunks"]:
         if only and entry["id"] not in only:
             continue
@@ -168,18 +172,33 @@ def merge(
         missing = [u for u in entry["unit_ids"] if u not in units or not units[u].strip()]
         extra = sorted(set(units) - expected)
 
-        outcome = apply_units(book, {k: v for k, v in units.items() if k in expected})
-        _rewrite_tokens(book, entry["block_ids"], note_ids)
+        chosen = {k: v for k, v in units.items() if k in expected}
+        # Collected, not applied yet. One block's segments can be spread across
+        # several worksheets of the same page, and folding each worksheet on its
+        # own writes the block once per worksheet — every write replacing the
+        # last, so the book ends up holding the final fragment and nothing else.
+        replies.update(chosen)
+        rewrites.append((entry["block_ids"], note_ids))
+
         report["chunks_merged"] += 1
-        report["units_applied"] += len(outcome["applied"])
         if note_ids:
             report.setdefault("translator_notes", {})[entry["id"]] = note_ids
         if missing:
             report["missing_units"][entry["id"]] = missing
         if extra:
             report["unknown_units"][entry["id"]] = extra
-        if outcome["blank"]:
-            report["blank_units"][entry["id"]] = outcome["blank"]
+        blank = [unit_id for unit_id, value in chosen.items() if not value.strip()]
+        if blank:
+            report["blank_units"][entry["id"]] = blank
+
+    # Every worksheet is in. Fold the segments back — the book has never heard
+    # of `b00042#2` and must never be told — and write once.
+    outcome = apply_units(book, segments.rejoin(replies))
+    report["units_applied"] = len(outcome["applied"])
+    for block_ids, note_ids in rewrites:
+        # After the targets exist: a token rewrite reads the translation it is
+        # rewriting.
+        _rewrite_tokens(book, block_ids, note_ids)
 
     # Asking each chunk to introduce a name only where the worksheet says so is
     # a request, and parallel agents that cannot see each other all answer the
