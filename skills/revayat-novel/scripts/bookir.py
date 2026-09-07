@@ -144,6 +144,38 @@ class ArchiveTooLarge(ValueError):
     """An archive declares more than this pipeline is willing to unpack."""
 
 
+#: The most pixels one page render may allocate. A PDF page declares its own
+#: size, and PyMuPDF renders whatever it is told: measured, a legal 40-inch page
+#: at 150 dpi came back as 36 Mpx / 103 MB in 0.02 s with no complaint, and a
+#: 200-inch page at the 400 dpi the crop path uses would be 6.4 Gpx. A whole A4
+#: sheet at 1200 dpi is ~140 Mpx, so this clears every legitimate render by a
+#: wide margin and stops the one that fills the machine. Pillow guards its own
+#: decodes (`Image.MAX_IMAGE_PIXELS`, ~89 Mpx, left at its default); this is
+#: the same guard for the renderer, which has none.
+RENDER_MAX_PIXELS = 400_000_000
+
+
+class RenderTooLarge(ValueError):
+    """A page would render to more pixels than this pipeline is willing to hold."""
+
+
+def check_render_area(width_pt: float, height_pt: float, dpi: float) -> tuple[int, int]:
+    """The pixel size a page renders to at ``dpi``, or a refusal if it is absurd.
+
+    Pure arithmetic on the page's declared size, so it can run before a single
+    byte is rendered — which is the only useful moment to run it.
+    """
+    width = int(round(float(width_pt) * float(dpi) / 72.0))
+    height = int(round(float(height_pt) * float(dpi) / 72.0))
+    if width * height > RENDER_MAX_PIXELS:
+        raise RenderTooLarge(
+            f"a {width_pt / 72:.1f}x{height_pt / 72:.1f} inch page at {dpi:g} dpi "
+            f"would render to {width}x{height} = {width * height / 1e6:.0f} Mpx, "
+            f"over the {RENDER_MAX_PIXELS / 1e6:.0f} Mpx ceiling; it was not "
+            f"rendered. A page this size is not a book page.")
+    return width, height
+
+
 def check_archive_limits(path: str | os.PathLike[str]) -> dict[str, int]:
     """Refuse an archive whose *declared* contents would exhaust the machine.
 

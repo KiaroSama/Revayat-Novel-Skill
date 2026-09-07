@@ -253,6 +253,12 @@ def build(
         with tempfile.TemporaryDirectory(prefix="revayat-novel-ocr-") as scratch:
             for index in range(count):
                 image = Path(scratch) / f"p{index + 1:05d}.png"
+                # A page declares its own size; at 300 dpi a legal 200-inch page
+                # is 3.6 Gpx. Refused from the declared size, before rendering,
+                # and raised rather than skipped: a scan with such a page is not
+                # a book, and OCR quietly missing a page is the worse outcome.
+                ir.check_render_area(document[index].rect.width,
+                                     document[index].rect.height, dpi)
                 document[index].get_pixmap(dpi=dpi).save(image)
                 page = build_page(
                     run_tesseract(image, language=language, binary=binary),

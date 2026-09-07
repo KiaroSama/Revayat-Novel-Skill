@@ -173,7 +173,16 @@ def render_png(pdf_path: Path, index: int, out_path: Path,
     try:
         if not 0 <= index < len(doc):
             return None
-        doc[index].get_pixmap(dpi=dpi).save(str(out_path))
+        page = doc[index]
+        try:
+            # A page declares its own size and PyMuPDF renders whatever it is
+            # told; a legal 200-inch page at this dpi is gigabytes. Refused from
+            # the declared size, before any pixel exists — and reported the way
+            # every other "could not render" is here: no artefact, unverified.
+            ir.check_render_area(page.rect.width, page.rect.height, dpi)
+        except ir.RenderTooLarge:
+            return None
+        page.get_pixmap(dpi=dpi).save(str(out_path))
     finally:
         doc.close()
     return out_path

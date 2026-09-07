@@ -776,3 +776,65 @@ def test_doctor_reports_the_backend_the_pipeline_will_actually_use():
         assert reported.startswith("not found"), reported
         assert wordrender.unavailable_reason() in reported
     assert "WINWORD" not in reported
+
+
+# --------------------------------------------------------------------------- #
+# A page declares its own size, and the renderer has no ceiling of its own
+# --------------------------------------------------------------------------- #
+
+def _hostile_pdf(path, inches: float = 200.0):
+    """A legal one-page PDF whose page is `inches` square. Tiny on disk."""
+    pymupdf = pytest.importorskip("pymupdf")
+    doc = pymupdf.open()
+    page = doc.new_page(width=inches * 72, height=inches * 72)
+    page.insert_text((72, 72), "a page this size is not a book page", fontsize=11)
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+def test_the_render_ceiling_refuses_a_giant_page_and_clears_every_real_one():
+    """Measured before this existed: a 40-inch page at 150 dpi rendered 36 Mpx in
+    0.02 s with no complaint. A 200-inch page at the crop path's 400 dpi is 6.4
+    Gpx. The ceiling has to stop that and never touch a real book."""
+    import bookir as ir
+
+    for dpi in (110, 150, 300, 400):
+        with pytest.raises(ir.RenderTooLarge):
+            ir.check_render_area(200 * 72, 200 * 72, dpi)
+
+    # Every legitimate case, at every dpi this pipeline uses, plus a margin.
+    a4 = (595.3, 841.9)
+    letter = (612.0, 792.0)
+    vaziri = (16.5 / 2.54 * 72, 23.5 / 2.54 * 72)
+    for w, h in (a4, letter, vaziri):
+        for dpi in (110, 150, 300, 400):
+            ir.check_render_area(w, h, dpi)
+    ir.check_render_area(*a4, 1200)                 # ~140 Mpx: a real print scan
+    w, h = ir.check_render_area(*letter, 400)
+    assert (w, h) == (3400, 4400)
+
+
+def test_render_png_declines_a_hostile_page_instead_of_allocating(tmp_path):
+    """`None` is this function's word for "could not render"; every caller
+    already turns it into `unverified`. It must not become a 2.5 GB pixmap."""
+    pdf = _hostile_pdf(tmp_path / "giant.pdf")
+    assert pdf.stat().st_size < 10_000, "the fixture should be tiny on disk"
+    out = tmp_path / "renders" / "giant.png"
+
+    assert pagecheck.render_png(pdf, 0, out, 150) is None
+    assert not out.exists(), "an artefact was written for a refused render"
+
+
+def test_the_crop_path_refuses_a_hostile_page_by_name(tmp_path):
+    """No embedded raster covers this page, so the crop path would render it at
+    400 dpi. It has to refuse with the named error, not degrade quietly."""
+    import bookir as ir
+    import rasters
+
+    pymupdf = pytest.importorskip("pymupdf")
+    pdf = _hostile_pdf(tmp_path / "giant.pdf")
+    with pymupdf.open(str(pdf)) as document:
+        with pytest.raises(ir.RenderTooLarge) as refused:
+            rasters.crop_from_source(document, 1, [72, 72, 720, 720], tmp_path)
+    assert "not a book page" in str(refused.value)
