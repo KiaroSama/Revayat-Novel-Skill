@@ -48,10 +48,11 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import bookir as ir
 import pagecheck
+import pagerun
 import preview
 import review
 import qa
@@ -93,45 +94,80 @@ def report_path(work_dir: Path, page: int) -> Path:
     return work_dir / "qa" / "pages" / f"page-{page:04d}.json"
 
 
-#: Returned as the index when the manifest exists, describes a PDF book, and
-#: still names no source page. Distinct from "there is no manifest at all",
-#: which is an EPUB or a synthetic fixture and has no source page by nature.
-MISSING_MANIFEST_SOURCE = -1
+class Source(NamedTuple):
+    """This page's source page: where it is, which sheet, and what it must be.
+
+    ``problem`` is the named reason there is no usable source, empty when there
+    is one. ``required`` says the page run owes a source page at all — a DOCX or
+    EPUB run does not, and never will.
+    """
+    path: Path | None = None
+    index: int = 0
+    sha256: str = ""
+    required: bool = False
+    problem: str = ""
 
 
 def source_evidence(work_dir: Path, pages_dir: Path | None, page: int,
-                    given: Path | None) -> tuple[Path | None, int]:
-    """Which file holds this page's source render, and which sheet of it.
+                    given: Path | None) -> Source:
+    """Which file holds this page's source render, and whether it is the right one.
 
     Callers used to have to work this out: hand over the whole reference PDF
     and remember that its page index is one less than the page number. Nobody
     following the documented loop did, so `--source-pdf` was simply omitted and
-    the comparison quietly became one-sided. The manifest already knows - it
-    records a one-page PDF per page - so this reads it instead of asking.
+    the comparison quietly became one-sided. The manifest already knows — it
+    records a one-page PDF per page, and its SHA-256 — so this reads it.
 
-    ``(path, index)`` when there is one, ``(None, MISSING_MANIFEST_SOURCE)``
-    when a PDF book's manifest names none, and ``(None, 0)`` when the book has
-    no source pages at all and never should have.
+    **The manifest wins over `--source-pdf`.** An override was allowed to
+    replace the recorded artefact, which let any readable PDF stand in as the
+    evidence for a manifested page: the report then said a source had been
+    rendered, and nothing downstream could tell it was a different book. An
+    explicit path is still honoured where there is no manifest, which is how
+    synthetic fixtures and one-off diagnostics work.
+
+    **The bytes are checked, not just the path.** `pages build` recorded what
+    that file was; a file at the right path is not the same claim as the file
+    the run committed to.
     """
-    if given is not None:
-        # An explicit file is the whole reference PDF unless it is one page.
-        given = Path(given)
-        return given, 0 if page_count(given) == 1 else page - 1
-
     pages_dir = Path(pages_dir) if pages_dir else Path(work_dir) / "pages"
     try:
         manifest = json.loads((pages_dir / "manifest.json")
                               .read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None, 0          # no page run here: nothing was ever promised
+        # No page run here, so nothing was ever promised and an explicit file
+        # is the only thing there is. It is the whole reference PDF unless it
+        # is one page, which is the arithmetic the manifest exists to remove.
+        if given is None:
+            return Source()
+        given = Path(given)
+        return Source(path=given,
+                      index=0 if page_count(given) == 1 else page - 1)
 
-    if not (manifest.get("reference_pdf") or "").strip():
-        return None, 0          # an EPUB or DOCX book: there is no source page
-    for entry in manifest.get("chunks") or ():
-        if entry.get("page") == page and entry.get("source_pdf"):
-            # The split one-page PDF, so the index is always its only sheet.
-            return pages_dir / entry["source_pdf"], 0
-    return None, MISSING_MANIFEST_SOURCE
+    if not pagerun.needs_source_page(manifest):
+        return Source()         # a DOCX or EPUB run: there is no source page
+
+    entry = next((item for item in manifest.get("chunks") or ()
+                  if item.get("page") == page), None)
+    if entry is None or not entry.get("source_pdf"):
+        return Source(required=True, problem=(
+            f"the page manifest names no source PDF for page {page}, so there "
+            f"is nothing to compare the translation against"))
+
+    path = pages_dir / entry["source_pdf"]
+    if not path.exists():
+        return Source(required=True, problem=(
+            f"source-missing: page {page}'s source page should be at {path} "
+            f"and is not there; re-run `pages build`"))
+
+    wanted = entry.get("source_pdf_sha256") or ""
+    if wanted and ir.sha256_file(path) != wanted:
+        return Source(required=True, problem=(
+            f"source-hash-mismatch: {path} is not the file `pages build` cut "
+            f"for page {page}. Something replaced it, and comparing against it "
+            f"would compare the translation with the wrong page"))
+
+    # The split one-page PDF, so the index is always its only sheet.
+    return Source(path=path, index=0, sha256=wanted, required=True)
 
 
 def check(
@@ -214,21 +250,17 @@ def check(
             conversion_failure = str(error)
 
     renders: dict[str, Any] = {}
-    wanted, source_index = source_evidence(work_dir, pages_dir, page, source_pdf)
-    source_missing = ""
-    if wanted is not None:
-        rendered = (render_png(wanted, source_index,
-                               work_dir / "renders" / "source" / f"page-{page:04d}.png",
-                               dpi) if wanted.exists() else None)
+    origin = source_evidence(work_dir, pages_dir, page, source_pdf)
+    source_missing = origin.problem
+    if origin.path is not None and not source_missing:
+        rendered = render_png(
+            origin.path, origin.index,
+            work_dir / "renders" / "source" / f"page-{page:04d}.png", dpi)
         if rendered is not None:
             renders["source"] = str(rendered.relative_to(work_dir).as_posix())
-        else:
-            source_missing = (f"the source page for page {page} should be at "
-                              f"{wanted}, and it could not be rendered from "
-                              f"there")
-    elif source_index == MISSING_MANIFEST_SOURCE:
-        source_missing = (f"the page manifest names no source PDF for page "
-                          f"{page}, so there is nothing to compare against")
+        elif origin.required:
+            source_missing = (f"source-unreadable: page {page}'s source page is "
+                              f"at {origin.path} and could not be rendered")
 
     target_png = work_dir / "renders" / "target" / f"page-{page:04d}.png"
     if target_image is not None and not Path(target_image).exists():
@@ -288,6 +320,8 @@ def check(
             # apart from a page with no source at all — otherwise a missing
             # converter is reported as a missing source page.
             "source_evidence": renders.get("source", ""),
+            "source_pdf": str(origin.path) if origin.path else "",
+            "source_pdf_sha256": origin.sha256,
             "renders": renders,
             "detail": f"page {page} was not checked: {unverified}. It is "
                       f"unverified, not passed.",
@@ -317,6 +351,8 @@ def check(
         # Named rather than inferred from `renders`, so a gate downstream asks
         # one question instead of re-deriving the answer from a file listing.
         "source_evidence": renders.get("source", ""),
+        "source_pdf": str(origin.path) if origin.path else "",
+        "source_pdf_sha256": origin.sha256,
         "renders": renders,
         "preview": built_preview or str(docx or target_pdf or ""),
         "sheets": len(views),

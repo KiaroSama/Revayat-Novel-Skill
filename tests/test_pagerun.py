@@ -1461,3 +1461,166 @@ def test_the_page_loop_still_reaches_accepted_with_both_sides_present(
         assert taken.get("refused") != "no-source-render", taken
     else:
         assert taken["ok"], f"a page with both sides was not accepted: {taken}"
+
+
+# --------------------------------------------------------------------------- #
+# Source identity: a PDF book cannot stop being one
+# --------------------------------------------------------------------------- #
+
+def test_a_pdf_whose_source_moved_is_refused_a_page_run(tmp_path, sample_png):
+    """Losing the source file is not a new source format.
+
+    Before this, `reference_pdf` returned None, `build` carried on, and the
+    manifest came out with an empty `reference_pdf` and an empty `source_pdf`
+    on every entry — which every later gate read as "a format that has no
+    source pages", exactly what DOCX and EPUB look like. The book then walked
+    all the way to `accepted` with nothing ever compared against it.
+    """
+    pytest.importorskip("pymupdf")
+    pdf = _odd_pdf(tmp_path / "source.pdf", sample_png)
+    book_path = _save(_book_from_pdf(pdf, 3), tmp_path)
+    pdf.unlink()
+
+    with pytest.raises(pagerun.SourceUnavailable) as refused:
+        pagerun.build(book_path, tmp_path / "pages")
+    assert "PDF" in str(refused.value)
+    assert not (tmp_path / "pages" / "manifest.json").exists(), (
+        "a manifest was written for a run that cannot compare anything")
+
+
+def test_a_non_pdf_book_still_needs_no_source_page(tmp_path):
+    """The gate must not fire on a book that never had a source page."""
+    book = _book([_prose(1, "First"), _prose(2, "Second")])
+    book["source"]["format"] = "epub"
+    book_path = _save(book, tmp_path)
+
+    manifest = pagerun.build(book_path, tmp_path / "pages")
+    assert manifest["source_format"] == "epub"
+    assert manifest["reference_pdf"] == ""
+    assert pagerun.needs_source_page(manifest) is False
+    assert pagerun.missing_source_render(tmp_path / "pages", 1) is None
+
+
+def test_the_source_requirement_survives_an_empty_path(tmp_path, sample_png):
+    """`source_format` is the authority, not whether a path is filled in."""
+    pytest.importorskip("pymupdf")
+    _, _, pages = _translated_pdf_run(tmp_path, sample_png)
+
+    manifest = pagerun.load_manifest(pages)
+    assert manifest["source_format"] == "pdf"
+    assert pagerun.needs_source_page(manifest) is True
+
+    # Exactly the state the old code produced: a PDF run, every path blanked.
+    hollow = json.loads(json.dumps(manifest))
+    hollow["reference_pdf"] = ""
+    for entry in hollow["chunks"]:
+        entry["source_pdf"] = ""
+        entry["source_pdf_sha256"] = ""
+    assert pagerun.needs_source_page(hollow) is True, (
+        "blanking the paths made the source requirement disappear")
+
+    (pages / "manifest.json").write_text(
+        json.dumps(hollow, ensure_ascii=False), encoding="utf-8")
+    refused = pagerun.missing_source_render(pages, 1)
+    assert refused and refused["refused"] in {"no-source-render", "no-render-qa"}
+
+
+def test_an_older_manifest_with_no_source_format_is_still_read_as_pdf(
+        tmp_path, sample_png):
+    """A manifest written before the field existed must not lose the gate."""
+    pytest.importorskip("pymupdf")
+    _, _, pages = _translated_pdf_run(tmp_path, sample_png)
+    manifest = pagerun.load_manifest(pages)
+    del manifest["source_format"]
+    assert pagerun.needs_source_page(manifest) is True, (
+        "an older PDF manifest stopped requiring a source page")
+
+
+def test_an_explicit_source_pdf_cannot_replace_the_manifest_artefact(
+        tmp_path, sample_png):
+    """Any readable PDF could stand in as a manifested page's evidence.
+
+    The report then said a source had been rendered, and nothing downstream
+    could tell it was a different book.
+    """
+    pytest.importorskip("pymupdf")
+    _, book_path, pages = _translated_pdf_run(tmp_path, sample_png)
+    impostor = _odd_pdf(tmp_path / "someone-elses.pdf", sample_png)
+
+    origin = renderqa.source_evidence(tmp_path, pages, 1, impostor)
+    assert origin.path is not None
+    assert origin.path != impostor, "the override replaced the manifest's page"
+    assert origin.path == pages / _job(pagerun.load_manifest(pages), 1)["source_pdf"]
+    assert origin.sha256, "the manifest's recorded hash was not carried"
+
+
+def test_replacing_the_source_artefact_is_caught_by_its_hash(tmp_path, sample_png):
+    """A file at the right path is not the file the run committed to."""
+    pymupdf = pytest.importorskip("pymupdf")
+    _, book_path, pages = _translated_pdf_run(tmp_path, sample_png)
+    artefact = pages / _job(pagerun.load_manifest(pages), 1)["source_pdf"]
+
+    assert renderqa.source_evidence(tmp_path, pages, 1, None).problem == ""
+
+    # A different, perfectly readable one-page PDF at exactly the right path.
+    other = _odd_pdf(tmp_path / "other.pdf", sample_png)
+    with pymupdf.open(str(other)) as book, pymupdf.open() as one:
+        one.insert_pdf(book, from_page=1, to_page=1)
+        artefact.unlink()
+        one.save(str(artefact))
+
+    tampered = renderqa.source_evidence(tmp_path, pages, 1, None)
+    assert "source-hash-mismatch" in tampered.problem, tampered.problem
+    assert tampered.path is None
+
+    written = renderqa.check(tmp_path, book_path, 1)
+    assert written["verified"] is False and written["ok"] is False
+    assert "source-hash-mismatch" in written.get("unverified", "")
+    assert not written.get("source_evidence")
+
+    review.record(tmp_path, 1, dict.fromkeys(review.QUESTIONS, True),
+                  note="claims to have compared them")
+    refused = pagerun.missing_source_render(pages, 1)
+    assert refused and refused["refused"] == "no-source-render"
+    taken = pagerun.accept(book_path, pages, 1)
+    assert taken["ok"] is False, f"accepted against a swapped source: {taken}"
+
+
+def test_a_deleted_source_artefact_is_named_missing_not_mismatched(
+        tmp_path, sample_png):
+    """`source-missing` and `source-hash-mismatch` are different diagnoses."""
+    pytest.importorskip("pymupdf")
+    _, _, pages = _translated_pdf_run(tmp_path, sample_png)
+    (pages / _job(pagerun.load_manifest(pages), 2)["source_pdf"]).unlink()
+
+    gone = renderqa.source_evidence(tmp_path, pages, 2, None)
+    assert "source-missing" in gone.problem, gone.problem
+    assert gone.required is True
+
+
+def test_rebuilding_restores_the_source_and_the_loop_works_again(
+        tmp_path, sample_png):
+    """A tamper must be recoverable, or the gate is a trap rather than a check."""
+    pytest.importorskip("pymupdf")
+    _, book_path, pages = _translated_pdf_run(tmp_path, sample_png)
+    artefact = pages / _job(pagerun.load_manifest(pages), 1)["source_pdf"]
+    artefact.write_bytes(b"%PDF-1.4 not really\n")
+
+    assert "source-hash-mismatch" in renderqa.source_evidence(
+        tmp_path, pages, 1, None).problem
+
+    pagerun.build(book_path, pages)          # re-cut from the real source
+    restored = renderqa.source_evidence(tmp_path, pages, 1, None)
+    assert restored.problem == "", restored.problem
+    assert restored.path is not None and restored.path.exists()
+
+
+def test_a_run_with_no_manifest_still_honours_an_explicit_source(
+        tmp_path, sample_png):
+    """Synthetic fixtures and one-off diagnostics keep working."""
+    pytest.importorskip("pymupdf")
+    pdf = _odd_pdf(tmp_path / "loose.pdf", sample_png)
+    origin = renderqa.source_evidence(tmp_path, tmp_path / "nowhere", 2, pdf)
+    assert origin.path == pdf
+    assert origin.index == 1, "a multi-page file still needs the page index"
+    assert origin.required is False
