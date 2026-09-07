@@ -445,6 +445,9 @@ def read_docx(
     lang_target: str = "fa-IR",
 ) -> dict[str, Any]:
     asset_dir.mkdir(parents=True, exist_ok=True)
+    # A DOCX is a zip, and python-docx unpacks whatever the central directory
+    # declares. Refused here first, before any member is inflated.
+    ir.check_archive_limits(path)
     document = Document(path)
     notes = _read_notes(document)
     core = document.core_properties

@@ -61,6 +61,13 @@ function Get-AgentRoot {
         'opencode'    { '.opencode' }
         'antigravity' { '.agents' }
     }
+    if ($InstallScope -eq 'user' -and $Name -eq 'opencode') {
+        # OpenCode reads project skills from .opencode/skills but user skills
+        # from ~/.config/opencode/skills - not ~/.opencode/skills, where this
+        # installer used to put them and where OpenCode never looks. Verified
+        # against opencode.ai/docs/skills, not inferred from the project path.
+        return (Join-Path (Join-Path (Join-Path $HOME '.config') 'opencode') 'skills')
+    }
     $base = if ($InstallScope -eq 'user') { $HOME } else { $ProjectPath }
     return (Join-Path (Join-Path $base $folder) 'skills')
 }

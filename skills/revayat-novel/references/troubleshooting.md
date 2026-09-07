@@ -203,3 +203,27 @@ are one function, so they cannot disagree about a machine.
 
 On Windows, Word is preferred when `pywin32` is installed; LibreOffice is the
 fallback there, not the first choice.
+
+## `extract` refuses an EPUB or DOCX with `ArchiveTooLarge`
+
+Both formats are zip files, and a zip's members *declare* their own unpacked
+sizes — a few kilobytes of well-compressed zeros can announce gigabytes and fill
+the disk when a reader inflates them. The readers therefore check the central
+directory before opening anything, against three ceilings:
+
+| ceiling | value | what it stops |
+| --- | --- | --- |
+| members | 20 000 | a zip of a hundred thousand empty files |
+| total unpacked | 2 GB | a handful of members that add up to a disk |
+| one member's inflation | 400:1, only for members over 8 MB | a single large run of zeros |
+
+A real novel is a few thousand members and a few hundred megabytes at the
+outside, so these clear it by an order of magnitude. The inflation test applies
+only to members over 8 MB on purpose: a 100 KB chapter of repetitive XHTML was
+measured compressing 558:1 and is harmless — the cost of inflating it is 100 KB.
+
+If a genuine book trips this — a scanned facsimile EPUB with thousands of page
+images, say — the message names which ceiling and which member. Open the archive
+with any zip tool and look at that member before raising a limit; the ceilings
+are constants at the top of `bookir.py`, not command-line flags, because a book
+that needs them raised is rare enough to be worth a moment's attention.

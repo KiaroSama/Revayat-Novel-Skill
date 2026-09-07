@@ -124,12 +124,20 @@ for name in $TARGETS; do
     folder="$(agent_folder "$name")"
     base="$HOME"
     [ "$SCOPE" = "project" ] && base="$PROJECT_PATH"
-    root="$base/$folder/skills"
+    agent_home="$base/$folder"
+    # OpenCode reads project skills from .opencode/skills but user skills from
+    # ~/.config/opencode/skills - not ~/.opencode/skills, where this installer
+    # used to put them and where OpenCode never looks. Verified against
+    # opencode.ai/docs/skills rather than inferred from the project layout.
+    if [ "$name" = "opencode" ] && [ "$SCOPE" != "project" ]; then
+        agent_home="$HOME/.config/opencode"
+    fi
+    root="$agent_home/skills"
     destination="$root/$SKILL_NAME"
 
     # For 'all' at user scope, only install where the agent is actually present,
     # so we do not create config directories for tools that are not installed.
-    if [ "$AGENT" = "all" ] && [ ! -d "$base/$folder" ]; then
+    if [ "$AGENT" = "all" ] && [ ! -d "$agent_home" ]; then
         skipped="$skipped $name(absent)"
         continue
     fi
