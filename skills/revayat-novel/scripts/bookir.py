@@ -159,6 +159,56 @@ class RenderTooLarge(ValueError):
     """A page would render to more pixels than this pipeline is willing to hold."""
 
 
+class ImageTooLarge(ValueError):
+    """An image file declares more pixels than this pipeline is willing to decode."""
+
+
+def open_image(source: Any) -> Any:
+    """``PIL.Image.open`` with Pillow's decode ceiling made into a refusal.
+
+    Pillow has *two* thresholds for one limit, and that is easy to remember as
+    one. Above twice ``Image.MAX_IMAGE_PIXELS`` (~179 Mpx) it raises
+    ``DecompressionBombError``; between one and two times (~89-179 Mpx) it only
+    *warns* and decodes anyway. Measured: a 66-byte PNG declaring 15000x9000 -
+    135 Mpx, some 400 MB decoded - opened with one ``DecompressionBombWarning``
+    on stderr that nothing reads. Both bands become one named error here, and
+    the ceiling itself is left at Pillow's default on purpose: raise it for a
+    genuine oversized plate, never remove it.
+    """
+    import warnings  # noqa: PLC0415
+
+    from PIL import Image  # noqa: PLC0415
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        try:
+            image = Image.open(source)
+            image.load()
+        except (Image.DecompressionBombWarning, Image.DecompressionBombError) as bomb:
+            raise ImageTooLarge(
+                f"an image declares more pixels than this pipeline will decode "
+                f"({bomb}); it was not decoded") from bomb
+    return image
+
+
+#: The most pages one PDF may have. The longest real books run to about two
+#: thousand; a PDF can legally declare millions of empty pages in a few
+#: megabytes, and the page route writes one file per page.
+PDF_MAX_PAGES = 20_000
+
+
+class TooManyPages(ValueError):
+    """A document declares more pages than this pipeline is willing to walk."""
+
+
+def check_page_count(count: int, label: str = "the document") -> int:
+    if count > PDF_MAX_PAGES:
+        raise TooManyPages(
+            f"{label} declares {count} pages, over the {PDF_MAX_PAGES} ceiling; "
+            f"a book does not have that many and it was not read")
+    return count
+
+
 def check_render_area(width_pt: float, height_pt: float, dpi: float) -> tuple[int, int]:
     """The pixel size a page renders to at ``dpi``, or a refusal if it is absurd.
 

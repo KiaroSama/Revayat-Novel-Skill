@@ -526,6 +526,10 @@ def read_pdf(
     asset_dir.mkdir(parents=True, exist_ok=True)
     doc = pymupdf.open(path)
     try:
+        # A PDF can legally declare millions of empty pages in a few megabytes,
+        # and the page route writes one file per page. Refused from the count
+        # before a single page is read.
+        ir.check_page_count(len(doc), str(path))
         return _read_open_pdf(
             doc, path, asset_dir,
             lang_source=lang_source, lang_target=lang_target, max_pages=max_pages,

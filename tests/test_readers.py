@@ -263,3 +263,73 @@ def test_pillow_keeps_its_own_decode_ceiling():
     assert len(hostile) < 100
     with pytest.raises(Image.DecompressionBombError):
         Image.open(io.BytesIO(hostile)).load()
+
+
+def _declared_png(width: int, height: int) -> bytes:
+    """A valid PNG header declaring any size, with one compressed byte of data."""
+    import struct
+    import zlib
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return (struct.pack(">I", len(body)) + kind + body
+                + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF))
+
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"\0"))
+            + chunk(b"IEND", b""))
+
+
+def test_open_image_refuses_the_warning_band_not_only_the_extreme():
+    """Pillow raises above 2x its ceiling and only *warns* between 1x and 2x.
+
+    Measured: 15000x9000 is 135 Mpx, inside that band, and `Image.open` opened
+    it with one stderr line. `open_image` must refuse both bands by name.
+    """
+    import io
+
+    import bookir as ir
+    from PIL import Image
+
+    limit = Image.MAX_IMAGE_PIXELS
+    assert limit is not None
+    assert limit < 15000 * 9000 < 2 * limit, "the fixture is not in the warning band"
+
+    with pytest.raises(ir.ImageTooLarge):
+        ir.open_image(io.BytesIO(_declared_png(15000, 9000)))       # warning band
+    with pytest.raises(ir.ImageTooLarge):
+        ir.open_image(io.BytesIO(_declared_png(60000, 60000)))      # error band
+
+
+def test_open_image_opens_an_ordinary_image(tmp_path):
+    from PIL import Image
+
+    import bookir as ir
+
+    path = tmp_path / "plate.png"
+    Image.new("RGB", (1200, 900), (200, 30, 30)).save(path)
+    image = ir.open_image(path)
+    assert image.size == (1200, 900)
+
+
+def test_a_pdf_declaring_too_many_pages_is_refused_before_it_is_read(tmp_path):
+    """Millions of empty pages fit in a few megabytes, and the page route writes
+    one file per page. A book does not have twenty thousand pages."""
+    import bookir as ir
+    from read_pdf import read_pdf
+
+    pymupdf = pytest.importorskip("pymupdf")
+    assert ir.check_page_count(2000) == 2000
+    with pytest.raises(ir.TooManyPages):
+        ir.check_page_count(ir.PDF_MAX_PAGES + 1)
+
+    doc = pymupdf.open()
+    for _ in range(ir.PDF_MAX_PAGES + 1):
+        doc.new_page(width=200, height=300)
+    path = tmp_path / "endless.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    with pytest.raises(ir.TooManyPages) as refused:
+        read_pdf(str(path), tmp_path / "assets")
+    assert str(ir.PDF_MAX_PAGES + 1) in str(refused.value)

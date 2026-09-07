@@ -43,6 +43,8 @@ import io
 from pathlib import Path
 from typing import Any
 
+import bookir as ir
+
 #: Saturation above this counts as coloured. Text measured 0, so this is a
 #: wide margin that still catches faint, heavily-transparent watermark edges.
 SATURATION_THRESHOLD = 16
@@ -164,7 +166,9 @@ def clean_pdf(
                 except Exception:
                     raw = None
                 if raw is not None:
-                    original = Image.open(io.BytesIO(raw["image"]))
+                    # Not `Image.open`: Pillow only warns in the band between
+                    # one and two times its pixel ceiling, and decodes anyway.
+                    original = ir.open_image(io.BytesIO(raw["image"]))
                     cleaned, outcome = clean_image(
                         original, force=force, ghost_threshold=ghost_threshold
                     )
