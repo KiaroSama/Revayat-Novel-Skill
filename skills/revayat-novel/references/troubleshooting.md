@@ -138,3 +138,42 @@ recognised text rather than the page image.
 The cleaner skips pages whose coloured fraction looks like artwork rather than a
 stamp, to avoid wiping real pictures. `--clean-scan force` overrides that for a
 page you know is text.
+
+## `pages build` refuses with `source-pdf-unavailable`
+
+The book was read from a PDF and that PDF is no longer where `book.json` says
+it is. The page route cuts one real PDF per source page so a reviewer can set
+the translation beside the page it came from; without the file it cannot cut
+any of them.
+
+It refuses rather than carrying on, because carrying on used to produce a page
+run with an empty `reference_pdf` and an empty `source_pdf` on every page —
+which every later gate read as *a format that has no source pages*, exactly
+what a DOCX or an EPUB looks like. The book then reached `accepted` with
+nothing ever compared against it. **Losing the source file is not a new source
+format.**
+
+Put the PDF back where the book names it, or beside `book.json`, and run
+`pages build` again. If the file is genuinely gone, re-run `extract` against
+the copy you do have.
+
+## `render-qa` says `source-missing` or `source-hash-mismatch`
+
+Two different diagnoses about the same artefact, `pages/source/page-NNNN.pdf`:
+
+- **`source-missing`** — the one-page PDF `pages build` cut is not there. Run
+  `pages build` again; it is safe on an existing run and re-cuts the sources.
+- **`source-hash-mismatch`** — a file *is* there and it is not the one the
+  manifest committed to. Something replaced it, and rendering it would compare
+  the translation against the wrong page. `pages build` again restores it.
+
+Either way the page comes back `unverified`, and `pages review` and `pages
+accept` both refuse until it is resolved. That is the gate working: the page
+route accepts a page by *comparison*, and every deterministic check reads only
+the translated side, so all of them would pass on a page nobody set beside its
+source.
+
+`--source-pdf` will not get you past this on a page that has a manifest — the
+manifest's own artefact wins, deliberately, because an override let any
+readable PDF stand in as a page's evidence. It is still honoured where there is
+no page run at all, which is how one-off diagnostics work.

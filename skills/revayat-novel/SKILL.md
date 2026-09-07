@@ -279,10 +279,19 @@ Then `pages next` again, until it says there is nothing left.
 there for when you want to open the page in Word and look at it yourself.
 
 **A PDF page cannot be accepted on the translation alone.** If the source page
-cannot be rendered — the one-page PDF deleted, unreadable, never split — the
-report comes back `unverified`, and both `pages review` and `pages accept`
-refuse it. Every deterministic check reads the target, so all of them would
-pass on a page nobody ever set beside the page it came from.
+cannot be rendered — the one-page PDF deleted, replaced, never split — the
+report comes back `unverified` with a named reason (`source-missing`,
+`source-hash-mismatch`), and both `pages review` and `pages accept` refuse it.
+Every deterministic check reads the target, so all of them would pass on a page
+nobody ever set beside the page it came from. `--source-pdf` will not override
+a page that has a manifest: the artefact `pages build` cut, and its recorded
+hash, are what the comparison uses.
+
+**And `pages build` itself refuses if the source PDF has moved**
+(`source-pdf-unavailable`). Building anyway produced a run with every source
+path empty, which reads exactly like a DOCX or an EPUB — a format that has no
+source pages — so the whole book could reach `accepted` uncompared. See
+`references/troubleshooting.md`.
 
 **The preview is one source page, laid out alone.** It is emphatically not the
 whole book: Persian reflows, so source page 12 does not become the book's page
