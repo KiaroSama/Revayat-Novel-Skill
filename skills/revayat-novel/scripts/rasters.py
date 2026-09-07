@@ -65,7 +65,9 @@ def best_page_raster(document, page_number: int):
 
     if best is not None:
         extracted = document.extract_image(best[0])
-        image = Image.open(BytesIO(extracted["image"]))
+        # `ir.open_image`, not `Image.open`: Pillow only *warns* in the band
+        # between one and two times its pixel ceiling and decodes anyway.
+        image = ir.open_image(BytesIO(extracted["image"]))
         return image, {
             "method": "embedded-page-image",
             "pixel_width": image.width,
@@ -78,7 +80,7 @@ def best_page_raster(document, page_number: int):
     # rather than degrading to a smaller render nobody asked for.
     ir.check_render_area(rect.width, rect.height, CROP_RENDER_DPI)
     pixmap = page.get_pixmap(dpi=CROP_RENDER_DPI)
-    image = Image.open(BytesIO(pixmap.tobytes("png")))
+    image = ir.open_image(BytesIO(pixmap.tobytes("png")))
     return (image,
             {"method": "rendered-page", "dpi": CROP_RENDER_DPI,
              "pixel_width": image.width, "pixel_height": image.height},

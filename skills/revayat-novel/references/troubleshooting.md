@@ -249,3 +249,27 @@ Pillow's own decode ceiling (`Image.MAX_IMAGE_PIXELS`, about 89 Mpx) covers the
 other side — an image file that declares an absurd size — and is left at its
 default on purpose. Raise a ceiling if a genuine oversized plate needs it; never
 remove one.
+
+## `ImageTooLarge` — an image was refused before it was decoded
+
+An image file declares its own pixel size, and a 66-byte PNG can declare
+60000x60000 and cost ten gigabytes to decode. Pillow's ceiling
+(`Image.MAX_IMAGE_PIXELS`, about 89 megapixels) covers that — but it has two
+bands, and only one of them refuses. Above twice the ceiling it raises; between
+one and two times it merely prints a warning and decodes anyway. Measured: a
+PNG declaring 15000x9000 (135 Mpx, some 400 MB) opened with one line on stderr
+that nothing reads.
+
+Every decode in this pipeline goes through `open_image`, which turns both bands
+into this one named refusal. A genuine plate that large is rare; if you have
+one, raise `Image.MAX_IMAGE_PIXELS` deliberately for that run. Never set it to
+`None` — that is the whole ceiling gone, not a bigger one.
+
+## `TooManyPages` — a PDF declares more than 20 000 pages
+
+A PDF can declare millions of empty pages in a few megabytes, and the page route
+writes one file per page. The longest real books run to about two thousand
+pages, so the ceiling is ten times that. It is checked from the page count
+alone, before the first page is read. If a real book trips it, the constant is
+`PDF_MAX_PAGES` in `bookir.py`; look at the file first, because a book that
+long is more likely a concatenation of several than one volume.
