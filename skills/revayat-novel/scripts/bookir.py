@@ -125,6 +125,60 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+#: Ceilings for an archive somebody hands this pipeline. EPUB and DOCX are both
+#: zip files, and a zip's members declare their own sizes, so a few kilobytes of
+#: well-compressed zeros can announce gigabytes and fill the disk on extraction.
+#: A real novel is a few thousand members and a few hundred megabytes at the
+#: outside; these are an order of magnitude above that, not a squeeze.
+ARCHIVE_MAX_MEMBERS = 20_000
+ARCHIVE_MAX_TOTAL_BYTES = 2 * 1024 ** 3
+ARCHIVE_MAX_MEMBER_RATIO = 400
+#: The ratio test applies only to members at least this large. Measured while
+#: writing the test: a 100 KB chapter of repetitive XHTML compresses 558:1 and
+#: is harmless — inflating it costs 100 KB. A ratio without a size floor refuses
+#: ordinary repetitive text; a bomb is a *large* member that inflates absurdly.
+ARCHIVE_RATIO_MIN_BYTES = 8 * 1024 * 1024
+
+
+class ArchiveTooLarge(ValueError):
+    """An archive declares more than this pipeline is willing to unpack."""
+
+
+def check_archive_limits(path: str | os.PathLike[str]) -> dict[str, int]:
+    """Refuse an archive whose *declared* contents would exhaust the machine.
+
+    Read from the central directory only - nothing is extracted to find out.
+    Three ceilings, because a bomb can be built against any one alone: too many
+    members, too many bytes in total, or one member that inflates absurdly.
+    Returns the totals it measured so a caller can record them.
+    """
+    import zipfile  # noqa: PLC0415
+
+    members = total = 0
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            members += 1
+            if members > ARCHIVE_MAX_MEMBERS:
+                raise ArchiveTooLarge(
+                    f"{path}: more than {ARCHIVE_MAX_MEMBERS} members; a book "
+                    f"does not have that many files and this one was not opened")
+            total += info.file_size
+            if total > ARCHIVE_MAX_TOTAL_BYTES:
+                raise ArchiveTooLarge(
+                    f"{path}: declares more than {ARCHIVE_MAX_TOTAL_BYTES >> 20} MB "
+                    f"unpacked, which is not a book; it was not opened")
+            # A stored (uncompressed) member has ratio 1; a real text member
+            # compresses perhaps 10:1. Hundreds-to-one is a run of zeros — but
+            # only worth refusing when there is enough of it to matter.
+            if (info.file_size > ARCHIVE_RATIO_MIN_BYTES and info.compress_size
+                    and info.file_size / info.compress_size > ARCHIVE_MAX_MEMBER_RATIO):
+                raise ArchiveTooLarge(
+                    f"{path}: member {info.filename!r} inflates "
+                    f"{info.file_size // max(info.compress_size, 1)}:1, which is "
+                    f"not text or an image; the archive was not opened")
+    return {"members": members, "unpacked_bytes": total}
+
+
 # --------------------------------------------------------------------------- #
 # Book construction
 # --------------------------------------------------------------------------- #

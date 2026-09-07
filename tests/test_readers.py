@@ -166,3 +166,72 @@ def test_docx_reader_round_trips_a_document_we_built(translated_book, tmp_path):
     assert any(b["type"] == "image" for b in again["blocks"])
     assert len(again["footnotes"]) == len(book["footnotes"])
     assert "یادداشت مترجم" in again["footnotes"][0]["text"]
+
+
+# --------------------------------------------------------------------------- #
+# An archive is untrusted input, and a zip declares its own size
+# --------------------------------------------------------------------------- #
+
+def _bomb(path, *, members=1, size_each=64 * 1024 * 1024):
+    """A tiny file that declares a huge unpacked size: zeros compress to nothing."""
+    import zipfile
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for n in range(members):
+            z.writestr(f"m{n:05d}.bin", b"\0" * size_each)
+    return path
+
+
+def test_an_archive_that_inflates_absurdly_is_refused_before_it_is_opened(tmp_path):
+    """Sixty-four megabytes of zeros is a few kilobytes on disk and a 1000:1 member.
+
+    The reader must refuse from the central directory alone. Nothing may be
+    extracted to find out — that is the attack.
+    """
+    import bookir as ir
+
+    bomb = _bomb(tmp_path / "bomb.docx")
+    assert bomb.stat().st_size < 200 * 1024, "the fixture is not a bomb"
+    with pytest.raises(ir.ArchiveTooLarge) as refused:
+        ir.check_archive_limits(bomb)
+    assert "inflates" in str(refused.value)
+
+
+def test_too_many_members_is_refused_even_when_each_is_tiny(tmp_path):
+    import bookir as ir
+
+    many = _bomb(tmp_path / "many.epub", members=ir.ARCHIVE_MAX_MEMBERS + 1,
+                 size_each=1)
+    with pytest.raises(ir.ArchiveTooLarge) as refused:
+        ir.check_archive_limits(many)
+    assert "members" in str(refused.value)
+
+
+def test_the_docx_and_epub_readers_both_refuse_a_bomb(tmp_path):
+    """The guard has to sit in front of the readers, not beside them."""
+    import bookir as ir
+    from read_docx import read_docx
+    from read_epub import read_epub
+
+    bomb = _bomb(tmp_path / "bomb.docx")
+    with pytest.raises(ir.ArchiveTooLarge):
+        read_docx(str(bomb), tmp_path / "assets-docx")
+
+    bomb2 = _bomb(tmp_path / "bomb.epub")
+    with pytest.raises(ir.ArchiveTooLarge):
+        read_epub(str(bomb2), tmp_path / "assets-epub")
+
+
+def test_a_real_sized_book_archive_is_not_refused(tmp_path):
+    """The ceilings must clear a novel by a wide margin, or the guard is an outage."""
+    import zipfile
+    import bookir as ir
+
+    book = tmp_path / "novel.epub"
+    with zipfile.ZipFile(book, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("mimetype", "application/epub+zip")
+        for n in range(60):                       # sixty chapters
+            z.writestr(f"OEBPS/ch{n:02d}.xhtml", "<p>" + ("word " * 20_000) + "</p>")
+        z.writestr("OEBPS/cover.jpg", bytes(range(256)) * 4000)  # incompressible
+    measured = ir.check_archive_limits(book)
+    assert measured["members"] == 62
+    assert measured["unpacked_bytes"] > 5 * 1024 * 1024
