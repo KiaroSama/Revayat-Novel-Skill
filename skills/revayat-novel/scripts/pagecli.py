@@ -92,11 +92,16 @@ def main(argv: list[str] | None = None) -> int:
                 budget=args.budget,
                 neighbour_chars=args.neighbour_chars,
             )
-        except (pagerun.OverBudget, pagerun.SourceCollision) as refusal:
+        except (pagerun.OverBudget, pagerun.SourceCollision,
+                pagerun.SourceUnavailable) as refusal:
+            named = {
+                pagerun.OverBudget: "over-budget",
+                pagerun.SourceCollision: "source-directory-in-use",
+                pagerun.SourceUnavailable: "source-pdf-unavailable",
+            }
             print(json.dumps({
                 "ok": False,
-                "refused": ("over-budget" if isinstance(refusal, pagerun.OverBudget)
-                            else "source-directory-in-use"),
+                "refused": named[type(refusal)],
                 "detail": str(refusal),
             }, ensure_ascii=False, indent=1))
             return 2

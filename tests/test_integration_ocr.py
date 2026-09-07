@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -37,10 +38,33 @@ if PROJECT_TESSDATA.is_dir() and not os.environ.get("TESSDATA_PREFIX"):
 
 
 def language_available(code: str) -> bool:
-    """Is this language pack reachable by the tesseract we would actually run?"""
+    """Is this language pack reachable by the tesseract we would actually run?
+
+    Asked of that binary, because only it knows. Guessing at the install layout
+    is right on Windows, where the data sits beside the .exe, and wrong on
+    Debian, where the binary is in `/usr/bin` and the packs are under
+    `/usr/share/tesseract-ocr/<version>/tessdata`. Measured: with
+    `tesseract-ocr-fas` installed and `tesseract --list-langs` naming `fas`,
+    the path guess said no and skipped the test that needed it.
+
+    The directory search stays as a fallback for a tesseract that cannot be
+    executed here but whose data is plainly on disk.
+    """
+    binary = shutil.which("tesseract")
+    if binary:
+        try:
+            listed = subprocess.run([binary, "--list-langs"], capture_output=True,
+                                    text=True, timeout=30)
+            # It prints the list on stdout and a header line on stderr; older
+            # builds put both on stderr, so read whichever carried it.
+            names = f"{listed.stdout}\n{listed.stderr}".split()
+            if code in names:
+                return True
+        except (OSError, subprocess.SubprocessError):
+            pass
+
     prefix = os.environ.get("TESSDATA_PREFIX")
     roots = [Path(prefix)] if prefix else []
-    binary = shutil.which("tesseract")
     if binary:
         roots.append(Path(binary).resolve().parent / "tessdata")
     return any((root / f"{code}.traineddata").exists() for root in roots)
