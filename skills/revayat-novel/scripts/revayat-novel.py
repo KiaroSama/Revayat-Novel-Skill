@@ -56,8 +56,25 @@ OPTIONAL_TOOLS = {
     "tesseract": (["tesseract"], "the OCR engine OCRmyPDF drives"),
     "ghostscript": (["gs", "gswin64c", "gswin32c"], "required by OCRmyPDF"),
     "mineru": (["mineru", "magic-pdf"], "stronger extraction for difficult scans"),
-    "word": (["WINWORD"], "lays the built document out for render QA (Windows)"),
 }
+
+
+def render_backend() -> str:
+    """Which program will lay documents out here, asked of the code that does it.
+
+    Not a `shutil.which` for `WINWORD`: Word is never on PATH — it is driven
+    through COM — so that reported Word missing on every Windows machine that
+    had it, and never mentioned LibreOffice at all. `wordrender` is the one
+    place that decides; `doctor` repeats its answer rather than guessing again.
+    """
+    import wordrender  # noqa: PLC0415  (the scripts directory is on sys.path)
+
+    backend = wordrender.backend()
+    if backend == "word":
+        return "Microsoft Word via COM (pywin32) — lays the document out for render QA"
+    if backend == "libreoffice":
+        return f"LibreOffice at {wordrender.find_libreoffice()} — lays the document out for render QA"
+    return f"not found — {wordrender.unavailable_reason()}"
 
 
 def find_tool(names: list[str]) -> str | None:
@@ -91,6 +108,7 @@ def doctor() -> dict[str, object]:
         label: (find_tool(names) or f"not found — {why}")
         for label, (names, why) in OPTIONAL_TOOLS.items()
     }
+    tools["render"] = render_backend()
     missing = [name for name, value in modules.items() if str(value).startswith("MISSING")]
     return {
         "python": sys.version.split()[0],
