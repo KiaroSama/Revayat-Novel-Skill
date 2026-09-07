@@ -745,3 +745,34 @@ def test_a_one_sheet_page_still_has_an_identity(tmp_path):
     written = renderqa.check(tmp_path, book_path, 1, target_pdf=target)
     assert written["renders"]["target_sheets"] == [written["renders"]["target"]]
     assert runstate.RunState(tmp_path).page(1)["hashes"]["render"]
+
+
+def test_doctor_reports_the_backend_the_pipeline_will_actually_use():
+    """`doctor` and `wordrender` must never disagree about the same machine.
+
+    They did: `doctor` looked for `WINWORD` on PATH, and Word is never on PATH —
+    it is driven through COM — so every Windows machine with Word installed was
+    told Word was missing, and LibreOffice was not mentioned at all. The pipeline
+    meanwhile found Word fine. A health check that contradicts the code it is
+    checking on is worse than none; this pins `doctor` to the pipeline's answer.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    entry = Path(__file__).resolve().parents[1] / "skills" / "revayat-novel" \
+        / "scripts" / "revayat-novel.py"
+    spec = importlib.util.spec_from_file_location("revayat_novel_cli", entry)
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+
+    reported = cli.doctor()["optional_tools"]["render"]
+    backend = wordrender.backend()
+    if backend == "word":
+        assert reported.startswith("Microsoft Word"), reported
+    elif backend == "libreoffice":
+        assert reported.startswith("LibreOffice at "), reported
+        assert wordrender.find_libreoffice() in reported
+    else:
+        assert reported.startswith("not found"), reported
+        assert wordrender.unavailable_reason() in reported
+    assert "WINWORD" not in reported

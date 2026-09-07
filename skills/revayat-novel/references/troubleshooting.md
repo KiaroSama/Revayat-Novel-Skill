@@ -177,3 +177,29 @@ source.
 manifest's own artefact wins, deliberately, because an override let any
 readable PDF stand in as a page's evidence. It is still honoured where there is
 no page run at all, which is how one-off diagnostics work.
+
+## LibreOffice is installed, but `render-qa` says it is not
+
+`wordrender` looks for `soffice` on `PATH` first, then in the places an ordinary
+install leaves it without touching `PATH`:
+
+```text
+/Applications/LibreOffice.app/Contents/MacOS/soffice     macOS cask / .dmg
+/usr/local/bin/soffice · /opt/homebrew/bin/soffice        Homebrew links
+C:\Program Files\LibreOffice\program\soffice.exe          Windows installer
+C:\Program Files (x86)\LibreOffice\program\soffice.exe
+```
+
+The macOS cask is the one that bit: it installs into the app bundle and adds
+nothing to `PATH`, so a Mac with LibreOffice installed the normal way reported
+it missing and every render check skipped itself. Found by running the full
+suite on a macOS runner with nothing allowed to skip.
+
+If yours is somewhere else — a portable build, a distro that installs under
+`/opt/libreoffice*/program` — put that directory on `PATH` or symlink `soffice`
+into one of the locations above. `doctor` prints the answer under
+`optional_tools.render`, and it is the same answer the pipeline uses: the two
+are one function, so they cannot disagree about a machine.
+
+On Windows, Word is preferred when `pywin32` is installed; LibreOffice is the
+fallback there, not the first choice.
