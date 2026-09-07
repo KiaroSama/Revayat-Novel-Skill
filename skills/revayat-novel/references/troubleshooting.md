@@ -227,3 +227,25 @@ images, say — the message names which ceiling and which member. Open the archi
 with any zip tool and look at that member before raising a limit; the ceilings
 are constants at the top of `bookir.py`, not command-line flags, because a book
 that needs them raised is rare enough to be worth a moment's attention.
+
+## `RenderTooLarge`, or `render-qa` says a page could not be rendered
+
+A PDF page declares its own size, and the renderer draws whatever it is told:
+a legal 200-inch page is 900 megapixels at 150 dpi and 6.4 gigapixels at the
+400 dpi the illustration crop uses. Measured, PyMuPDF renders a 40-inch page at
+150 dpi (36 Mpx, 103 MB) in 0.02 s without a word, so the ceiling is this
+pipeline's, not the library's: **400 megapixels per render**, checked from the
+declared page size before a pixel exists. A whole A4 sheet at 1200 dpi is about
+140 Mpx, so no real book page is anywhere near it.
+
+Where it shows up depends on the stage. `render-qa` and `doc-qa` report the page
+as *not rendered* and therefore `unverified` — the same word they use for a
+missing converter. `extract` on a scan (the OCR sidecar and the illustration
+crop) raises `RenderTooLarge` and names the page and its size, because a scan
+with a page like that is not a book and OCR silently skipping a page is worse
+than stopping.
+
+Pillow's own decode ceiling (`Image.MAX_IMAGE_PIXELS`, about 89 Mpx) covers the
+other side — an image file that declares an absurd size — and is left at its
+default on purpose. Raise a ceiling if a genuine oversized plate needs it; never
+remove one.
