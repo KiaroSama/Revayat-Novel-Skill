@@ -235,3 +235,31 @@ def test_a_real_sized_book_archive_is_not_refused(tmp_path):
     measured = ir.check_archive_limits(book)
     assert measured["members"] == 62
     assert measured["unpacked_bytes"] > 5 * 1024 * 1024
+
+
+def test_pillow_keeps_its_own_decode_ceiling():
+    """A 66-byte PNG can declare 60000x60000 and cost ten gigabytes to decode.
+
+    Pillow refuses that by default (`Image.MAX_IMAGE_PIXELS`). This pins the
+    default so nobody sets it to None to make one large scan load — the fix for
+    that is a higher ceiling, never no ceiling.
+    """
+    import io
+    import struct
+    import zlib
+
+    from PIL import Image
+
+    assert Image.MAX_IMAGE_PIXELS is not None, "Pillow's decode ceiling was disabled"
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return (struct.pack(">I", len(body)) + kind + body
+                + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF))
+
+    hostile = (b"\x89PNG\r\n\x1a\n"
+               + chunk(b"IHDR", struct.pack(">IIBBBBB", 60000, 60000, 8, 0, 0, 0, 0))
+               + chunk(b"IDAT", zlib.compress(b"\0"))
+               + chunk(b"IEND", b""))
+    assert len(hostile) < 100
+    with pytest.raises(Image.DecompressionBombError):
+        Image.open(io.BytesIO(hostile)).load()

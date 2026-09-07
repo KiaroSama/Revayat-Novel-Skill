@@ -17,6 +17,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import bookir as ir
+
 
 #: Rendering fallback resolution. Only reached when the page has no single
 #: embedded raster to cut from; 400 DPI keeps a half-page plate above the
@@ -71,6 +73,10 @@ def best_page_raster(document, page_number: int):
             "original_format": extracted.get("ext"),
         }, tuple(best[2])
 
+    # At 400 dpi a legal 200-inch page is 6.4 Gpx. The declared size is checked
+    # before a pixel exists; a page that size is not a book page, so this raises
+    # rather than degrading to a smaller render nobody asked for.
+    ir.check_render_area(rect.width, rect.height, CROP_RENDER_DPI)
     pixmap = page.get_pixmap(dpi=CROP_RENDER_DPI)
     image = Image.open(BytesIO(pixmap.tobytes("png")))
     return (image,
