@@ -254,6 +254,10 @@ def read_epub(
     lang_target: str = "fa-IR",
 ) -> dict[str, Any]:
     asset_dir.mkdir(parents=True, exist_ok=True)
+    # An EPUB is a zip, and a zip's members declare their own sizes: a few
+    # kilobytes can announce gigabytes. Checked from the central directory
+    # before anything is read out of it.
+    ir.check_archive_limits(path)
     archive = zipfile.ZipFile(path)
     try:
         opf = _opf_path(archive)
