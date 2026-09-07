@@ -86,9 +86,16 @@ jobs:
   # render-and-accept path and the whole OCR tier. This job installs the tools
   # and runs the same suite, so that code is executed somewhere on every push.
   full-coverage:
-    name: nothing skipped (ubuntu)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    name: nothing skipped (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both platforms that reach the document through LibreOffice. Windows
+        # drives Word instead and the matrix above already covers it, so a
+        # third runner here would install LibreOffice and never use it.
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v7
@@ -98,16 +105,33 @@ jobs:
           cache: pip
           cache-dependency-path: skills/revayat-novel/requirements.txt
 
-      - name: Install the tools the other jobs go without
+      - name: Install the tools the other jobs go without (linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libreoffice-writer tesseract-ocr tesseract-ocr-fas ghostscript
+
+      - name: Install the tools the other jobs go without (macos)
+        if: runner.os == 'macOS'
+        run: |
+          brew install --cask libreoffice
+          # tesseract-lang carries every pack, fas among them; the base
+          # formula ships English only and would skip the Persian tests.
+          brew install tesseract tesseract-lang ghostscript
+
+      - name: Python dependencies
+        run: |
           python -m pip install --upgrade pip
           python -m pip install -r skills/revayat-novel/requirements.txt ocrmypdf
 
       - name: Every one of them is really on PATH
         run: |
+          # The cask puts soffice inside the app bundle rather than on PATH.
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            echo "/Applications/LibreOffice.app/Contents/MacOS" >> "$GITHUB_PATH"
+            export PATH="/Applications/LibreOffice.app/Contents/MacOS:$PATH"
+          fi
           soffice --version
           tesseract --version | head -1
           tesseract --list-langs | grep -qx fas

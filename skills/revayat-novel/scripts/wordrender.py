@@ -42,11 +42,29 @@ class RenderError(RuntimeError):
 # What this machine can do
 # --------------------------------------------------------------------------- #
 
+#: Where a normal install puts the binary without putting it on PATH. The macOS
+#: cask installs into the app bundle and adds nothing to PATH, so a Mac with
+#: LibreOffice installed the ordinary way answered "LibreOffice is not
+#: installed" and skipped every render check. The Windows entries are the same
+#: story for an installer that did not offer to amend PATH.
+BUNDLED_LIBREOFFICE = (
+    "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    "/usr/local/bin/soffice",
+    "/opt/homebrew/bin/soffice",
+    r"C:\Program Files\LibreOffice\program\soffice.exe",
+    r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+)
+
+
 def find_libreoffice() -> str | None:
+    """The soffice binary, on PATH or where an ordinary install leaves it."""
     for name in ("soffice", "libreoffice"):
         found = shutil.which(name)
         if found:
             return found
+    for candidate in BUNDLED_LIBREOFFICE:
+        if Path(candidate).is_file():
+            return candidate
     return None
 
 
