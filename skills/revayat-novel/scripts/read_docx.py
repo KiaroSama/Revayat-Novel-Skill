@@ -29,6 +29,7 @@ from docx.table import Table
 from docx.text.hyperlink import Hyperlink
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
+from lxml import etree
 
 import bookir as ir
 
@@ -364,6 +365,15 @@ def _run_style(run) -> tuple[bool, bool]:
     return bool(bold), bool(italic)
 
 
+#: The note parts are read past python-docx, which models neither, so this is
+#: the one place in the project that parses a stranger's XML itself. It matches
+#: what python-docx does for every part it *does* own (`docx/oxml/parser.py`):
+#: entities off. A .docx is an archive from whoever sent the book - the same
+#: reason `bookir.check_archive_limits` refuses one before inflating it - and
+#: an entity expansion is consumed memory before any exception exists, so the
+#: `except` below would never see it.
+_NOTE_PARSER = etree.XMLParser(resolve_entities=False)
+
 #: The two ways Word stores a note. They are the same shape and the same loss
 #: if missed - a book that puts its notes at the back rather than the foot of
 #: the page came through with every one of them gone, and nothing said so.
@@ -382,8 +392,6 @@ def _read_notes(document) -> dict[str, str]:
 
     Word reserves ids -1 and 0 for the separator marks; they carry no content.
     """
-    from lxml import etree
-
     notes: dict[str, str] = {}
     for kind, relationship, tag, _ in NOTE_PARTS:
         try:
@@ -391,7 +399,7 @@ def _read_notes(document) -> dict[str, str]:
         except KeyError:
             continue
         try:
-            root = etree.fromstring(part.blob)
+            root = etree.fromstring(part.blob, parser=_NOTE_PARSER)
         except Exception:
             continue
         for node in root.findall(qn(tag)):

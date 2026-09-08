@@ -454,7 +454,7 @@ def test_merges_survive_the_round_trip_into_the_built_document(tmp_path):
     add_arguments(parser)
     destination = tmp_path / "rebuilt.docx"
     Builder(book, tmp_path / "assets",
-            parser.parse_args(["--book", "x", "--out", "y", "--font", "Vazirmatn",
+            parser.parse_args(["--book", "x", "--out", "y", "--font", "Vazir",
                                "--no-toc"])).build(destination)
 
     rebuilt = Open(destination).tables[0]
@@ -621,3 +621,57 @@ def test_a_document_with_no_links_or_heads_warns_about_neither(tmp_path):
     assert not kinds & {"hyperlinks-kept-as-metadata"}
     assert not any(kind.startswith("running-head") for kind in kinds)
     assert not list(ir.iter_running_pieces(book))
+
+
+def test_a_note_part_declaring_an_entity_is_read_without_expanding_it(tmp_path):
+    """The note parts are parsed past python-docx, so they need its parser's rules.
+
+    A .docx is an archive from whoever sent the book — the same reason the zip
+    itself is refused on size before it is inflated. python-docx builds its own
+    parser with `resolve_entities=False` for every part it owns; the note parts
+    are read around it, and for a while were the one place here that parsed a
+    stranger's XML at lxml's laxer default.
+    """
+    from docx.opc.packuri import PackURI
+    from docx.opc.part import Part
+
+    body = (
+        '<?xml version="1.0"?>'
+        '<!DOCTYPE w:footnotes ['
+        '  <!ENTITY a "AAAA">'
+        '  <!ENTITY b "&a;&a;&a;">'
+        ']>'
+        '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/'
+        'wordprocessingml/2006/main">'
+        '<w:footnote w:id="1"><w:p><w:r><w:t>note &b; text</w:t></w:r></w:p>'
+        '</w:footnote></w:footnotes>'
+    )
+
+    document = Document()
+    paragraph = document.add_paragraph("A sentence carrying a note.")
+    part = Part(
+        PackURI("/word/footnotes.xml"),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml."
+        "footnotes+xml",
+        body.encode("utf-8"),
+        document.part.package,
+    )
+    document.part.relate_to(part, RT.FOOTNOTES)
+    run = paragraph.add_run()
+    reference = OxmlElement("w:footnoteReference")
+    reference.set(qn("w:id"), "1")
+    run._r.append(reference)
+
+    destination = tmp_path / "entities.docx"
+    document.save(destination)
+
+    book = read_docx(str(destination), tmp_path / "assets")
+
+    # Whatever came back, the entity was not expanded into it. The book must
+    # still be a book — a refused note part is dropped, not a crash.
+    text = " ".join(note.get("text", "") for note in book.get("footnotes", []))
+    assert "AAAAAAAAAAAA" not in text, (
+        "the entity was expanded, so the note part is still being parsed with "
+        "lxml's default parser rather than one with resolve_entities=False"
+    )
+    assert isinstance(book.get("footnotes"), list)
