@@ -298,8 +298,13 @@ jobs:
 
       - name: Nothing unused, nothing undefined
         run: |
-          python -m pip install ruff
-          # Ruff's defaults only. The repository had seven dead imports in the
+          # Pinned, and it has to be. Ruff's *default* rule set widens between
+          # releases: this gate went in verified against 0.15.14 (zero findings)
+          # and 0.16.6 reported 196, most of them ISC004 on the Persian string
+          # literals this project exists to handle. An unpinned linter turns a
+          # green build red on someone else's release schedule.
+          python -m pip install ruff==0.15.14
+          # Defaults only. The repository had seven dead imports in the
           # published scripts when this went in, two of them left behind by
           # refactors that moved the code but not the import — the kind of thing
           # nothing else here would ever have mentioned.
