@@ -10,6 +10,8 @@ right-to-left; no hole where a page of text should be.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -524,13 +526,22 @@ def test_word_runs_in_a_child_process_so_the_timeout_is_real(monkeypatch, tmp_pa
     docx.write_bytes(b"not really a document")
     monkeypatch.setattr(wordrender, "word_available", lambda: True)
 
-    def wedged(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd="word", timeout=kwargs.get("timeout", 1))
+    reached = []
 
-    monkeypatch.setattr(wordrender.subprocess, "run", wedged)
+    def wedged(*args, **kwargs):
+        reached.append(args)
+        raise subprocess.TimeoutExpired(cmd="word", timeout=1)
+
+    monkeypatch.setattr(wordrender, "_run_bounded", wedged)
     with pytest.raises(wordrender.RenderError) as raised:
         wordrender.render(docx, tmp_path / "renders", timeout=1)
     assert "terminated" in str(raised.value)
+    # The message alone does not pin the route down: on a machine that has Word,
+    # a render path still calling `subprocess.run` starts the real worker, misses
+    # the same one-second clock and raises the same named error. Asserting the
+    # bounded runner was the thing that ran is what makes this test about the
+    # process-tree kill rather than about how slowly Word starts.
+    assert reached, "render() never went through _run_bounded, so nothing kills the tree"
 
 
 def test_a_conversion_failure_leaves_the_page_unverified_not_passed(
@@ -838,3 +849,59 @@ def test_the_crop_path_refuses_a_hostile_page_by_name(tmp_path):
         with pytest.raises(ir.RenderTooLarge) as refused:
             rasters.crop_from_source(document, 1, [72, 72, 720, 720], tmp_path)
     assert "not a book page" in str(refused.value)
+
+
+def test_a_timed_out_render_kills_the_whole_tree_not_just_the_launcher(
+        monkeypatch, tmp_path):
+    """Both backends are launchers, so killing the child leaves the renderer.
+
+    The module's docstring promised a process-tree kill; `subprocess.run`
+    signals the direct child only, and the real renderer - WINWORD.EXE started
+    through COM, or the soffice.bin the launcher forked - is a generation
+    further down. It survived, with its COM teardown never reached.
+    """
+    killed = []
+
+    def record_and_kill(process):
+        # It has to kill as well as record. A stub that only records leaves the
+        # sleeper below running for its full 30s, and the guarded runner fails
+        # the whole run for a leaked process - which is the exact leak this
+        # test exists to prove is now closed.
+        killed.append(process)
+        process.kill()
+
+    monkeypatch.setattr(wordrender, "_kill_tree", record_and_kill)
+
+    # A command that outlives its timeout without doing anything else.
+    slow = [sys.executable, "-c", "import time; time.sleep(30)"]
+    with pytest.raises(subprocess.TimeoutExpired):
+        wordrender._run_bounded(slow, timeout=1)
+    assert killed, "the tree was never killed; only the direct child was signalled"
+
+
+def test_libreoffice_is_given_a_profile_of_its_own(monkeypatch, tmp_path):
+    """Without one it is single-instance, and a second render returns 0 with no PDF.
+
+    That failure is silent by construction: exit code 0, empty stderr, and a
+    "produced no PDF" whose detail names nothing.
+    """
+    seen = {}
+
+    def capture(command, timeout):
+        seen["command"] = command
+        (tmp_path / "renders").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "renders" / "book.pdf").write_bytes(b"%PDF-1.4\n")
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr(wordrender, "find_libreoffice", lambda: "/usr/bin/soffice")
+    monkeypatch.setattr(wordrender, "_run_bounded", capture)
+
+    docx = tmp_path / "book.docx"
+    docx.write_bytes(b"not really a document")
+    wordrender._with_libreoffice(docx, tmp_path / "renders", timeout=5)
+
+    profile = [a for a in seen["command"] if a.startswith("-env:UserInstallation=")]
+    assert profile, f"no private profile in {seen['command']}"
+    assert profile[0].split("=", 1)[1].startswith("file:"), (
+        "LibreOffice requires a file:// URL here; a bare path is ignored")
+    assert "--norestore" in seen["command"]
