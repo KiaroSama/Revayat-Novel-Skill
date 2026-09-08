@@ -85,3 +85,78 @@ jobs:
           assert not fatal, "a test skipped for a tool this job installs:\n" + "\n".join(fatal)
           print(f"ok: {len(skipped)} tolerated skip(s)")
           PY
+
+  # The Windows render tier, here rather than in ci.yml's `full-coverage` job
+  # for the same reason the OCR tier is here at all: it needs a big, slow,
+  # third-party install that is among the least stable things in this
+  # repository's CI, and a flake in it must not block an unrelated commit.
+  #
+  # It is worth having. Measured on ci.yml run 34076799340, every one of the
+  # six matrix jobs reported 608 passed / 27 skipped — Windows included — so
+  # the ordinary matrix does *not* exercise the render tier there: a hosted
+  # Windows runner has neither Office nor LibreOffice, `wordrender.backend()`
+  # is empty, and the render-and-accept path skips itself exactly as it does on
+  # a bare Linux runner. This job is the only place the Windows branch of
+  # `find_libreoffice`, the Windows path handling and the taskkill process-tree
+  # kill are executed at all.
+  #
+  # The Word backend still runs nowhere in CI, and cannot: a hosted runner has
+  # no Office licence. `doctor` and `wordrender.unavailable_reason()` name that,
+  # and every render report records `laid_out_by`.
+  windows-render:
+    name: render tier (windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install LibreOffice
+        shell: pwsh
+        # --execution-timeout is not optional here: an unbounded choco install
+        # of this package wedged past 30 minutes on three separate runs. A
+        # bounded failure is diagnosable; a wedge just burns the job ceiling.
+        run: |
+          choco install --no-progress -y --execution-timeout 1200 libreoffice-fresh
+          if (-not (Test-Path "C:\Program Files\LibreOffice\program\soffice.exe")) {
+            throw "LibreOffice did not install where wordrender looks for it"
+          }
+
+      - name: Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r skills/revayat-novel/requirements.txt
+
+      - name: Which backend this runner will use
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "skills/revayat-novel/scripts")
+          import wordrender
+          chosen = wordrender.backend()
+          print("backend:", chosen or wordrender.unavailable_reason())
+          # `soffice.exe --version` is not asked: it is a GUI binary that prints
+          # nothing from a console and wedged the equivalent step for minutes.
+          # This is the question that matters and the call the pipeline makes.
+          assert chosen == "libreoffice", f"expected libreoffice, got {chosen!r}"
+          PY
+
+      - name: The render tier, where a skip is the thing being looked for
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          set -o pipefail
+          python -m pytest tests/test_renderqa.py tests/test_docqa.py \
+            tests/test_pagerun.py -q --timeout=900 -rs | tee suite.log
+          if grep -qE '^SKIPPED.*(lays a document out|no converter)' suite.log; then
+            echo "::error::the render tier skipped on the job that installs a renderer"
+            grep -E '^SKIPPED' suite.log || true
+            exit 1
+          fi

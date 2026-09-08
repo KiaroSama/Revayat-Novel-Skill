@@ -97,19 +97,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every platform, because "the matrix above already covers Windows" was
-        # not true. Measured on run 34076799340: all six matrix jobs reported
-        # 608 passed / 27 skipped, Windows included. GitHub's Windows runners
-        # have neither Office nor LibreOffice, so `wordrender.backend()` is
-        # empty there and the render tier skipped itself exactly as it did on
-        # the bare Linux runners — while this job existed to prove it had not.
+        # The two platforms that reach the document through LibreOffice *and*
+        # can install it quickly.
         #
-        # Windows reaches the document through LibreOffice here. The Word path
-        # cannot run on a hosted runner (no Office licence) and stays a local
-        # path; what this covers is the Windows *branch* of everything else —
-        # the bundled-LibreOffice lookup, path handling, and the process-tree
-        # kill, whose Windows mechanism is taskkill rather than a process group.
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Windows is NOT excluded because the matrix above covers it — that
+        # claim used to be here and it was false. Measured on run 34076799340:
+        # all six matrix jobs reported 608 passed / 27 skipped, Windows
+        # included, because a hosted Windows runner has neither Office nor
+        # LibreOffice, so `wordrender.backend()` is empty and the render tier
+        # skips exactly as it does on a bare Linux runner.
+        #
+        # It is excluded on cost. `choco install libreoffice-fresh` wedged past
+        # 30 minutes on three separate runs against this job's 60-minute
+        # ceiling, while every other job on those runs went green. That is the
+        # same judgement `integration.yml` already makes about apt and a 200 MB
+        # OCR toolchain, so the Windows render tier lives there instead —
+        # scheduled and dispatchable, off the push path.
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v7
@@ -134,32 +138,6 @@ jobs:
           # formula ships English only and would skip the Persian tests.
           brew install tesseract tesseract-lang ghostscript
 
-      - name: Install the tools the other jobs go without (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install --no-progress -y libreoffice-fresh
-          choco install --no-progress -y tesseract ghostscript
-          # The Persian pack decides whether the OCR tier runs or skips, and a
-          # skip fails this job by design. Fetch it if the package omitted it.
-          $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
-          if (Test-Path $tessdata) {
-            if (-not (Test-Path "$tessdata\fas.traineddata")) {
-              Invoke-WebRequest -UseBasicParsing `
-                -Uri "https://raw.githubusercontent.com/tesseract-ocr/tessdata/main/fas.traineddata" `
-                -OutFile "$tessdata\fas.traineddata"
-            }
-          }
-          # Chocolatey installs Ghostscript under a versioned directory and does
-          # not put its bin on PATH, so `gswin64c` is not found — measured, that
-          # is what failed this job. OCRmyPDF needs it too, so export the real
-          # one rather than guessing a version.
-          $gs = Get-ChildItem "C:\Program Files\gs" -Directory -ErrorAction SilentlyContinue |
-                Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $gs) { throw "Ghostscript did not install under C:\Program Files\gs" }
-          "$($gs.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          Write-Output "ghostscript bin: $($gs.FullName)\bin"
-
       - name: Python dependencies
         shell: bash
         run: |
@@ -176,27 +154,11 @@ jobs:
           fi
           # Chocolatey installs to Program Files and does not always amend the
           # PATH this shell inherited.
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            echo "/c/Program Files/LibreOffice/program" >> "$GITHUB_PATH"
-            echo "/c/Program Files/Tesseract-OCR" >> "$GITHUB_PATH"
-            export PATH="/c/Program Files/LibreOffice/program:/c/Program Files/Tesseract-OCR:$PATH"
-          fi
+          soffice --version
           tesseract --version | head -1
           tesseract --list-langs | grep -qx fas
+          gs --version
           ocrmypdf --version
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            # `soffice.exe` is a GUI binary: from a console it detaches, prints
-            # nothing for --version and can leave the shell waiting — measured,
-            # it wedged this step until the job timeout. The next step asks
-            # `wordrender.backend()` instead, which is the question that
-            # actually matters and the same call the pipeline makes.
-            test -x "/c/Program Files/LibreOffice/program/soffice.exe"
-            # Chocolatey's Ghostscript is gswin64c; there is no `gs` here.
-            gswin64c --version
-          else
-            soffice --version
-            gs --version
-          fi
 
       - name: Which backend this runner will use
         shell: bash
