@@ -353,3 +353,78 @@ def test_the_readme_walkthrough_agrees_with_the_skill(path: Path):
     assert checks >= reviews + 1, (
         f"{path.name} shows {checks} `doc-qa check` and {reviews} `doc-qa "
         f"review`; without the second check the book stays unverified")
+
+
+# --------------------------------------------------------------------------- #
+# The documented default is the real one
+# --------------------------------------------------------------------------- #
+
+#: The flag table a reader consults instead of `--help`.
+FLAG_TABLE = (Path(__file__).resolve().parents[1] / "skills" / "revayat-novel"
+              / "references" / "docx-and-ooxml.md")
+
+#: `| `--font NAME` | `Vazir` | Persian (complex-script) face |`
+_FLAG_ROW = re.compile(r"^\|\s*`(--[a-z-]+)[^`]*`\s*\|\s*(.+?)\s*\|", re.M)
+
+
+def _documented_defaults() -> dict[str, str]:
+    """Flag -> documented default, for the rows that state a literal one.
+
+    Rows whose default is prose (`none`, `on`, `<book dir>/assets`) describe a
+    behaviour rather than a value and are skipped: this guard is about values
+    that can silently disagree, not about wording.
+    """
+    found = {}
+    for flag, default in _FLAG_ROW.findall(FLAG_TABLE.read_text(encoding="utf-8")):
+        literal = re.fullmatch(r"`([^`]+)`", default.strip())
+        if literal:
+            found[flag] = literal.group(1)
+    return found
+
+
+def test_the_flag_table_states_the_defaults_the_parser_actually_has():
+    """A default written in prose is chosen in prose, and prose has no test.
+
+    `--font` was documented in six places. Changing it in the parser and missing
+    one of them leaves a reader following a table that is quietly wrong — and
+    nothing anywhere would have said so, because documentation is the one
+    artefact in this repository that no other test reads.
+    """
+    import argparse
+
+    import build_docx
+
+    parser = argparse.ArgumentParser()
+    build_docx.add_arguments(parser)
+    real = {action.option_strings[0]: action.default
+            for action in parser._actions if action.option_strings}
+
+    documented = _documented_defaults()
+    assert documented, f"no flag rows parsed out of {FLAG_TABLE.name}"
+
+    wrong = []
+    for flag, stated in documented.items():
+        if flag not in real or real[flag] is None:
+            continue          # the table may describe a flag argparse defaults to None
+        if str(real[flag]) != stated:
+            wrong.append(f"{flag}: table says {stated!r}, parser says {real[flag]!r}")
+    assert not wrong, (
+        "the flag table disagrees with the parser:\n  " + "\n  ".join(wrong))
+
+
+def test_the_persian_face_is_vazir_everywhere_it_is_promised():
+    """The owner's decision, and it is stated in more places than one.
+
+    Vazirmatn is the same family's other line and is commonly installed as a
+    variable font, which Word will not resolve for a complex-script run —
+    measured, a book asking for it came back set in Calibri.
+    """
+    import argparse
+
+    import build_docx
+
+    parser = argparse.ArgumentParser()
+    build_docx.add_arguments(parser)
+    options = parser.parse_args(["--book", "x", "--out", "y"])
+    assert options.font == "Vazir"
+    assert _documented_defaults().get("--font") == "Vazir"
