@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -44,14 +43,52 @@ def _fake_home(tmp_path: Path) -> dict[str, str]:
 
 
 def _bash() -> str | None:
-    return shutil.which("bash")
+    """A bash that can actually open ``SH``, or ``None``.
+
+    Not simply `shutil.which("bash")`. On Windows that commonly resolves to
+    `C:\\Windows\\system32\\bash.EXE` - the WSL launcher - which cannot open a
+    script addressed as `G:\\...` and exits 127 with "No such file or
+    directory". Measured: the same commit passed from Git Bash and failed from
+    PowerShell, because the parent shell decided which bash won the PATH. A
+    test whose result depends on something it does not control is reporting on
+    the machine, not on the installer.
+
+    So each candidate is asked the one question that matters - can you see this
+    file - and the first that says yes is used.
+    """
+    candidates = []
+    found = shutil.which("bash")
+    if found:
+        candidates.append(found)
+    # Git Bash, where an installer-shaped test can actually run, even when the
+    # WSL launcher shadows it on PATH.
+    for extra in (r"C:\Program Files\Git\bin\bash.exe",
+                  r"C:\Program Files\Git\usr\bin\bash.exe",
+                  "/bin/bash", "/usr/bin/bash"):
+        if extra not in candidates and Path(extra).exists():
+            candidates.append(extra)
+
+    for candidate in candidates:
+        try:
+            probe = subprocess.run(
+                [candidate, "-c", f'test -f "{SH.as_posix()}" || test -f "{SH}"'],
+                capture_output=True, timeout=30, stdin=subprocess.DEVNULL,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if probe.returncode == 0:
+            return candidate
+    return None
 
 
 def _pwsh() -> str | None:
     return shutil.which("pwsh") or shutil.which("powershell")
 
 
-@pytest.mark.skipif(_bash() is None, reason="no bash on this machine")
+@pytest.mark.skipif(
+    _bash() is None,
+    reason="no bash here that can open install.sh (a WSL-only bash cannot "
+           "reach a Windows path, so it would report the script missing)")
 def test_the_shell_installer_puts_a_user_scope_opencode_skill_where_opencode_looks(
         tmp_path):
     env = _fake_home(tmp_path)
@@ -73,7 +110,10 @@ def test_the_shell_installer_puts_a_user_scope_opencode_skill_where_opencode_loo
         "OpenCode never looks")
 
 
-@pytest.mark.skipif(_bash() is None, reason="no bash on this machine")
+@pytest.mark.skipif(
+    _bash() is None,
+    reason="no bash here that can open install.sh (a WSL-only bash cannot "
+           "reach a Windows path, so it would report the script missing)")
 def test_the_shell_installer_keeps_project_scope_opencode_in_dot_opencode(tmp_path):
     """The fix must not move the *project* location, which was already right."""
     env = _fake_home(tmp_path)
