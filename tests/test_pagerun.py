@@ -1087,7 +1087,6 @@ def test_each_source_page_is_laid_out_on_its_own_paper(tmp_path):
     from read_pdf import read_pdf
 
     book = read_pdf(str(_mixed_pdf(tmp_path / "mixed.pdf")), tmp_path / "assets")
-    book_path = _save(book, tmp_path)
     lookup = ir.blocks_by_id(book)
     owners = {job["page"]: job for job in pagerun.owners(book)}
 

@@ -191,7 +191,6 @@ def test_the_builder_puts_a_carried_link_back(imported, tmp_path):
     """
     import argparse
 
-    import bookir as ir
     from build_docx import Builder, add_arguments
 
     book = {**imported, "blocks": [dict(b) for b in imported["blocks"]]}

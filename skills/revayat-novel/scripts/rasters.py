@@ -45,7 +45,6 @@ def best_page_raster(document, page_number: int):
     """
     from io import BytesIO
 
-    from PIL import Image
 
     page = document[page_number - 1]
     rect = page.rect

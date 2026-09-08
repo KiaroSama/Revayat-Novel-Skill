@@ -14,7 +14,6 @@ outside: flatten every introduction, then re-introduce exactly one.
 
 from __future__ import annotations
 
-import pytest
 
 import bookir as ir
 import glossary as gl
