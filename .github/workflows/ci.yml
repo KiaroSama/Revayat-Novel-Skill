@@ -150,6 +150,15 @@ jobs:
                 -OutFile "$tessdata\fas.traineddata"
             }
           }
+          # Chocolatey installs Ghostscript under a versioned directory and does
+          # not put its bin on PATH, so `gswin64c` is not found — measured, that
+          # is what failed this job. OCRmyPDF needs it too, so export the real
+          # one rather than guessing a version.
+          $gs = Get-ChildItem "C:\Program Files\gs" -Directory -ErrorAction SilentlyContinue |
+                Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $gs) { throw "Ghostscript did not install under C:\Program Files\gs" }
+          "$($gs.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          Write-Output "ghostscript bin: $($gs.FullName)\bin"
 
       - name: Python dependencies
         shell: bash
