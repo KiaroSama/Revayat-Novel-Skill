@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 import sys
 from pathlib import Path
 
@@ -874,9 +875,20 @@ def test_a_timed_out_render_kills_the_whole_tree_not_just_the_launcher(
 
     # A command that outlives its timeout without doing anything else.
     slow = [sys.executable, "-c", "import time; time.sleep(30)"]
+    started = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
         wordrender._run_bounded(slow, timeout=1)
+    elapsed = time.monotonic() - started
+
     assert killed, "the tree was never killed; only the direct child was signalled"
+    # When the thing under test is a *bound*, assert the bound. `killed`
+    # only says the code noticed; the clock says it acted. A version that
+    # raised correctly, killed correctly and still blocked until the child
+    # finished would satisfy every other assertion here - and would be
+    # exactly the failure the timeout exists to prevent.
+    assert elapsed < 10.0, (
+        f"the call was bounded at 1s and took {elapsed:.1f}s: it waited for "
+        f"the child instead of returning when the bound expired")
 
 
 def test_libreoffice_is_given_a_profile_of_its_own(monkeypatch, tmp_path):
