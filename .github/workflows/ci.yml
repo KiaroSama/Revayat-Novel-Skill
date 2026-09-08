@@ -22,9 +22,14 @@ jobs:
       fail-fast: false
       matrix:
         # All three platforms people actually run this on, at the oldest and
-        # newest supported interpreters.
+        # newest supported interpreters — and 3.14, which is what someone
+        # installing Python today gets. This is a skill people copy into their
+        # own agent directory and run against whatever interpreter they have,
+        # so "newest" has to mean the current release rather than the one that
+        # was current when the matrix was written. Verified locally first: the
+        # full suite passes on CPython 3.14.7 with every dependency as a wheel.
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.10", "3.13"]
+        python: ["3.10", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v7
@@ -92,10 +97,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Both platforms that reach the document through LibreOffice. Windows
-        # drives Word instead and the matrix above already covers it, so a
-        # third runner here would install LibreOffice and never use it.
-        os: [ubuntu-latest, macos-latest]
+        # Every platform, because "the matrix above already covers Windows" was
+        # not true. Measured on run 34076799340: all six matrix jobs reported
+        # 608 passed / 27 skipped, Windows included. GitHub's Windows runners
+        # have neither Office nor LibreOffice, so `wordrender.backend()` is
+        # empty there and the render tier skipped itself exactly as it did on
+        # the bare Linux runners — while this job existed to prove it had not.
+        #
+        # Windows reaches the document through LibreOffice here. The Word path
+        # cannot run on a hosted runner (no Office licence) and stays a local
+        # path; what this covers is the Windows *branch* of everything else —
+        # the bundled-LibreOffice lookup, path handling, and the process-tree
+        # kill, whose Windows mechanism is taskkill rather than a process group.
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v7
@@ -120,17 +134,43 @@ jobs:
           # formula ships English only and would skip the Persian tests.
           brew install tesseract tesseract-lang ghostscript
 
+      - name: Install the tools the other jobs go without (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install --no-progress -y libreoffice-fresh
+          choco install --no-progress -y tesseract ghostscript
+          # The Persian pack decides whether the OCR tier runs or skips, and a
+          # skip fails this job by design. Fetch it if the package omitted it.
+          $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
+          if (Test-Path $tessdata) {
+            if (-not (Test-Path "$tessdata\fas.traineddata")) {
+              Invoke-WebRequest -UseBasicParsing `
+                -Uri "https://raw.githubusercontent.com/tesseract-ocr/tessdata/main/fas.traineddata" `
+                -OutFile "$tessdata\fas.traineddata"
+            }
+          }
+
       - name: Python dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r skills/revayat-novel/requirements.txt ocrmypdf
 
       - name: Every one of them is really on PATH
+        shell: bash
         run: |
           # The cask puts soffice inside the app bundle rather than on PATH.
           if [ "$RUNNER_OS" = "macOS" ]; then
             echo "/Applications/LibreOffice.app/Contents/MacOS" >> "$GITHUB_PATH"
             export PATH="/Applications/LibreOffice.app/Contents/MacOS:$PATH"
+          fi
+          # Chocolatey installs to Program Files and does not always amend the
+          # PATH this shell inherited.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            echo "/c/Program Files/LibreOffice/program" >> "$GITHUB_PATH"
+            echo "/c/Program Files/Tesseract-OCR" >> "$GITHUB_PATH"
+            export PATH="/c/Program Files/LibreOffice/program:/c/Program Files/Tesseract-OCR:$PATH"
           fi
           soffice --version
           tesseract --version | head -1
@@ -138,10 +178,35 @@ jobs:
           gs --version
           ocrmypdf --version
 
+      - name: Which backend this runner will use
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "skills/revayat-novel/scripts")
+          import wordrender
+          chosen = wordrender.backend()
+          print("backend:", chosen or wordrender.unavailable_reason())
+          # A job whose whole purpose is that the render tier runs must not
+          # start with no renderer. Failing here names the cause; failing in
+          # the suite would name a dozen skips instead.
+          assert chosen, "no rendering backend on the job that exists to use one"
+          PY
+
       # A skip here is the hole this job exists to close, so it fails the build.
       # Without this the job could install nothing, skip everything and go green
       # exactly like the jobs it is meant to cover for.
+      #
+      # Still not executed anywhere in CI, and deliberately: the Word backend.
+      # A hosted runner has no Office licence, so `_with_word` and its COM
+      # teardown run only on a developer machine that has Word. `doctor` and
+      # `wordrender.unavailable_reason()` both name that, and every render
+      # report records `laid_out_by`, so a reader can always tell which backend
+      # produced a given result.
       - name: The full suite, where a skip is a failure
+        shell: bash
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -230,6 +295,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r skills/revayat-novel/requirements.txt
+
+      - name: Nothing unused, nothing undefined
+        run: |
+          python -m pip install ruff
+          # Ruff's defaults only. The repository had seven dead imports in the
+          # published scripts when this went in, two of them left behind by
+          # refactors that moved the code but not the import — the kind of thing
+          # nothing else here would ever have mentioned.
+          ruff check skills/revayat-novel/scripts tests
 
       - name: Every plugin manifest is valid JSON and agrees on version
         run: |

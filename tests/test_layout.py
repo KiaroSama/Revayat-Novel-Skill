@@ -12,9 +12,7 @@ from __future__ import annotations
 import argparse
 import zipfile
 
-import pytest
 
-import bookir as ir
 import layout
 from build_docx import Builder, add_arguments
 

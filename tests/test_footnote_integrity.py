@@ -13,7 +13,6 @@ below are mostly about the ways a marker can go missing or multiply.
 
 from __future__ import annotations
 
-import pytest
 
 import bookir as ir
 import qa

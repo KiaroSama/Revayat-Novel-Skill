@@ -15,7 +15,6 @@ a clear message up front rather than a confusing failure mid-book.
 
 from __future__ import annotations
 
-import argparse
 import importlib
 import json
 import shutil

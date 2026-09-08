@@ -15,7 +15,7 @@ import posixpath
 import re
 import zipfile
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from urllib.parse import unquote, urldefrag, urlsplit
 from xml.etree import ElementTree
 
