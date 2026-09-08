@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shutil
 import sys
 from pathlib import Path
@@ -55,7 +54,6 @@ import pagecheck
 import pagerun
 import preview
 import review
-import qa
 import runstate
 import wordrender
 from pagecheck import (  # noqa: F401  (this module's published surface)
@@ -249,6 +247,14 @@ def check(
         except RenderError as error:
             conversion_failure = str(error)
 
+    # What the *document* asked for, read out of the package rather than taken
+    # from the caller's options - the same rule as the text and the direction.
+    # Computed here because the unverified return below carries it too: a page
+    # nobody could lay out still has a font it asked for.
+    wanted_font = ""
+    if docx is not None and Path(docx).exists():
+        wanted_font = pagecheck.requested_fonts(Path(docx)).get("complex", "")
+
     renders: dict[str, Any] = {}
     origin = source_evidence(work_dir, pages_dir, page, source_pdf)
     source_missing = origin.problem
@@ -322,6 +328,8 @@ def check(
             "source_evidence": renders.get("source", ""),
             "source_pdf": str(origin.path) if origin.path else "",
             "source_pdf_sha256": origin.sha256,
+            "font_requested": wanted_font,
+            "fonts_seen": [],
             "renders": renders,
             "detail": f"page {page} was not checked: {unverified}. It is "
                       f"unverified, not passed.",
@@ -336,7 +344,8 @@ def check(
         except Exception:  # a package we cannot open is not a page we can fail
             source = None
 
-    report = check_preview(views, expected, source=source)
+    report = check_preview(views, expected, source=source,
+                           requested_font=wanted_font)
     if docx is not None and Path(docx).exists():
         # Direction is asked of the file for the same reason text is: measured
         # on a document whose every paragraph carries `w:bidi`, PyMuPDF
@@ -353,6 +362,13 @@ def check(
         "source_evidence": renders.get("source", ""),
         "source_pdf": str(origin.path) if origin.path else "",
         "source_pdf_sha256": origin.sha256,
+        # Which face was asked for and which arrived. Recorded rather than left
+        # to the findings, because a reader comparing two reports needs it for
+        # the same reason they need `laid_out_by`: the same .docx sets
+        # differently on a machine without the font.
+        "font_requested": wanted_font,
+        "fonts_seen": sorted({name for view in views
+                              for name in view.get("fonts") or ()}),
         "renders": renders,
         "preview": built_preview or str(docx or target_pdf or ""),
         "sheets": len(views),

@@ -307,7 +307,7 @@ def check_section_order(views: list[dict[str, Any]],
 
 
 def check_assembled_page(target: dict[str, Any], setup: dict[str, Any],
-                         unit: str) -> qa.Report:
+                         unit: str, *, requested_font: str = "") -> qa.Report:
     """The checks that still mean something once the book is assembled.
 
     Ownership by source page does not survive assembly — the built document
@@ -321,6 +321,7 @@ def check_assembled_page(target: dict[str, Any], setup: dict[str, Any],
     pagecheck._check_body_area(target, setup, report, unit, margins=False)
     pagecheck._check_blank_regions(target, setup, report, unit)
     pagecheck._check_overlap(target, report, unit, setup)
+    pagecheck._check_fonts(target, report, unit, requested=requested_font)
     # Direction is deliberately not judged here. `_check_direction` reads the
     # alignment of PyMuPDF's block boxes, and for Arabic script those do not
     # reliably reflect what is on the page: measured on a document whose every
@@ -359,6 +360,11 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
                           f"PyMuPDF may not be installed",
         })
 
+    # Asked of the package, not of the caller: the same rule as the text and
+    # the direction. A book set in a face the renderer could not use is a book
+    # whose every geometry finding describes a page nobody will see.
+    wanted_font = pagecheck.requested_fonts(docx).get("complex", "")
+
     setups = page_setups(book)
     views: list[dict[str, Any]] = []
     pages: list[dict[str, Any]] = []
@@ -372,7 +378,8 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
         view = pagecheck.page_view(rendered, index)
         views.append(view)
         summary = check_assembled_page(view, setup_for(view, setups),
-                                       f"page{index + 1:04d}").summary()
+                                       f"page{index + 1:04d}",
+                                       requested_font=wanted_font).summary()
         pages.append({"page": index + 1, "ok": summary["ok"],
                       "errors": summary["errors"], "warnings": summary["warnings"]})
         for finding in summary["findings"]:
@@ -408,6 +415,8 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
             "verified": False,
             "unverified": seen["detail"],
             "laid_out_by": wordrender.backend(),
+            "font_requested": wanted_font,
+            "fonts_seen": sorted({n for v in views for n in v.get("fonts") or ()}),
             "pages": total,
             "findings": findings[:60],
             "render": str(rendered),
@@ -424,6 +433,10 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
         "ok": not findings,
         "verified": True,
         "laid_out_by": wordrender.backend(),
+        # The same reason `laid_out_by` is here: the same .docx sets
+        # differently on a machine that lacks the face it asked for.
+        "font_requested": wanted_font,
+        "fonts_seen": sorted({n for v in views for n in v.get("fonts") or ()}),
         "pages": total,
         "findings": findings[:60],
         "render": str(rendered),
