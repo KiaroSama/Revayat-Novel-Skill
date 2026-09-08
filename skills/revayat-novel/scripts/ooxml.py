@@ -25,6 +25,17 @@ W = nsmap["w"]
 _WNS = f'xmlns:w="{W}"'
 _RNS = f'xmlns:r="{nsmap["r"]}"'
 
+#: The four theme attributes `w:rFonts` may carry. When one is present it
+#: supersedes the explicit attribute beside it (ECMA-376 §17.3.2.26), so a
+#: `w:cs` written next to `w:cstheme` is ignored. Measured: every heading in a
+#: built book came out in the theme font while the body was correct, because
+#: python-docx's template gives its heading and title styles all four and its
+#: theme declares an *empty* complex-script typeface. With `--font Vazir` the
+#: body was Vazir and the heading was Times New Roman Bold; with `w:cstheme`
+#: stripped, the heading was Vazir Bold.
+THEME_FONT_ATTRIBUTES = ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme",
+                         "w:cstheme")
+
 FOOTNOTE_TEXT_STYLE = "FootnoteText"
 FOOTNOTE_REF_STYLE = "FootnoteReference"
 
@@ -159,6 +170,11 @@ def style_rtl(document, style_name: str, *, persian_font: str | None = None,
         run_properties.append(el("rtl"))
     if persian_font:
         for existing in run_properties.findall(qn("w:rFonts")):
+            # The theme attributes go first. Setting `w:cs` beside a surviving
+            # `w:cstheme` writes a font Word then ignores - which is what made
+            # this silent: the style said the right thing and the page did not.
+            for attribute in THEME_FONT_ATTRIBUTES:
+                existing.attrib.pop(qn(attribute), None)
             existing.set(qn("w:cs"), persian_font)
         if run_properties.find(qn("w:rFonts")) is None:
             run_properties.append(el("rFonts", cs=persian_font))

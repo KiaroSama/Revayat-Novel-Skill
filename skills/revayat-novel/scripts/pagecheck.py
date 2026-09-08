@@ -116,11 +116,16 @@ def _pymupdf():
             return None
 
 
+def _basefont(name: str) -> str:
+    """``"BCDEEE+Calibri"`` -> ``"Calibri"``. PDF subset tags are per-file noise."""
+    return str(name).split("+", 1)[-1].strip()
+
+
 def page_view(pdf_path: Path, index: int) -> dict[str, Any]:
     """One PDF page reduced to the geometry the checks compare.
 
     ``{"width_pt", "height_pt", "blocks": [{"text", "bbox"}],
-       "images": [{"bbox", "width_pt", "height_pt"}]}``
+       "images": [{"bbox", "width_pt", "height_pt"}], "fonts": [str]}``
     """
     pymupdf = _pymupdf()
     if pymupdf is None:
@@ -144,11 +149,25 @@ def page_view(pdf_path: Path, index: int) -> dict[str, Any]:
                     "width_pt": round(float(rect.width), 2),
                     "height_pt": round(float(rect.height), 2),
                 })
+        # Which fonts the page was *actually* set in. Measured: a book built
+        # with `--font Vazirmatn` came back set in Calibri on a machine that
+        # has Vazirmatn installed - the installed build is a variable font and
+        # Word will not resolve one for `w:cs`, so it fell back to the theme's
+        # minorBidi without a word. Every other check here passed, because
+        # every other check measures a layout that is not the one the reader
+        # gets - and a fallback's metrics differ, so those findings describe a
+        # page nobody will see.
+        fonts = sorted({_basefont(span["font"])
+                        for block in page.get_text("dict")["blocks"]
+                        for line in block.get("lines", ())
+                        for span in line.get("spans", ())
+                        if span.get("text", "").strip()})
         return {
             "width_pt": round(float(page.rect.width), 2),
             "height_pt": round(float(page.rect.height), 2),
             "blocks": blocks,
             "images": images,
+            "fonts": fonts,
         }
     finally:
         doc.close()
@@ -406,6 +425,38 @@ def document_text(docx: Path) -> str:
     return " ".join(paragraphs)
 
 
+def requested_fonts(docx: Path) -> dict[str, str]:
+    """Which fonts the *document* asked for: ``{"complex": …, "ascii": …}``.
+
+    Asked of `word/styles.xml` rather than of the caller, for the same reason
+    the text and the direction are: the caller's idea of the options is not
+    what ended up in the file, and the file is what the renderer obeyed. The
+    builder writes the Persian font as `w:cs` in `w:docDefaults`
+    (`ooxml.set_document_defaults`), so docDefaults is the one place that
+    always carries it.
+
+    Empty strings when the document does not say - a state, not a failure: a
+    .docx from somewhere else need not carry any of this.
+    """
+    try:
+        with zipfile.ZipFile(docx) as archive:
+            styles = archive.read("word/styles.xml").decode("utf-8")
+    except (OSError, KeyError, zipfile.BadZipFile, UnicodeDecodeError):
+        return {"complex": "", "ascii": ""}
+
+    defaults = re.search(r"<w:docDefaults>.*?</w:docDefaults>", styles, re.S)
+    if not defaults:
+        return {"complex": "", "ascii": ""}
+    element = re.search(r"<w:rFonts\b[^>]*/>", defaults.group(0))
+    if not element:
+        return {"complex": "", "ascii": ""}
+    found = {}
+    for key, attribute in (("complex", "w:cs"), ("ascii", "w:ascii")):
+        match = re.search(rf'{attribute}="([^"]*)"', element.group(0))
+        found[key] = match.group(1) if match else ""
+    return found
+
+
 def check_direction_in_document(docx: Path) -> list[dict[str, Any]]:
     """Is the built document right-to-left? Asked of the file, not the render.
 
@@ -610,12 +661,51 @@ def _check_overlap(target: dict[str, Any], report: qa.Report, unit: str,
                            f"({shared / smaller:.0%} of it covered)")
 
 
+def _check_fonts(target: dict[str, Any], report: qa.Report, unit: str, *,
+                 requested: str) -> None:
+    """Was the page set in the font it asked for?
+
+    A WARNING, deliberately, and never an ERROR. A fallback is a real defect -
+    the metrics are wrong, so every geometry finding above describes a layout
+    nobody will see, and a fallback without Arabic joining forms sets Persian
+    as disconnected letters - but it is a property of the *machine that
+    rendered*, not of the book. A Linux runner with no Persian font installed
+    would fail every page of a perfectly good book, and a gate that fails on
+    every page of correct output is one people learn to ignore.
+
+    Silent when the document did not ask for anything, which is a state rather
+    than a pass: a .docx from elsewhere carries no docDefaults of ours.
+    """
+    if not requested:
+        return
+    fonts = target.get("fonts")
+    if not fonts:
+        report.add(qa.WARNING, "font-unverified", unit,
+                   "the render reported no font names, so which font this page "
+                   "was set in was not checked")
+        return
+    # Substring and fold, not equality: a renderer names `Times New Roman` as
+    # `TimesNewRomanPSMT` and `Arial` as `ArialMT`. Exact matching would report
+    # a fallback on every correct page.
+    wanted = requested.strip().casefold().replace(" ", "")
+    if any(wanted in name.casefold().replace(" ", "") for name in fonts):
+        return
+    report.add(qa.WARNING, "font-fallback", unit,
+               f"this page asked for {requested!r} and was set in "
+               f"{', '.join(fonts)}. The renderer could not use it, so the "
+               f"metrics above describe a layout the reader will not get; a "
+               f"fallback without Arabic joining forms also breaks the script.")
+
+
 def check_page(target: dict[str, Any], expected: dict[str, Any], *,
-               source: str | None = None) -> qa.Report:
+               source: str | None = None,
+               requested_font: str = "") -> qa.Report:
     """Every structural check, against one rendered page.
 
     ``source`` is the document's own text when the caller has the file; see
     `_check_text_presence` for why a rendered page is not asked about Persian.
+    ``requested_font`` is what the *document* asked for, from
+    `requested_fonts`; empty means the question is not asked.
     """
     report = qa.Report()
     unit = f"page{expected['page']:04d}"
@@ -627,6 +717,7 @@ def check_page(target: dict[str, Any], expected: dict[str, Any], *,
     _check_images(target, expected, report, unit)
     _check_blank_regions(target, setup, report, unit)
     _check_overlap(target, report, unit)
+    _check_fonts(target, report, unit, requested=requested_font)
 
     report.count("expected_blocks", len(expected["texts"]))
     report.count("rendered_blocks", len(target["blocks"]))
@@ -659,7 +750,8 @@ def combine(views: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def check_preview(views: list[dict[str, Any]], expected: dict[str, Any], *,
-                  source: str | None = None) -> qa.Report:
+                  source: str | None = None,
+                  requested_font: str = "") -> qa.Report:
     """One source page's preview, however many sheets it came out as.
 
     The split is between what a *page* can be wrong about and what a *page's
@@ -688,6 +780,9 @@ def check_preview(views: list[dict[str, Any]], expected: dict[str, Any], *,
         sheet = unit if len(views) == 1 else f"{unit}-{index + 1}"
         _check_page_size(view, setup, report, sheet)
         _check_body_area(view, setup, report, sheet)
+        # Per sheet, not once for the combined view: a page whose second sheet
+        # fell back is a different state from one whose first did.
+        _check_fonts(view, report, sheet, requested=requested_font)
         _check_blank_regions(view, setup, report, sheet)
         _check_overlap(view, report, sheet, setup)
 

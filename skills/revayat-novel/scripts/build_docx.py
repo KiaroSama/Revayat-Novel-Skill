@@ -25,7 +25,7 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from docx import Document
 from docx.enum.section import WD_ORIENT, WD_SECTION_START
@@ -159,8 +159,11 @@ class Builder:
             size_pt=max(7.5, self.options.size - 2),
         )
         if self.options.rtl:
-            for name in ("Normal", "Quote", "Caption", "List Bullet", "List Number",
-                         *(f"Heading {n}" for n in range(1, 7))):
+            # `Title` was missing, and it is the one style on the title page.
+            # `style_rtl` returns silently for a style a custom --template does
+            # not define, so naming one that may be absent is safe.
+            for name in ("Normal", "Title", "Quote", "Caption", "List Bullet",
+                         "List Number", *(f"Heading {n}" for n in range(1, 7))):
                 ooxml.style_rtl(self.document, name, persian_font=self.options.font)
 
         # Book layout goes into the styles, not onto each paragraph, so the
@@ -730,7 +733,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--out", required=True, help="output .docx path")
     parser.add_argument("--template", default=None,
                         help="reference .docx supplying styles and page setup")
-    parser.add_argument("--font", default="Vazirmatn",
+    parser.add_argument("--font", default="Vazir",
                         help="Persian (complex-script) font; e.g. 'B Nazanin', 'Tahoma'")
     parser.add_argument("--latin-font", default="Times New Roman")
     parser.add_argument("--size", type=float, default=11.5, help="body size in pt")

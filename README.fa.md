@@ -133,7 +133,7 @@ $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pag
 
 $PY $S/revayat-novel.py falint fix   --book work/book.json
 $PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
-$PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
+$PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"
 
 # دو دروازهٔ پایانی؛ تا هر دو سبز نشوند فایل آماده نیست: یکی بستهٔ فایل،
 # یکی کتاب نهایی که رندر و نگاه شده است.
