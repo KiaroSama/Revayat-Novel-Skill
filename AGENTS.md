@@ -104,3 +104,8 @@ widens between releases. If you split a module, put every deliberate re-export
 in one block with `# noqa: F401` — the linter cannot tell a re-export from a
 dead import, and a name a test imports is public whatever it looks like inside
 the file.
+
+And the flag table in `references/docx-and-ooxml.md` must state the defaults the
+parser actually has: a test reads the table and compares every literal default
+against `build_docx.add_arguments`. Change a default in one place and the build
+says so. Documentation is otherwise the only artefact here that no test reads.
