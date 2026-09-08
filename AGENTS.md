@@ -38,12 +38,14 @@ tests/              pytest; fixtures are generated, never committed
 | `read_docx.py` | DOCX via python-docx, plus raw XML for what it cannot reach: footnotes *and* endnotes, hyperlink targets, section breaks, running heads |
 | `extract.py` | format detection, OCR routing, MinerU/Markdown adapters |
 | `rasters.py` | cropping an illustration out of a scan's own pixels |
+| `adapters.py` | importing an extraction MinerU or Markdown already did |
 | `ocr_sidecar.py` | per-word OCR confidence and boxes |
 | `scan_clean.py` | removing a colour watermark from a scan |
 | `glossary.py` | name candidates, term tables, drift checking |
 | `chunk.py` | worksheets by character budget; owns the `@@` header format |
 | `pagerun.py` | the page lifecycle: one job per source page, and the gates a page must clear |
 | `pagecli.py` | the `pages` command line; `pagerun.main` forwards here |
+| `sourcepages.py` | the source PDF as an artefact: a page's visual identity, one file per page |
 | `segments.py` | one unit longer than the whole budget, cut reversibly |
 | `merge.py` | worksheets back into the IR, with named failures |
 | `falint.py` | Persian typography lint and fix |
