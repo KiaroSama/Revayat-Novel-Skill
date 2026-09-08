@@ -20,10 +20,13 @@ tree and reports a named failure instead of waiting.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+from typing import Any
 
 #: Word's own "save as PDF" format code.
 WORD_PDF_FORMAT = 17
@@ -100,6 +103,58 @@ def unavailable_reason() -> str:
             "macOS: brew install --cask libreoffice)")
 
 
+def _run_bounded(command: list[str], timeout: float) -> subprocess.CompletedProcess:
+    """Run ``command`` and, on timeout, kill it *and everything it started*.
+
+    `subprocess.run(timeout=...)` kills only the direct child. Both renderers
+    are launchers: the Word path's child is a Python worker whose grandchild is
+    WINWORD.EXE, started through COM; `soffice` forks `soffice.bin` and returns.
+    So the documented promise above - "the parent kills the process tree" - was
+    not kept by the call that made it, and a timeout left a hidden renderer
+    running with its COM teardown never reached. A book is hundreds of renders,
+    so one leak per timeout is how a machine quietly runs out of memory.
+    """
+    popen_extra: dict[str, Any] = {}
+    if os.name == "posix":
+        # Its own process group, so one signal reaches the launcher and the
+        # process it forked.
+        popen_extra["start_new_session"] = True
+    else:
+        popen_extra["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+    process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, **popen_extra)
+    try:
+        out, err = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(process)
+        # Drain, so the pipes are closed and the handles released before the
+        # caller reports; the process is already dead so this cannot block.
+        try:
+            process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, out, err)
+
+
+def _kill_tree(process: subprocess.Popen) -> None:
+    """Kill ``process`` and its descendants, on either platform."""
+    if os.name == "nt":
+        # Windows has no process groups that survive a launcher, so ask the OS
+        # to walk the tree. /T is the whole point; /F because a wedged renderer
+        # is not going to honour a polite request.
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                       capture_output=True, check=False)
+        process.kill()
+        return
+    import signal  # noqa: PLC0415
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        process.kill()
+
+
 # --------------------------------------------------------------------------- #
 # The two backends
 # --------------------------------------------------------------------------- #
@@ -142,14 +197,26 @@ def _with_libreoffice(docx: Path, out_dir: Path, timeout: float) -> Path:
     launcher = find_libreoffice()
     if not launcher:
         raise RenderError(unavailable_reason())
-    finished = subprocess.run(
-        [launcher, "--headless", "--convert-to", "pdf", "--outdir",
-         str(out_dir), str(docx)],
-        capture_output=True, timeout=timeout,
-    )
+    # A private profile per render, and not for tidiness. LibreOffice is
+    # single-instance *per profile*: with the default one, an invocation made
+    # while another LibreOffice is running - the operator's own Writer window,
+    # or the next page of the same book - hands the work to that process and
+    # returns 0 immediately. The PDF then arrives late or never, and the guard
+    # below reports "produced no PDF" with an empty detail, because the exit
+    # code was 0 and stderr was silent. A page that could have been rendered
+    # comes back unverified naming nothing.
+    with tempfile.TemporaryDirectory(prefix="revayat-novel-soffice-") as profile:
+        finished = _run_bounded(
+            [launcher,
+             f"-env:UserInstallation={Path(profile).resolve().as_uri()}",
+             "--headless", "--norestore", "--invisible", "--nolockcheck",
+             "--convert-to", "pdf", "--outdir", str(out_dir), str(docx)],
+            timeout,
+        )
     produced = out_dir / (docx.stem + ".pdf")
     if finished.returncode != 0 or not produced.exists():
-        detail = finished.stderr.decode("utf-8", "replace").strip()[:300]
+        detail = (finished.stderr.decode("utf-8", "replace").strip()[:300]
+                  or f"exit {finished.returncode} and no {produced.name}")
         raise RenderError(f"LibreOffice produced no PDF: {detail}")
     return produced
 
@@ -187,7 +254,7 @@ def render(docx: Path, out_dir: Path, *,
     command = [sys.executable, str(Path(__file__).resolve()), str(docx),
                str(out_dir)]
     try:
-        finished = subprocess.run(command, capture_output=True, timeout=timeout)
+        finished = _run_bounded(command, timeout)
     except subprocess.TimeoutExpired as error:
         raise RenderError(
             f"Word did not finish within {timeout:.0f}s and was terminated; "
