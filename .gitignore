@@ -78,3 +78,6 @@ Thumbs.db
 
 # Local-only quality runs over the user's own books; never committed.
 /.sample/
+
+# Advisory implementation plans: working documents, not part of the skill.
+/plans/
