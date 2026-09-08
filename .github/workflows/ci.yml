@@ -172,11 +172,22 @@ jobs:
             echo "/c/Program Files/Tesseract-OCR" >> "$GITHUB_PATH"
             export PATH="/c/Program Files/LibreOffice/program:/c/Program Files/Tesseract-OCR:$PATH"
           fi
-          soffice --version
           tesseract --version | head -1
           tesseract --list-langs | grep -qx fas
-          gs --version
           ocrmypdf --version
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # `soffice.exe` is a GUI binary: from a console it detaches, prints
+            # nothing for --version and can leave the shell waiting — measured,
+            # it wedged this step until the job timeout. The next step asks
+            # `wordrender.backend()` instead, which is the question that
+            # actually matters and the same call the pipeline makes.
+            test -x "/c/Program Files/LibreOffice/program/soffice.exe"
+            # Chocolatey's Ghostscript is gswin64c; there is no `gs` here.
+            gswin64c --version
+          else
+            soffice --version
+            gs --version
+          fi
 
       - name: Which backend this runner will use
         shell: bash
