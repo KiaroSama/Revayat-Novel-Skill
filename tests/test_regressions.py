@@ -9,7 +9,6 @@ against a class of failure this project has already shipped once.
 from __future__ import annotations
 
 import io
-from pathlib import Path
 
 import pytest
 

@@ -338,7 +338,6 @@ def test_the_glossary_is_keyed_on_the_source_side_so_merge_cannot_stale_it():
 
 
 def test_the_build_records_the_document_it_produced(translated_book, tmp_path):
-    import argparse
 
     import build_docx
 

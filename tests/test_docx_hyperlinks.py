@@ -20,7 +20,6 @@ import re
 import zipfile
 from pathlib import Path
 
-import pytest
 from docx import Document
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml import OxmlElement

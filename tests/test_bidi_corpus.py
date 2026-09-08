@@ -19,7 +19,6 @@ Two properties matter and are checked for every line:
 from __future__ import annotations
 
 import argparse
-import re
 import zipfile
 
 import pytest
@@ -87,7 +86,6 @@ def _build_paragraph(text: str, tmp_path):
 
 def _runs(paragraph):
     """``(text, is_rtl)`` for each run, in document order."""
-    from lxml import etree
 
     out = []
     for run in paragraph.findall(f"{{{W}}}r"):

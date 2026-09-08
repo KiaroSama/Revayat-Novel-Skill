@@ -17,7 +17,6 @@ them inlined in a paragraph.
 from __future__ import annotations
 
 import re
-import statistics
 from collections import Counter
 from pathlib import Path
 from typing import Any

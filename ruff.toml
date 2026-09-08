@@ -1,0 +1,6 @@
+# Ruff's default rule selection, which is the findings this repository actually
+# had when the gate went in and nothing else. Deliberately not wider: `B905`
+# fires on eight `zip()` calls that were each read and found correct, and
+# `RUF001` fires on the Persian and typographic characters this project exists
+# to handle. A gate that cries wolf is a gate people turn off.
+target-version = "py310"
