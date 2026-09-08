@@ -37,6 +37,23 @@ import review
 import wordrender
 from build_docx import Builder, add_arguments
 
+#: Findings that describe the *machine that rendered*, not the book. A CI runner
+#: with no Persian font installed reports `font-fallback` on every page of a
+#: perfectly correct document — that is the check working, and it is a WARNING
+#: rather than an ERROR for exactly this reason. These tests claim the assembled
+#: book is structurally sound, so they judge the structural findings; the font
+#: behaviour has its own tests in `test_font_styles.py`.
+#:
+#: Written after all three assertions below passed locally and failed on macOS
+#: CI: the machine had the font, so nothing fell back, so nothing was noticed.
+MACHINE_DEPENDENT = {"font-fallback", "font-unverified"}
+
+
+def structural(report: dict) -> list[dict]:
+    return [f for f in report["findings"]
+            if f.get("code") not in MACHINE_DEPENDENT]
+
+
 PERSIAN = [
     "صبح به آرامی از فراز تپه‌ها بالا آمد و الیزابت کنار پنجره ایستاده بود.",
     "دارسی هیچ نگفت و او رویش را از پنجره برگرداند و به راه افتاد.",
@@ -109,7 +126,7 @@ def test_a_correctly_assembled_document_passes(tmp_path):
     report = _laid_out(tmp_path, book_path, _built(tmp_path, book_path))
 
     assert report["ok"] is True and report["verified"] is True
-    assert report["findings"] == []
+    assert structural(report) == []
     assert report["counts"]["expected_blocks"] == len(PERSIAN)
     assert docqa.report_path(tmp_path).exists()
 
@@ -230,7 +247,7 @@ def test_a_document_nobody_looked_at_is_unverified_not_passed(tmp_path):
     assert report["ok"] is False
     assert report["verified"] is False
     assert "nobody has looked at the document" in report["unverified"]
-    assert report["findings"] == [], (
+    assert structural(report) == [], (
         "the measurements were fine; it is the looking that is missing"
     )
 
@@ -452,7 +469,7 @@ def test_a_landscape_and_a_resized_section_are_not_reported_as_wrong_pages(tmp_p
     report = _laid_out(tmp_path, book_path, _built(tmp_path, book_path))
 
     assert report["verified"] is True
-    assert report["findings"] == [], "a correctly assembled book reported nothing"
+    assert structural(report) == [], "a correctly assembled book reported nothing"
     assert report["ok"] is True
     assert report["pages"] >= 3, "one page per section at least"
 
