@@ -10,7 +10,7 @@ $PY scripts/revayat-novel.py build --book work/book.json --out out/book.fa.docx 
 | --- | --- | --- |
 | `--assets DIR` | `<book dir>/assets` | where the extracted pictures live |
 | `--template REF.docx` | none | inherit styles and page setup from a Word file |
-| `--font NAME` | `Vazirmatn` | Persian (complex-script) face |
+| `--font NAME` | `Vazir` | Persian (complex-script) face |
 | `--latin-font NAME` | `Times New Roman` | Latin runs inside Persian text |
 | `--size PT` | `11.5` | body size |
 | `--toc` / `--no-toc` | on | table of contents |

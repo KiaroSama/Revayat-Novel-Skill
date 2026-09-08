@@ -538,13 +538,19 @@ Then build:
 ```bash
 $PY $SKILL_DIR/scripts/revayat-novel.py build \
   --book $WORK/book.json --assets $WORK/assets --out out/book.fa.docx \
-  --font "Vazirmatn" --size 11.5
+  --font "Vazir" --size 11.5
 ```
 
 Useful flags: `--font Tahoma` when the file must render on a machine with no
 Persian fonts; `--heading-size source` to reproduce the original heading point
 sizes; `--template ref.docx` to inherit styles from an existing Word file. Full
 list in `references/docx-and-ooxml.md`.
+
+**The default is `Vazir`, not `Vazirmatn`.** Vazirmatn is usually installed as
+a *variable* font and Word will not resolve one for a complex-script run —
+measured, a book asking for it came back set in Calibri on a machine that had
+it, with every check passing. `render-qa` and `doc-qa` now report a substituted
+face as `font-fallback`, so it can no longer happen silently.
 
 ## Step 9 — Verify and report
 

@@ -119,7 +119,7 @@ $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pag
 
 $PY $S/revayat-novel.py falint fix   --book work/book.json
 $PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
-$PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazirmatn"
+$PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"
 
 # Two final gates, and the file is not ready until both pass: the package, and
 # the finished book rendered and looked at.

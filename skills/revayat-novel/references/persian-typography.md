@@ -100,7 +100,12 @@ Word picks the *complex script* font for Persian runs, which is a separate
 setting from the Latin font. The builder sets both: `--font` for Persian
 (`w:rFonts w:cs`), `--latin-font` for Latin (`w:ascii`/`w:hAnsi`).
 
-- `Vazirmatn` — free, modern, widely installed by Persian users. Default.
+- `Vazir` — free, modern, widely installed by Persian users. **Default.**
+  Deliberately not `Vazirmatn`, the same family's newer line: it is commonly
+  installed as a *variable* font, and Word will not resolve a variable font for
+  a complex-script run. Measured — a book asking for `Vazirmatn` came back set
+  in Calibri on a machine where Vazirmatn was installed, with every check
+  passing. `render-qa` and `doc-qa` now report that as `font-fallback`.
 - `B Nazanin` — the classic Persian book face; ships with Persian Office setups.
 - `Tahoma` — not a book face, but present on every Windows machine. Use it when
   the file must render correctly somewhere you do not control.

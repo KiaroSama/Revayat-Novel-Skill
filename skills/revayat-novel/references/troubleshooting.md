@@ -45,7 +45,28 @@ If it happens there too, check the document really has `w:bidi` —
 
 Missing glyphs, which is a font problem, not a direction problem. Rebuild with
 `--font Tahoma` (present on every Windows machine) to confirm, then install
-Vazirmatn or B Nazanin if you want a proper book face.
+Vazir or B Nazanin if you want a proper book face.
+
+## The Persian came out in Calibri or Times New Roman, but the font is installed
+
+The renderer could not use the face that was asked for, and until recently
+nothing said so. `render-qa` and `doc-qa` now report it as `font-fallback`,
+naming what was requested and what arrived.
+
+Two causes, both measured:
+
+- **The font is a *variable* font.** Word will not resolve one for a
+  complex-script run. `Vazirmatn` is usually installed this way
+  (`Vazirmatn-VariableFont_wght.ttf`), and a book asking for it came back set
+  in Calibri on a machine that had it. Install a static build — `Vazir` is the
+  default for exactly this reason — or use `--font Tahoma` to confirm the
+  pipeline is otherwise fine.
+- **The machine has no Persian face at all.** Common on a Linux or macOS CI
+  runner, where the render is still useful for checking structure but is not
+  what a reader will see. The warning says so rather than failing the run.
+
+A fallback is not only ugly: its metrics differ, so every geometry finding in
+the same report describes a page nobody will get.
 
 ## The book came out much shorter than expected
 
