@@ -36,7 +36,7 @@ tests/              pytest; fixtures are generated, never committed
 | `read_pdf.py` | PDF via PyMuPDF: text, geometry, original image bytes |
 | `read_epub.py` | EPUB via zipfile + BeautifulSoup: footnotes and link targets |
 | `read_docx.py` | DOCX via python-docx, plus raw XML for what it cannot reach: footnotes *and* endnotes, hyperlink targets, section breaks, running heads |
-| `extract.py` | format detection, OCR routing, MinerU/Markdown adapters |
+| `extract.py` | format detection and OCR routing |
 | `rasters.py` | cropping an illustration out of a scan's own pixels |
 | `adapters.py` | importing an extraction MinerU or Markdown already did |
 | `ocr_sidecar.py` | per-word OCR confidence and boxes |
@@ -96,3 +96,11 @@ they bloat the repository and the content is usually someone else's.
 Keep the three plugin manifests at the same `version` — CI enforces it.
 
 Every tracked text file must be UTF-8; CI enforces that too.
+
+CI also runs `ruff check skills/revayat-novel/scripts tests` on ruff's default
+rules, so an unused import fails the build. It is **pinned** (`ruff.toml` sets
+only `target-version`; the CI step pins the version) because ruff's default set
+widens between releases. If you split a module, put every deliberate re-export
+in one block with `# noqa: F401` — the linter cannot tell a re-export from a
+dead import, and a name a test imports is public whatever it looks like inside
+the file.
