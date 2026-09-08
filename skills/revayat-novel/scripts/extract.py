@@ -43,6 +43,11 @@ from adapters import (  # noqa: F401
     from_mineru,
     merge_mineru_figures,
 )
+# Its home is `rasters`, but `extract` has always exposed it and the OCR tier
+# imports it from here. That tier skips wherever Tesseract is absent, so this
+# re-export disappearing broke nothing any developer machine would notice — the
+# `nothing skipped` CI job caught it, which is the hole that job exists to close.
+from rasters import crop_from_source  # noqa: F401
 
 #: A page with fewer characters than this has no usable text layer.
 PAGE_TEXT_THRESHOLD = 80
