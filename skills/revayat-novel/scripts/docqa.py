@@ -65,6 +65,16 @@ import wordrender
 #: Where the finished document's own evidence lives, kept apart from the
 #: per-page reports so a reader is never in doubt which artefact a finding is
 #: about.
+#: Findings that describe the *machine that rendered*, not the book. They are
+#: still reported — a reader has to know the pages were measured in a face the
+#: book did not ask for, because a fallback's metrics are different — but they
+#: must not decide `ok`. This report's `ok` is `not findings`, which counts
+#: warnings as failures; before the font check there were simply no warnings in
+#: a healthy document, so the difference never showed. A runner with no Persian
+#: font installed would otherwise fail every page of a perfectly correct book,
+#: which is exactly why `_check_fonts` is a WARNING in the first place.
+MACHINE_DEPENDENT_CODES = frozenset({"font-fallback", "font-unverified"})
+
 FINAL_RENDER_DIR = ("renders", "final")
 FINAL_PAGE_DIR = ("renders", "final", "pages")
 
@@ -430,7 +440,8 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
         })
 
     return _write(work_dir, {
-        "ok": not findings,
+        "ok": not [f for f in findings
+                   if f.get("code") not in MACHINE_DEPENDENT_CODES],
         "verified": True,
         "laid_out_by": wordrender.backend(),
         # The same reason `laid_out_by` is here: the same .docx sets
