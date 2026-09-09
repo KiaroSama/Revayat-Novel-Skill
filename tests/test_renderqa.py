@@ -10,6 +10,7 @@ right-to-left; no hole where a page of text should be.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 import sys
@@ -954,8 +955,11 @@ def test_doctor_finds_a_tool_that_is_installed_but_not_on_path(tmp_path, monkeyp
 
     monkeypatch.setattr(extract.shutil, "which", lambda name: None)
     monkeypatch.setattr(extract, "_drives", lambda: [str(tmp_path)])
-    monkeypatch.setattr(extract, "BUNDLED_TOOLS",
-                        {"thing": (r"<drive>\Program Files\Thing\thing.exe",)})
+    # Built with this platform's separator. The shipped table is Windows-only,
+    # but the mechanism it drives is not, and a hard-coded backslash passes on
+    # Windows and fails everywhere else — which is exactly what it did.
+    pattern = os.sep.join(["<drive>", "Program Files", "Thing", "thing.exe"])
+    monkeypatch.setattr(extract, "BUNDLED_TOOLS", {"thing": (pattern,)})
 
     assert cli.find_tool(["thing"], "thing") == str(installed)
     # A tool with no table entry still answers None rather than raising.
@@ -976,8 +980,8 @@ def test_doctor_picks_the_newest_versioned_install(tmp_path, monkeypatch):
 
     monkeypatch.setattr(extract.shutil, "which", lambda name: None)
     monkeypatch.setattr(extract, "_drives", lambda: [str(tmp_path)])
-    monkeypatch.setattr(extract, "BUNDLED_TOOLS",
-                        {"ghostscript": (r"<drive>\gs\gs*\bin\gswin64c.exe",)})
+    pattern = os.sep.join(["<drive>", "gs", "gs*", "bin", "gswin64c.exe"])
+    monkeypatch.setattr(extract, "BUNDLED_TOOLS", {"ghostscript": (pattern,)})
 
     assert extract.find_tool(["gs"], "ghostscript").endswith(
         str(Path("gs10.07.1") / "bin" / "gswin64c.exe"))
