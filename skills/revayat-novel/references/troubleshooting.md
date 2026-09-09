@@ -298,19 +298,27 @@ long is more likely a concatenation of several than one volume.
 ## Tesseract, Ghostscript or MinerU is installed, but the tool says it is not
 
 Being on `PATH` is a different question from being installed, and on Windows it
-is usually the wrong one. `extract.find_tool` therefore looks on `PATH` first
-and then where an ordinary installer leaves each tool:
+is usually the wrong one. `extract.find_tool` therefore asks three questions in
+order: is it on `PATH`; is it in the script directory of the interpreter running
+the skill; is it where an ordinary installer leaves it?
 
 ```text
 <drive>\Program Files\Tesseract-OCR\tesseract.exe          winget / installer
 <drive>\Program Files\gs\gs*\bin\gswin64c.exe              Ghostscript, versioned
 <drive>\Program Files\MinerU\venv\Scripts\mineru.exe       MinerU in its own venv
+/opt/homebrew/bin/tesseract, /usr/local/bin/gs             Homebrew, MacPorts
+~/.local/bin/mineru                                        pip --user, pipx
 ```
 
 `<drive>` is every fixed drive, not just `C:` — a large optional tool is
 routinely installed elsewhere, and the MinerU this was measured against lives on
-`G:`. OCRmyPDF is resolved separately by `extract.find_ocrmypdf`, which also
-finds it inside the interpreter running the skill.
+`G:`. A `<drive>` pattern is skipped off Windows; every other pattern is tried
+anywhere, with `~` expanded.
+
+The interpreter's script directory is the general form of what
+`extract.find_ocrmypdf` already did for its own tool: a virtual environment is
+routinely absent from `PATH`, so a tool installed beside the skill's own
+dependencies is invisible to a `PATH` search on every platform.
 
 **`doctor`, the `ocr-sidecar` stage and the OCR test tier all call that one
 function**, so they cannot disagree about a machine. They used to: each asked

@@ -1003,3 +1003,59 @@ def test_doctor_asks_extract_where_ocrmypdf_is(monkeypatch):
 
     monkeypatch.setattr(extract, "find_ocrmypdf", lambda: None)
     assert cli.ocrmypdf_launcher() is None
+
+
+def test_a_tool_installed_into_this_interpreter_is_found_on_any_platform(
+        tmp_path, monkeypatch):
+    """A venv's script directory is routinely absent from PATH — everywhere.
+
+    `find_ocrmypdf` already handled this for its own tool by importing the
+    module. Generalised: pip puts a console script beside the interpreter
+    (`Scripts` on Windows, `bin` on POSIX), so a tool installed alongside this
+    skill's own dependencies is invisible to `shutil.which` on Linux and macOS
+    just as much as on Windows. The Windows-only `BUNDLED_TOOLS` table never
+    covered that case.
+    """
+    import extract
+
+    scripts = tmp_path / "venv-scripts"
+    scripts.mkdir()
+    name = "thing.exe" if os.name == "nt" else "thing"
+    (scripts / name).write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(extract.shutil, "which", lambda n: None)
+    monkeypatch.setattr(extract, "_interpreter_scripts", lambda: scripts)
+    monkeypatch.setattr(extract, "BUNDLED_TOOLS", {})
+
+    assert extract.find_tool(["thing"], "thing") == str(scripts / name)
+    assert extract.find_tool(["absent"], "absent") is None
+
+
+def test_a_posix_install_location_is_searched_too(tmp_path, monkeypatch):
+    """`<drive>` patterns are Windows-only; the rest must work anywhere.
+
+    The first version of this table held Windows paths and nothing else, so on
+    Linux and macOS `find_tool` degraded to a bare `shutil.which` — the very
+    behaviour it was written to replace.
+    """
+    import extract
+
+    installed = tmp_path / "opt" / "homebrew" / "bin" / "gs"
+    installed.parent.mkdir(parents=True)
+    installed.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(extract.shutil, "which", lambda n: None)
+    monkeypatch.setattr(extract, "_interpreter_scripts", lambda: tmp_path / "nowhere")
+    # An absolute pattern with no `<drive>`: used as written, on every platform.
+    monkeypatch.setattr(extract, "BUNDLED_TOOLS", {"ghostscript": (str(installed),)})
+    assert extract.find_tool(["gs"], "ghostscript") == str(installed)
+
+    # `~` is expanded, which is how a `pip --user` install is reachable.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    home_tool = tmp_path / ".local" / "bin" / "gs"
+    home_tool.parent.mkdir(parents=True)
+    home_tool.write_text("", encoding="utf-8")
+    monkeypatch.setattr(extract, "BUNDLED_TOOLS",
+                        {"ghostscript": (os.path.join("~", ".local", "bin", "gs"),)})
+    assert extract.find_tool(["gs"], "ghostscript") == str(home_tool)
