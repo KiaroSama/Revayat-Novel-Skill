@@ -294,3 +294,30 @@ pages, so the ceiling is ten times that. It is checked from the page count
 alone, before the first page is read. If a real book trips it, the constant is
 `PDF_MAX_PAGES` in `bookir.py`; look at the file first, because a book that
 long is more likely a concatenation of several than one volume.
+
+## Tesseract, Ghostscript or MinerU is installed, but the tool says it is not
+
+Being on `PATH` is a different question from being installed, and on Windows it
+is usually the wrong one. `extract.find_tool` therefore looks on `PATH` first
+and then where an ordinary installer leaves each tool:
+
+```text
+<drive>\Program Files\Tesseract-OCR\tesseract.exe          winget / installer
+<drive>\Program Files\gs\gs*\bin\gswin64c.exe              Ghostscript, versioned
+<drive>\Program Files\MinerU\venv\Scripts\mineru.exe       MinerU in its own venv
+```
+
+`<drive>` is every fixed drive, not just `C:` — a large optional tool is
+routinely installed elsewhere, and the MinerU this was measured against lives on
+`G:`. OCRmyPDF is resolved separately by `extract.find_ocrmypdf`, which also
+finds it inside the interpreter running the skill.
+
+**`doctor`, the `ocr-sidecar` stage and the OCR test tier all call that one
+function**, so they cannot disagree about a machine. They used to: each asked
+`shutil.which` on its own, so a machine with all four tools installed was told
+it had none, `ocr-sidecar` refused to run with "tesseract was not found on
+PATH", and ten OCR tests skipped themselves while reporting success.
+
+If yours is somewhere else — a portable build, a custom prefix — put its
+directory on `PATH`. `doctor` prints what it found under `optional_tools`, and
+that is the same answer the pipeline will get.
