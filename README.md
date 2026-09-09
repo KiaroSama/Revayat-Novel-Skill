@@ -82,6 +82,10 @@ brew install ghostscript                   # macOS
 sudo apt install ghostscript               # Debian/Ubuntu
 ```
 
+None of them has to be on `PATH`. `doctor` looks on `PATH`, then in the script
+directory of the interpreter you ran `pip install` with — a virtual environment
+usually is not on `PATH` — and then where each installer leaves the tool.
+
 ## Use
 
 Ask your agent, in whatever words you like:
