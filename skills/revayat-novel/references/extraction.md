@@ -55,17 +55,24 @@ sudo apt install tesseract-ocr             # Debian/Ubuntu
 
 # Ghostscript. Verified 2026-09-05: it is NOT in the winget default
 # source, so on Windows take the installer from
-# https://ghostscript.com/releases/gsdnld.html and put its bin/ on PATH.
+# https://ghostscript.com/releases/gsdnld.html. Its bin/ does not have to
+# go on PATH — the versioned install directory is searched.
 brew install ghostscript                   # macOS
 sudo apt install ghostscript               # Debian/Ubuntu
 ```
 
-`revayat-novel.py doctor` reports all three. On Windows it looks for
-`gswin64c`/`gswin32c` as well as `gs`, because Ghostscript does not ship a
-binary called `gs` there.
+`revayat-novel.py doctor` reports all three, **and none of them has to be on
+PATH.** It looks on `PATH` first and then where an ordinary install leaves a
+tool, so Tesseract under `C:\Program Files\Tesseract-OCR`, Ghostscript under a
+versioned `…\gs\gs10.07.1\bin\gswin64c.exe`, and MinerU under its own venv are
+all found where they are. On Windows it also tries `gswin64c`/`gswin32c`,
+because Ghostscript does not ship a binary called `gs` there.
 
 OCRmyPDF is also found when it is installed in the same interpreter as the
 skill's other dependencies, even if its script directory is not on PATH.
+
+The pipeline asks the same function `doctor` does, so a tool `doctor` reports
+present is one the `ocr-sidecar` stage will find — see `troubleshooting.md`.
 
 `--ocr off` proceeds without it, extracting only the pages that already have a
 text layer. Say so explicitly to the user — a book that comes back suspiciously
