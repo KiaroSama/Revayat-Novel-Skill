@@ -917,3 +917,85 @@ def test_libreoffice_is_given_a_profile_of_its_own(monkeypatch, tmp_path):
     assert profile[0].split("=", 1)[1].startswith("file:"), (
         "LibreOffice requires a file:// URL here; a bare path is ignored")
     assert "--norestore" in seen["command"]
+
+
+def _cli():
+    """The dispatcher, loaded by path: its filename is not an importable name."""
+    import importlib.util
+    from pathlib import Path
+
+    entry = Path(__file__).resolve().parents[1] / "skills" / "revayat-novel" \
+        / "scripts" / "revayat-novel.py"
+    spec = importlib.util.spec_from_file_location("revayat_novel_cli", entry)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_doctor_finds_a_tool_that_is_installed_but_not_on_path(tmp_path, monkeypatch):
+    """`shutil.which` alone is not "is it installed" on Windows.
+
+    Measured: MinerU at `G:\Program Files\MinerU`, Tesseract under
+    `C:\Program Files`, and OCRmyPDF inside the project venv were all reported
+    missing on a machine that had all three — so `doctor` printed install
+    instructions for software the reader had already installed, the OCR tier
+    skipped itself, and `ocr_sidecar` refused to run. That is the same defect
+    the render backend had with `WINWORD`.
+
+    Nothing here depends on what this machine actually has: the search table and
+    the drive list are both replaced, so the test measures the *mechanism*.
+    """
+    import extract
+
+    cli = _cli()
+    installed = tmp_path / "Program Files" / "Thing" / "thing.exe"
+    installed.parent.mkdir(parents=True)
+    installed.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(extract.shutil, "which", lambda name: None)
+    monkeypatch.setattr(extract, "_drives", lambda: [str(tmp_path)])
+    monkeypatch.setattr(extract, "BUNDLED_TOOLS",
+                        {"thing": (r"<drive>\Program Files\Thing\thing.exe",)})
+
+    assert cli.find_tool(["thing"], "thing") == str(installed)
+    # A tool with no table entry still answers None rather than raising.
+    assert cli.find_tool(["nothing"], "nothing") is None
+    # And PATH still wins when it has an answer.
+    monkeypatch.setattr(extract.shutil, "which", lambda name: "/usr/bin/thing")
+    assert extract.find_tool(["thing"], "thing") == "/usr/bin/thing"
+
+
+def test_doctor_picks_the_newest_versioned_install(tmp_path, monkeypatch):
+    """Ghostscript installs into `gs10.07.1`; a machine may hold several."""
+    import extract
+
+    for version in ("gs10.02.0", "gs10.07.1"):
+        binary = tmp_path / "gs" / version / "bin" / "gswin64c.exe"
+        binary.parent.mkdir(parents=True)
+        binary.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(extract.shutil, "which", lambda name: None)
+    monkeypatch.setattr(extract, "_drives", lambda: [str(tmp_path)])
+    monkeypatch.setattr(extract, "BUNDLED_TOOLS",
+                        {"ghostscript": (r"<drive>\gs\gs*\bin\gswin64c.exe",)})
+
+    assert extract.find_tool(["gs"], "ghostscript").endswith(
+        str(Path("gs10.07.1") / "bin" / "gswin64c.exe"))
+
+
+def test_doctor_asks_extract_where_ocrmypdf_is(monkeypatch):
+    """It can live in this interpreter rather than on PATH, and `which` cannot see that.
+
+    `extract.find_ocrmypdf` already resolves both cases; `doctor` repeats its
+    answer instead of guessing a second time — the same rule the render backend
+    follows.
+    """
+    import extract
+
+    cli = _cli()
+    monkeypatch.setattr(extract, "find_ocrmypdf",
+                        lambda: ["/usr/bin/python", "-m", "ocrmypdf"])
+    assert cli.ocrmypdf_launcher() == "/usr/bin/python -m ocrmypdf"
+
+    monkeypatch.setattr(extract, "find_ocrmypdf", lambda: None)
+    assert cli.ocrmypdf_launcher() is None
