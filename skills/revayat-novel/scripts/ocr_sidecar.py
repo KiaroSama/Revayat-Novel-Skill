@@ -29,7 +29,6 @@ import difflib
 import io
 import json
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -56,7 +55,20 @@ class SidecarError(RuntimeError):
 
 
 def find_tesseract() -> str | None:
-    return shutil.which("tesseract")
+    """Tesseract's path — on PATH, or where its installer left it.
+
+    `shutil.which` alone refused to run this stage on a machine with Tesseract
+    under `C:\Program Files\Tesseract-OCR`, while `doctor` reported it present
+    on the very same machine. Being on PATH is not the same question as being
+    installed, and on Windows it is usually the wrong one.
+
+    Imported here rather than at module scope: `extract` is a heavy import and
+    this is the only line that needs it. It cannot cycle — `extract` does not
+    import this module.
+    """
+    from extract import find_tool  # noqa: PLC0415
+
+    return find_tool(["tesseract"], "tesseract")
 
 
 def grade(confidence: float | None, *, high: float = DEFAULT_HIGH,
@@ -241,8 +253,10 @@ def build(
     binary = binary or find_tesseract()
     if not binary:
         raise SidecarError(
-            "tesseract was not found on PATH — it is needed to record OCR "
-            "confidence (Windows: winget install tesseract-ocr.tesseract · "
+            "tesseract was not found — it is needed to record OCR confidence. "
+            "Searched PATH and the usual install locations; run "
+            "`revayat-novel.py doctor` to see what was found. "
+            "(Windows: winget install tesseract-ocr.tesseract · "
             "macOS: brew install tesseract · Debian: apt install tesseract-ocr)"
         )
 

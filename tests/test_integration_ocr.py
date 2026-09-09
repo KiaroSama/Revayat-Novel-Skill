@@ -18,7 +18,6 @@ here is required for the unit tier to pass.
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -26,7 +25,7 @@ import pytest
 
 import bookir as ir
 import qa
-from extract import find_ocrmypdf, ocr_command, run_ocr
+from extract import find_ocrmypdf, find_tool, ocr_command, run_ocr
 
 #: A tessdata directory inside the project, used when the system one cannot be
 #: written to. It must be the *whole* directory, not just the language file:
@@ -50,7 +49,7 @@ def language_available(code: str) -> bool:
     The directory search stays as a fallback for a tesseract that cannot be
     executed here but whose data is plainly on disk.
     """
-    binary = shutil.which("tesseract")
+    binary = find_tool(["tesseract"], "tesseract")
     if binary:
         try:
             listed = subprocess.run([binary, "--list-langs"], capture_output=True,
@@ -70,9 +69,14 @@ def language_available(code: str) -> bool:
     return any((root / f"{code}.traineddata").exists() for root in roots)
 
 
+# Asked of `extract`, which is what `doctor` and the pipeline both ask. A bare
+# `shutil.which` skipped this whole tier on a machine that had Tesseract under
+# `C:\Program Files` and Ghostscript under a versioned directory — while
+# `doctor` reported both present. A skip condition that disagrees with the
+# health check is how ten tests quietly stopped covering anything.
 HAVE_OCRMYPDF = find_ocrmypdf() is not None
-HAVE_TESSERACT = shutil.which("tesseract") is not None
-HAVE_GHOSTSCRIPT = any(shutil.which(name) for name in ("gs", "gswin64c", "gswin32c"))
+HAVE_TESSERACT = find_tool(["tesseract"], "tesseract") is not None
+HAVE_GHOSTSCRIPT = find_tool(["gs", "gswin64c", "gswin32c"], "ghostscript") is not None
 
 needs_ocr = pytest.mark.skipif(
     not (HAVE_OCRMYPDF and HAVE_TESSERACT and HAVE_GHOSTSCRIPT),
@@ -230,7 +234,7 @@ def test_a_wrong_language_is_visible_rather_than_silent(ocred, tmp_path):
     import ocr_sidecar as ocr
     from read_pdf import read_pdf
 
-    if not shutil.which("tesseract"):
+    if not find_tool(["tesseract"], "tesseract"):
         pytest.skip("tesseract missing")
     if not language_available("fas"):
         pytest.skip("the Persian language pack is not reachable from here")
