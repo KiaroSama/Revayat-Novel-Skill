@@ -1,0 +1,79 @@
+name: Word render tier
+
+# The one path in this project that no hosted runner can execute.
+#
+# `wordrender` prefers Word wherever pywin32 can drive it, because the
+# deliverable is a .docx and Word's pagination is the one the reader sees.
+# GitHub's Windows runners have no Office licence, so `_with_word`, its COM
+# teardown, and the taskkill process-tree kill on the Word branch run only on a
+# machine that has Word — until now, only ever a developer's own, with no record
+# that they ran.
+#
+# This job closes that as far as it can be closed: register a self-hosted
+# Windows runner on a machine with Word and pywin32, label it `word`, and
+# dispatch this workflow. It is **dispatch-only on purpose** — a job wanting a
+# label no registered runner carries would queue forever, so it must never sit
+# on the push path.
+#
+#   Registering one (from the machine that has Word):
+#     Settings -> Actions -> Runners -> New self-hosted runner, then
+#     ./config.cmd --labels self-hosted,windows,word
+#
+# Without such a runner this workflow simply never runs, and the Word path stays
+# covered by a local `pytest tests` on a machine with Word — which is what
+# `doctor` reports under `optional_tools.render`.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: word-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  word:
+    name: render tier (real Word)
+    runs-on: [self-hosted, windows, word]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r skills/revayat-novel/requirements.txt pywin32
+
+      - name: This runner really has Word
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "skills/revayat-novel/scripts")
+          import wordrender
+          chosen = wordrender.backend()
+          print("backend:", chosen or wordrender.unavailable_reason())
+          # The whole point of this workflow. LibreOffice here would mean the
+          # job ran and proved nothing about the path it exists for.
+          assert chosen == "word", (
+              f"expected the Word backend, got {chosen!r} — this runner is "
+              f"labelled `word` but cannot drive Word")
+          PY
+
+      - name: The render tier, on the backend the reader will use
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          set -o pipefail
+          python -m pytest tests/test_renderqa.py tests/test_docqa.py \
+            tests/test_pagerun.py -q --timeout=1800 -rs | tee suite.log
+          if grep -qE '^SKIPPED.*(lays a document out|no converter)' suite.log; then
+            echo "::error::the render tier skipped on the job that exists to run it"
+            grep -E '^SKIPPED' suite.log || true
+            exit 1
+          fi
