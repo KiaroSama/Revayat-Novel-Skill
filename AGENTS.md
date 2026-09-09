@@ -109,3 +109,13 @@ And the flag table in `references/docx-and-ooxml.md` must state the defaults the
 parser actually has: a test reads the table and compares every literal default
 against `build_docx.add_arguments`. Change a default in one place and the build
 says so. Documentation is otherwise the only artefact here that no test reads.
+
+**The Word render path runs on no hosted runner**, because none has an Office
+licence — so `_with_word`, its COM teardown and the Windows process-tree kill
+are covered only by a local `pytest tests` on a machine with Word and pywin32
+(`doctor` reports which backend that is under `optional_tools.render`). To get
+it into CI, register a self-hosted Windows runner on such a machine with the
+label `word` and dispatch `.github/workflows/word-render.yml`; that workflow is
+dispatch-only because a job wanting a label nobody carries queues forever.
+Everything else — LibreOffice on all three platforms, the OCR tier — runs in
+`ci.yml` and `integration.yml`.
