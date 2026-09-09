@@ -21,8 +21,11 @@ better extraction instead of pretending to reimplement it.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
+import os
 import shutil
+import string
 import subprocess
 import sys
 from pathlib import Path
@@ -135,6 +138,68 @@ def find_ocrmypdf() -> list[str] | None:
     except ImportError:
         return None
     return [sys.executable, "-m", "ocrmypdf"]
+
+
+#: Where an ordinary install leaves a tool *without* putting it on PATH.
+#: `<drive>` expands to each fixed drive, because a large optional tool is
+#: routinely installed off the system drive — the MinerU this was measured
+#: against lives on `G:`.
+#:
+#: Same shape and the same measured reason as `wordrender.BUNDLED_LIBREOFFICE`:
+#: `shutil.which` alone reported MinerU and Tesseract missing on a machine that
+#: had both installed, so `doctor` printed install instructions for software the
+#: reader already had and the OCR tier skipped itself. A tool that is present but
+#: not on PATH is the ordinary case on Windows, not the exception.
+#:
+#: It lives here rather than in the dispatcher because `extract` is the stage
+#: that drives these tools and already owns `find_ocrmypdf` — and because the
+#: OCR tests need the same answer `doctor` gives. Two places deciding separately
+#: is how they came to disagree.
+BUNDLED_TOOLS = {
+    "tesseract": (
+        r"<drive>\Program Files\Tesseract-OCR\tesseract.exe",
+        r"<drive>\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    ),
+    "ghostscript": (
+        r"<drive>\Program Files\gs\gs*\bin\gswin64c.exe",
+        r"<drive>\Program Files\gs\gs*\bin\gswin32c.exe",
+    ),
+    "mineru": (
+        r"<drive>\Program Files\MinerU\venv\Scripts\mineru.exe",
+        r"<drive>\MinerU\venv\Scripts\mineru.exe",
+    ),
+}
+
+
+def _drives() -> list[str]:
+    """Every fixed drive root, or nothing off Windows so the patterns no-op."""
+    if os.name != "nt":
+        return []
+    listed = getattr(os, "listdrives", None)          # 3.12+
+    if listed is not None:
+        try:
+            return [drive.rstrip("\\/") for drive in listed()]
+        except OSError:
+            pass
+    return [f"{letter}:" for letter in string.ascii_uppercase
+            if os.path.isdir(f"{letter}:\\")]
+
+
+def find_tool(names: list[str], label: str = "") -> str | None:
+    """The tool's path: on PATH first, then where an installer leaves it."""
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+    for pattern in BUNDLED_TOOLS.get(label, ()):
+        for drive in _drives():
+            # Reversed, so a versioned directory yields the newest first —
+            # `gs10.07.1` before `gs10.02.0`.
+            for match in sorted(glob.glob(pattern.replace("<drive>", drive)),
+                                reverse=True):
+                if os.path.isfile(match):
+                    return match
+    return None
 
 
 def ocr_command(

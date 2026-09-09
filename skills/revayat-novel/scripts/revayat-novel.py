@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import importlib
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -76,12 +75,30 @@ def render_backend() -> str:
     return f"not found — {wordrender.unavailable_reason()}"
 
 
-def find_tool(names: list[str]) -> str | None:
-    for name in names:
-        found = shutil.which(name)
-        if found:
-            return found
-    return None
+def ocrmypdf_launcher() -> str | None:
+    """Asked of the code that runs it, rather than guessed a second time.
+
+    `extract.find_ocrmypdf` already knows the two ways it can be available: on
+    PATH, or as a module in *this* interpreter — which is the normal case when
+    the skill's dependencies live in a virtual environment that is not on PATH,
+    and which a `shutil.which` can never see.
+    """
+    import extract  # noqa: PLC0415  (the scripts directory is on sys.path)
+
+    launcher = extract.find_ocrmypdf()
+    return " ".join(launcher) if launcher else None
+
+
+def find_tool(names: list[str], label: str = "") -> str | None:
+    """Where a tool is, asked of `extract` — the stage that drives them.
+
+    Not a `shutil.which` here: a tool installed anywhere but PATH is the
+    ordinary case on Windows, and doctor answering that question separately
+    from the code that runs the tool is how the two came to disagree.
+    """
+    import extract  # noqa: PLC0415
+
+    return extract.find_tool(names, label)
 
 
 def doctor() -> dict[str, object]:
@@ -103,10 +120,11 @@ def doctor() -> dict[str, object]:
         except ImportError:
             modules[name] = f"MISSING — needed for {why}"
 
-    tools = {
-        label: (find_tool(names) or f"not found — {why}")
-        for label, (names, why) in OPTIONAL_TOOLS.items()
-    }
+    tools = {}
+    for label, (names, why) in OPTIONAL_TOOLS.items():
+        found = (ocrmypdf_launcher() if label == "ocrmypdf"
+                 else find_tool(names, label))
+        tools[label] = found or f"not found — {why}"
     tools["render"] = render_backend()
     missing = [name for name, value in modules.items() if str(value).startswith("MISSING")]
     return {
