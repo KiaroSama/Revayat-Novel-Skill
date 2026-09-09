@@ -62,14 +62,18 @@ sudo apt install ghostscript               # Debian/Ubuntu
 ```
 
 `revayat-novel.py doctor` reports all three, **and none of them has to be on
-PATH.** It looks on `PATH` first and then where an ordinary install leaves a
-tool, so Tesseract under `C:\Program Files\Tesseract-OCR`, Ghostscript under a
-versioned `…\gs\gs10.07.1\bin\gswin64c.exe`, and MinerU under its own venv are
-all found where they are. On Windows it also tries `gswin64c`/`gswin32c`,
-because Ghostscript does not ship a binary called `gs` there.
+PATH.** It looks in three places, in order: `PATH`; the script directory of the
+interpreter running the skill; then where an ordinary install leaves that tool.
+So Tesseract under `C:\Program Files\Tesseract-OCR`, Ghostscript under a
+versioned `…\gs\gs10.07.1\bin\gswin64c.exe`, MinerU under its own venv, and a
+Homebrew, MacPorts or `pip --user` install on macOS or Linux, are all found
+where they are. On Windows it also tries `gswin64c`/`gswin32c`, because
+Ghostscript does not ship a binary called `gs` there.
 
-OCRmyPDF is also found when it is installed in the same interpreter as the
-skill's other dependencies, even if its script directory is not on PATH.
+The interpreter's own script directory matters because a virtual environment is
+routinely not on PATH: a tool installed beside the skill's other dependencies —
+OCRmyPDF being the usual one — is invisible to a PATH search on every platform,
+not only on Windows.
 
 The pipeline asks the same function `doctor` does, so a tool `doctor` reports
 present is one the `ocr-sidecar` stage will find — see `troubleshooting.md`.

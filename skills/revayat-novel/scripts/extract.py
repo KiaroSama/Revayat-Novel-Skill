@@ -141,15 +141,18 @@ def find_ocrmypdf() -> list[str] | None:
 
 
 #: Where an ordinary install leaves a tool *without* putting it on PATH.
-#: `<drive>` expands to each fixed drive, because a large optional tool is
-#: routinely installed off the system drive — the MinerU this was measured
-#: against lives on `G:`.
 #:
 #: Same shape and the same measured reason as `wordrender.BUNDLED_LIBREOFFICE`:
 #: `shutil.which` alone reported MinerU and Tesseract missing on a machine that
 #: had both installed, so `doctor` printed install instructions for software the
-#: reader already had and the OCR tier skipped itself. A tool that is present but
-#: not on PATH is the ordinary case on Windows, not the exception.
+#: reader already had, `ocr_sidecar` refused to run, and the OCR tier skipped
+#: itself. A tool that is present but not on PATH is the ordinary case, not the
+#: exception.
+#:
+#: A pattern containing `<drive>` is Windows-only and is expanded against every
+#: fixed drive — a large optional tool is routinely installed off the system
+#: drive, and the MinerU this was measured against lives on `G:`. Every other
+#: pattern is used as written, with `~` expanded, and is tried on any platform.
 #:
 #: It lives here rather than in the dispatcher because `extract` is the stage
 #: that drives these tools and already owns `find_ocrmypdf` — and because the
@@ -159,20 +162,30 @@ BUNDLED_TOOLS = {
     "tesseract": (
         r"<drive>\Program Files\Tesseract-OCR\tesseract.exe",
         r"<drive>\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        "/opt/homebrew/bin/tesseract",          # Homebrew on Apple silicon
+        "/usr/local/bin/tesseract",             # Homebrew on Intel, /usr/local
+        "/opt/local/bin/tesseract",             # MacPorts
+        "~/.local/bin/tesseract",               # pip --user, pipx
     ),
     "ghostscript": (
         r"<drive>\Program Files\gs\gs*\bin\gswin64c.exe",
         r"<drive>\Program Files\gs\gs*\bin\gswin32c.exe",
+        "/opt/homebrew/bin/gs",
+        "/usr/local/bin/gs",
+        "/opt/local/bin/gs",
     ),
     "mineru": (
         r"<drive>\Program Files\MinerU\venv\Scripts\mineru.exe",
         r"<drive>\MinerU\venv\Scripts\mineru.exe",
+        "/opt/MinerU/venv/bin/mineru",
+        "~/MinerU/venv/bin/mineru",
+        "~/.local/bin/mineru",
     ),
 }
 
 
 def _drives() -> list[str]:
-    """Every fixed drive root, or nothing off Windows so the patterns no-op."""
+    """Every fixed drive root, or nothing off Windows so `<drive>` patterns skip."""
     if os.name != "nt":
         return []
     listed = getattr(os, "listdrives", None)          # 3.12+
@@ -185,20 +198,48 @@ def _drives() -> list[str]:
             if os.path.isdir(f"{letter}:\\")]
 
 
+def _interpreter_scripts() -> Path:
+    """Where pip puts a console script for the interpreter running this skill.
+
+    `Scripts` on Windows, `bin` on POSIX. This is the case `find_ocrmypdf`
+    already handles for its own tool, generalised: a virtual environment's
+    script directory is routinely absent from PATH, so a tool installed
+    *alongside this skill's own dependencies* is invisible to `shutil.which`
+    on every platform — not just Windows.
+    """
+    return Path(sys.executable).resolve().parent
+
+
+def _candidates(pattern: str) -> list[str]:
+    """Every real path a search pattern names, newest-looking first."""
+    if "<drive>" in pattern:
+        expanded = [pattern.replace("<drive>", drive) for drive in _drives()]
+    else:
+        expanded = [os.path.expanduser(pattern)]
+    found: list[str] = []
+    for one in expanded:
+        # Reversed, so a versioned directory yields the newest first —
+        # `gs10.07.1` before `gs10.02.0`.
+        found += sorted(glob.glob(one), reverse=True)
+    return found
+
+
 def find_tool(names: list[str], label: str = "") -> str | None:
-    """The tool's path: on PATH first, then where an installer leaves it."""
+    """The tool's path: PATH, then this interpreter's own scripts, then installs."""
     for name in names:
         found = shutil.which(name)
         if found:
             return found
+    scripts = _interpreter_scripts()
+    for name in names:
+        for suffix in (".exe", ".cmd", "") if os.name == "nt" else ("",):
+            candidate = scripts / f"{name}{suffix}"
+            if candidate.is_file():
+                return str(candidate)
     for pattern in BUNDLED_TOOLS.get(label, ()):
-        for drive in _drives():
-            # Reversed, so a versioned directory yields the newest first —
-            # `gs10.07.1` before `gs10.02.0`.
-            for match in sorted(glob.glob(pattern.replace("<drive>", drive)),
-                                reverse=True):
-                if os.path.isfile(match):
-                    return match
+        for match in _candidates(pattern):
+            if os.path.isfile(match):
+                return match
     return None
 
 
