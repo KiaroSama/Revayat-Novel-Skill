@@ -81,3 +81,6 @@ Thumbs.db
 
 # Advisory implementation plans: working documents, not part of the skill.
 /plans/
+
+# Codebase Memory MCP artifact: regenerated on every index, never committed.
+/.codebase-memory/
