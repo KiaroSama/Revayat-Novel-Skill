@@ -28,6 +28,9 @@ sys.path.insert(0, str(SCRIPTS))
 import bookir as ir  # noqa: E402
 import pagerun  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from tests_support import png_bytes  # noqa: E402
+
 
 def _book(tmp_path: Path) -> Path:
     """One page carrying prose, a note, a figure with a caption and a head."""
@@ -41,8 +44,16 @@ def _book(tmp_path: Path) -> Path:
     figure["target_alt"] = "مستطیلی سرخ."
     figure["width_pt"] = 180
     figure["height_pt"] = 120
-    figure["asset_sha256"] = "a" * 64
     book["blocks"] = [para, figure]
+    # A real file, beside book.json where every stage looks for it. The asset's
+    # identity is read from the bytes on disk — an earlier version hashed a
+    # `asset_sha256` field instead, which nothing in this project writes, so it
+    # contributed the empty string for every figure and a replaced picture
+    # changed nothing. A fixture that sets that invented key by hand agrees with
+    # the bug, which is exactly how it survived.
+    assets = tmp_path / "assets"
+    assets.mkdir(exist_ok=True)
+    (assets / "p0001-img001.png").write_bytes(png_bytes(120, 80))
     note = ir.make_footnote(1, anchor_block=para["id"], text="A source note.")
     note["target"] = "یادداشت منبع."
     book["footnotes"] = [note]
@@ -77,10 +88,8 @@ def _edit(book_path: Path, change) -> str:
      lambda b: b["footnotes"][0].update(target="یادداشتی دیگر.")),
     ("a caption",
      lambda b: b["blocks"][1].update(target_alt="مستطیلی آبی.")),
-    ("the figure's asset",
+    ("the figure's asset name",
      lambda b: b["blocks"][1].update(asset="p0001-img009.png")),
-    ("the figure's bytes under the same name",
-     lambda b: b["blocks"][1].update(asset_sha256="b" * 64)),
     ("a running head",
      lambda b: b["sections"][0]["headers"]["default"]["paragraphs"][0]
      ["pieces"][0].update(target="غرور و تعصب، ویرایش دوم")),
@@ -174,3 +183,70 @@ def test_a_moved_current_digest_is_reported_as_changed(tmp_path):
 
     assert refusal == "translation-changed", detail
     assert pagerun.PAGE_DIGEST_VERSION in detail
+
+
+# --------------------------------------------------------------------------- #
+# The asset's identity comes from the file, not from a field
+# --------------------------------------------------------------------------- #
+
+def test_replacing_the_picture_under_the_same_name_moves_the_digest(tmp_path):
+    """The case a hand-made fixture could not have caught.
+
+    An earlier version hashed `block["asset_sha256"]` — a field nothing in this
+    project writes — so every figure contributed the empty string and swapping the
+    picture changed nothing. The test passed because it set that same invented key
+    itself, which is the shape of a fixture agreeing with the bug. The identity is
+    read from the bytes on disk now, so this is the real question.
+    """
+    book_path = _book(tmp_path)
+    before = pagerun.translation_hash(book_path, 1)
+
+    (tmp_path / "assets" / "p0001-img001.png").write_bytes(png_bytes(200, 140,
+                                                                    (20, 90, 200)))
+
+    assert pagerun.translation_hash(book_path, 1) != before, (
+        "a different picture under the same filename left the page acceptable")
+
+
+def test_deleting_the_picture_moves_the_digest(tmp_path):
+    """A figure that is simply gone must invalidate the page too — the sheet a
+    reviewer approved had a picture on it."""
+    book_path = _book(tmp_path)
+    before = pagerun.translation_hash(book_path, 1)
+
+    (tmp_path / "assets" / "p0001-img001.png").unlink()
+
+    assert pagerun.translation_hash(book_path, 1) != before
+
+
+def test_an_untouched_picture_does_not_move_the_digest(tmp_path):
+    """The negative control: reading the file must be stable, or every page
+    re-opens on every check."""
+    book_path = _book(tmp_path)
+
+    assert pagerun.translation_hash(book_path, 1) == \
+        pagerun.translation_hash(book_path, 1)
+
+
+def test_the_digest_reads_no_field_the_project_never_writes(tmp_path):
+    """A guard on the class of defect, not the instance. Every key the digest
+    consults has to be one the real constructors or readers actually produce —
+    hashing a misspelled field silently hashes nothing, and the feature quietly
+    does not exist."""
+    import inspect
+    import re
+
+    # Comments and the docstring are stripped first: this function's comments
+    # *name* the field that caused the defect, in order to explain it, and a guard
+    # that cannot tell an explanation from a lookup would forbid writing the
+    # explanation down.
+    source = inspect.getsource(pagerun.translation_hash)
+    source = source.replace(inspect.getdoc(pagerun.translation_hash) or "", "")
+    code = "\n".join(re.sub(r"#.*$", "", line) for line in source.splitlines())
+
+    invented = [name for name in ("asset_sha256", "translation", "drop",
+                                  "target_text", "dropped")
+                if f'"{name}"' in code or f"'{name}'" in code]
+
+    assert not invented, (
+        f"the digest reads field(s) this project does not write: {invented}")
