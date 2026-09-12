@@ -553,11 +553,19 @@ def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]
                 continue
             accepted = [canonical(entry)]
             accepted += [a for a in entry.get("alias_targets", []) if a]
-            if any(form and form in target_plain for form in accepted):
-                continue
-            # An untranslated original spelling is acceptable inside the
-            # first-mention parenthetical, but not on its own.
-            if entry["source"] in target_plain and canonical(entry) in target_plain:
+            # Boundary-aware, never substring. «علی» sits inside «علیرضا», a
+            # different person, and inside «علی‌اکبر», a different name again —
+            # U+200C glues word parts, so a form flanked by one is a fragment of
+            # a longer word, not an occurrence. A substring match there is the
+            # worst failure this gate has: it certifies the wrong man as the
+            # right one, on the very check that exists to catch a drifted name.
+            #
+            # An approved alias target still passes, because it is matched the
+            # same way and on its own. So does the first-mention parenthetical
+            # «علی (Ali)» — the canonical form stands alone in front of it, which
+            # is why there is no separate rule for the untranslated spelling.
+            if any(form and standalone_spans(target_plain, form)
+                   for form in accepted):
                 continue
             violations.append({
                 "block": block["id"],
