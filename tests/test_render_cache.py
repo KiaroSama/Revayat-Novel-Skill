@@ -117,8 +117,21 @@ def _render(tmp_path: Path, docx: Path) -> Path:
     return renderqa.render_docx(docx, tmp_path / "renders")
 
 
-def test_the_same_document_is_laid_out_once(tmp_path, stubbed):
-    """The whole point: asking twice about an unchanged document costs one render."""
+@pytest.mark.parametrize("backend", ["word", "libreoffice", ""])
+def test_the_same_document_is_laid_out_once(tmp_path, stubbed, monkeypatch,
+                                            backend):
+    """The whole point: asking twice about an unchanged document costs one render.
+
+    The backend name is pinned rather than inherited from the machine, because
+    `wordrender.backend()` returns `""` where neither Word nor LibreOffice is
+    installed — every hosted CI runner — and the first version of this cache built
+    its key as `f"{backend}\\n{hash}"`. With an empty backend that key began with
+    the newline `_cached_key` strips, so the stored key never equalled the computed
+    one and nothing was ever reused. It passed here, on a machine with Word, and
+    failed on all nine CI platforms at once. Pinning the value is what makes that
+    case reachable without uninstalling Word.
+    """
+    monkeypatch.setattr(wordrender, "backend", lambda: backend)
     docx = _built(tmp_path)
 
     first = _render(tmp_path, docx)
@@ -145,6 +158,24 @@ def test_a_changed_document_is_laid_out_again(tmp_path, stubbed):
     _render(tmp_path, docx)
 
     assert len(stubbed) == 2, "a rebuilt document reused the old render"
+
+
+def test_a_render_made_by_another_backend_is_not_reused(tmp_path, stubbed,
+                                                        monkeypatch):
+    """`render_docx` documents that the key covers the renderer as well as the
+    document, and it has to: Word and LibreOffice do not paginate identically, so
+    handing back the other one's PDF answers a layout question with the wrong
+    layout. Nothing proved the claim until this test."""
+    monkeypatch.setattr(wordrender, "backend", lambda: "word")
+    docx = _built(tmp_path)
+    _render(tmp_path, docx)
+    assert len(stubbed) == 1
+
+    monkeypatch.setattr(wordrender, "backend", lambda: "libreoffice")
+    _render(tmp_path, docx)
+
+    assert len(stubbed) == 2, (
+        "the other backend's render was reused; the two do not paginate alike")
 
 
 def test_a_second_document_does_not_borrow_the_first_render(tmp_path, stubbed):

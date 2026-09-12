@@ -449,12 +449,24 @@ def _compose_comparison(work_dir: Path, page: int, renders: dict[str, Any]) -> N
 
 
 def _render_key(docx: Path, backend: str) -> str:
-    """What a cached render was made from: this document, by this renderer."""
-    return f"{backend}\n{ir.sha256_file(docx)}"
+    """What a cached render was made from: this document, by this renderer.
+
+    One line, and the separator is a colon rather than a newline on purpose:
+    `backend()` is `""` where neither Word nor LibreOffice is installed, and a
+    newline there would put the key's first character inside the whitespace
+    `_cached_key` strips — so the written key would never equal the computed one
+    and nothing would ever be reused. That is not hypothetical: it passed on a
+    machine with Word and failed on all nine CI platforms at once.
+    """
+    return f"{backend}:{ir.sha256_file(docx)}"
 
 
 def _cached_key(stamp: Path) -> str:
-    """The key beside an existing PDF, or ``""`` when there is none to trust."""
+    """The key beside an existing PDF, or ``""`` when there is none to trust.
+
+    `strip()` is for the trailing newline this writes, nothing more; the key
+    itself must stay free of whitespace for that to be safe.
+    """
     try:
         return stamp.read_text(encoding="utf-8").strip()
     except (OSError, ValueError):
