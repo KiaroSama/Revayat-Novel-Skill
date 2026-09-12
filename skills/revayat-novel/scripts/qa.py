@@ -239,6 +239,55 @@ def _check_duplicate_targets(book: dict[str, Any], report: Report) -> None:
 _PARENTHETICAL = re.compile(r"\([^()]{2,}\)")
 
 
+def _check_per_chapter(book: dict[str, Any], entry: dict[str, Any],
+                       introduction: str, name: str,
+                       targets: list[tuple[str, str]], report: Report) -> None:
+    """Under ``first_per_chapter``, every chapter that names her introduces her.
+
+    Chapter ownership comes from :func:`glossary.chapters_by_block`, the same
+    answer the enforcement pass uses. So does what counts as naming her: a
+    mention inside a verbatim span or a URL is not somewhere an introduction can
+    be placed, so it is not somewhere one is demanded.
+    """
+    chapters = gl.chapters_by_block(book)
+    later_form = gl.canonical(entry)
+    owner = entry.get("first_block_id") or ""
+    owner_chapter = chapters.get(owner)
+
+    placements: dict[str, list[tuple[str, int]]] = {}
+    names_her: dict[str, bool] = {}
+    for block_id, target in targets:
+        chapter = chapters.get(block_id, "front")
+        names_her.setdefault(chapter, False)
+        count = target.count(introduction)
+        if count:
+            placements.setdefault(chapter, []).append((block_id, count))
+        if not names_her[chapter] and gl.mentioned_in_prose(target, later_form):
+            names_her[chapter] = True
+
+    for chapter, mentioned in names_her.items():
+        here = placements.get(chapter, [])
+        total = sum(count for _, count in here)
+        if total == 0:
+            if mentioned:
+                report.add(ERROR, "first-mention-missing", name,
+                           f"{introduction} never appears in chapter {chapter}, "
+                           f"which names her; policy is 'first_per_chapter', so "
+                           f"re-run merge with --glossary")
+            continue
+        if total > 1:
+            where = ", ".join(f"{block_id}x{count}" if count > 1 else block_id
+                              for block_id, count in here[:4])
+            report.add(ERROR, "first-mention-repeated", name,
+                       f"{introduction} appears {total} times in chapter "
+                       f"{chapter} ({where}); it belongs once per chapter")
+            continue
+        if chapter == owner_chapter and here[0][0] != owner:
+            report.add(ERROR, "first-mention-misplaced", name,
+                       f"{introduction} is in {here[0][0]} but the first mention "
+                       f"of this name is in {owner}")
+
+
 def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
                           report: Report) -> None:
     """The original spelling belongs in exactly one place.
@@ -248,8 +297,20 @@ def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
     first mention" and «الیزابت بنت (Elizabeth Bennet)» is repeated through the
     whole book. The worksheet already names the chunk that owns the
     introduction; this is the gate that proves it was obeyed.
+
+    "Exactly one place" is what the policy says it is: once in the book, or once
+    in every chapter that names her. The gate has to read the policy the same way
+    the enforcement pass does, because a gate that disagrees with the pass that
+    produced the book is not a gate.
     """
-    policy = (glossary.get("policy") or {}).get("original_parenthetical", "first_mention")
+    try:
+        policy = gl.parenthetical_policy(glossary.get("policy") or {})
+    except ValueError as error:
+        # Reported, not raised: this is a gate, and a glossary nobody can
+        # interpret is exactly the kind of thing it exists to say out loud.
+        report.add(ERROR, "glossary-policy", "glossary", str(error))
+        return
+
     targets = [(block["id"], block.get("target") or "")
                for block in ir.iter_text_blocks(book)]
 
@@ -278,6 +339,10 @@ def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
                 report.add(ERROR, "first-mention-forbidden", name,
                            f"policy is 'never' but {introduction} appears "
                            f"{total} time(s)")
+            continue
+
+        if policy == "first_per_chapter":
+            _check_per_chapter(book, entry, introduction, name, targets, report)
             continue
 
         if total == 0:
