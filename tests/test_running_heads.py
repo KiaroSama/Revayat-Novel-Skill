@@ -244,7 +244,8 @@ def test_the_head_goes_out_as_a_worksheet_unit_and_merge_writes_it_back(
 
     for entry in manifest["chunks"]:
         (chunks / entry["output"]).write_text(
-            "\n".join(f"@@ {unit_id} x\nترجمهٔ {unit_id}\n"
+            "\n".join(f"@@ {unit_id} {entry['unit_kinds'][unit_id]}\n"
+                      f"ترجمهٔ {unit_id}\n"
                       for unit_id in entry["unit_ids"]),
             encoding="utf-8", newline="",
         )

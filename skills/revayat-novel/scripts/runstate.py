@@ -222,24 +222,48 @@ class RunState:
                       json.dumps(self.data, ensure_ascii=False, indent=1) + "\n")
 
 
+#: Which definition of :func:`source_digest` produced a recorded value.
+#:
+#: Stamped into the value itself so a record written by an older definition is
+#: recognisable as *incomparable* rather than as a book that changed. Without
+#: that distinction, correcting the formula would refuse every working directory
+#: holding real translations — which is the failure this whole module exists to
+#: prevent, arriving from the other side.
+DIGEST_VERSION = "2"
+
+
 def source_digest(book: dict[str, Any]) -> str:
     """Identity of everything a worksheet is cut from.
 
-    The *source* side only. Hashing ``book.json`` itself would be wrong in the
-    one direction that matters: merge writes the translations back into that
-    same file, so every successful merge would report the worksheets it was
-    built from as stale — and the next ``chunk build`` would refuse over a book
-    whose source text never moved. A re-extraction changes this digest; a
-    translation does not.
+    The *source* side only, and that cuts both ways.
+
+    Hashing ``book.json`` itself would be wrong in the one direction that
+    matters: merge writes the translations back into that same file, so every
+    successful merge would report the worksheets it was built from as stale, and
+    the next ``chunk build`` would refuse over a book whose source text never
+    moved. So a re-extraction changes this digest and a translation does not.
+
+    Two things follow, and both were wrong before:
+
+    * **A translator's footnote is not source.** Merge writes it, into this same
+      file, so counting it made a successful merge move the digest — the exact
+      false refusal above, reached by a different route.
+    * **A running head is source.** It is a unit a worksheet is cut from and a
+      translator is asked about, so editing one is a real change the staleness
+      check has to be able to see. It was invisible.
     """
     parts = [
         f"{block['id']}\x00{block['type']}\x00"
         f"{block.get('text') or ''}\x00{block.get('alt') or ''}"
         for block in book.get("blocks", [])
     ]
+    parts += [f"{unit_id}\x00{kind}\x00{piece.get('text') or ''}"
+              for unit_id, kind, piece, _ in ir.iter_running_pieces(book)]
     parts += [f"{note['id']}\x00{note.get('text') or ''}"
-              for note in book.get("footnotes", [])]
-    return ir.sha256_bytes("\n".join(parts).encode("utf-8"))
+              for note in book.get("footnotes", [])
+              if (note.get("origin") or "source") == "source"]
+    return f"{DIGEST_VERSION}:" + ir.sha256_bytes(
+        "\n".join(parts).encode("utf-8"))
 
 
 def _read(path: Path) -> dict[str, Any]:
