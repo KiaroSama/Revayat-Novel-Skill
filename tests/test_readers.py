@@ -312,24 +312,82 @@ def test_open_image_opens_an_ordinary_image(tmp_path):
     assert image.size == (1200, 900)
 
 
-def test_a_pdf_declaring_too_many_pages_is_refused_before_it_is_read(tmp_path):
-    """Millions of empty pages fit in a few megabytes, and the page route writes
-    one file per page. A book does not have twenty thousand pages."""
+def test_the_page_ceiling_refuses_an_absurd_count_and_clears_a_real_book():
+    """Pure arithmetic, no file: the longest real books run to about 2,000 pages."""
     import bookir as ir
+
+    assert ir.check_page_count(2000) == 2000
+    with pytest.raises(ir.TooManyPages) as refused:
+        ir.check_page_count(ir.PDF_MAX_PAGES + 1)
+    # The message has to name the count and the ceiling, or a reader cannot tell
+    # a hostile file from a long book.
+    assert str(ir.PDF_MAX_PAGES + 1) in str(refused.value)
+    assert str(ir.PDF_MAX_PAGES) in str(refused.value)
+
+
+def test_a_pdf_declaring_too_many_pages_is_refused_before_it_is_read(
+        tmp_path, monkeypatch):
+    """Millions of empty pages fit in a few megabytes, and the page route writes
+    one file per page — so the count is checked before the document is read.
+
+    The ceiling is lowered for the test rather than the fixture raised to meet
+    it. Building 20,001 pages to prove a `>` cost 131.66s, measured — the
+    slowest test in the suite by a factor of two, and slow for a reason that has
+    nothing to do with what it proves. A 6-page PDF against a 5-page ceiling
+    exercises exactly the same branch: `read_pdf` consults
+    `ir.check_page_count` before it reads anything.
+    """
+    import io
+
+    import bookir as ir
+    from PIL import Image
     from read_pdf import read_pdf
 
     pymupdf = pytest.importorskip("pymupdf")
-    assert ir.check_page_count(2000) == 2000
-    with pytest.raises(ir.TooManyPages):
-        ir.check_page_count(ir.PDF_MAX_PAGES + 1)
+    monkeypatch.setattr(ir, "PDF_MAX_PAGES", 5)
+
+    # Every page carries an image, and that is the load-bearing part of the
+    # fixture rather than decoration: a completed read writes one file per
+    # distinct image into the asset directory, so the emptiness assertion below
+    # can tell "refused before reading" from "read, then refused". With blank
+    # pages there is nothing to extract, the directory is empty either way, and
+    # a guard moved to after the read would pass this test — measured.
+    buffer = io.BytesIO()
+    Image.new("RGB", (120, 90), (180, 40, 40)).save(buffer, format="PNG")
 
     doc = pymupdf.open()
-    for _ in range(ir.PDF_MAX_PAGES + 1):
-        doc.new_page(width=200, height=300)
+    for _ in range(6):
+        page = doc.new_page(width=200, height=300)
+        page.insert_image(pymupdf.Rect(20, 60, 140, 150), stream=buffer.getvalue())
     path = tmp_path / "endless.pdf"
     doc.save(str(path))
     doc.close()
 
     with pytest.raises(ir.TooManyPages) as refused:
         read_pdf(str(path), tmp_path / "assets")
-    assert str(ir.PDF_MAX_PAGES + 1) in str(refused.value)
+    assert "6" in str(refused.value)
+    # Refused *before* reading: nothing was extracted on the way to the raise.
+    assert not (tmp_path / "assets").exists() or not any(
+        (tmp_path / "assets").iterdir())
+
+
+def test_a_pdf_just_under_the_ceiling_is_read_normally(tmp_path, monkeypatch):
+    """The negative half. A guard that refuses everything passes every test of
+    its sensitivity and is still wrong."""
+    import bookir as ir
+    from read_pdf import read_pdf
+
+    pymupdf = pytest.importorskip("pymupdf")
+    monkeypatch.setattr(ir, "PDF_MAX_PAGES", 5)
+
+    doc = pymupdf.open()
+    for number in range(5):
+        page = doc.new_page(width=200, height=300)
+        page.insert_text((20, 40), f"Page {number} of a short book.",
+                         fontsize=11, fontname="helv")
+    path = tmp_path / "short.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    book = read_pdf(str(path), tmp_path / "assets")
+    assert book["source"]["pages"] == 5
