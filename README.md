@@ -194,6 +194,10 @@ Two more limits worth knowing up front:
 - In a scanned book an illustration is usually part of the page raster rather
   than a separate image object, so there is nothing to extract. MinerU's layout
   model finds those; `--from-mineru` imports its output.
+- `doc-qa check --keep-pdf` will hand you a PDF of the finished book, with the
+  Persian selectable and the font embedded. Its contents page is text rather
+  than a clickable PDF outline, and its pagination is the rendering program's —
+  the `.docx` remains the editable deliverable.
 
 ## Documentation
 

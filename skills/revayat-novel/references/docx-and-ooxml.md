@@ -166,6 +166,20 @@ wants, then reuse it.
 The builder still applies RTL properties and creates any missing footnote
 styles, so a plain Latin template is a valid starting point.
 
+## A PDF of the finished book
+
+`doc-qa check --keep-pdf` keeps the rendering it checked and names it in the
+report's `pdf` key. Measured on a real Word export: **4 pages, 50.4 KB, `Vazir`
+and `Vazir-Bold` embedded, the Persian selectable and searchable (2984
+characters read back), the contents page present as text — and
+`doc.get_toc()` returning 0 entries**, because a Word TOC field becomes text in
+the PDF rather than a PDF outline. A reader gets a contents page they can read
+and not one they can click.
+
+Its pagination is the rendering program's, so `laid_out_by` travels with it: Word
+and LibreOffice do not paginate identically, and two readers comparing page
+numbers deserve to know why they disagree.
+
 ## The limitation worth stating plainly
 
 Word is a reflowable format. A Persian paragraph is rarely the same length as

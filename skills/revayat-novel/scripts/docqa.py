@@ -347,6 +347,7 @@ def check_assembled_page(target: dict[str, Any], setup: dict[str, Any],
 
 def check_document(work_dir: Path, book_path: Path, docx: Path, *,
                    dpi: int = pagecheck.DEFAULT_DPI,
+                   keep_pdf: bool = False,
                    timeout: float = wordrender.DEFAULT_TIMEOUT) -> dict[str, Any]:
     """Render the finished document, check every page and the whole of it."""
     work_dir, book_path, docx = Path(work_dir), Path(book_path), Path(docx)
@@ -430,6 +431,12 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
             "pages": total,
             "findings": findings[:60],
             "render": str(rendered),
+            # The artefact whose every page was just measured, named only when
+            # asked. It is already on disk — the render is written here and
+            # nothing removes it — so this names it rather than copying it. Its
+            # pagination is this backend's (`laid_out_by` says which) and the
+            # .docx stays the editable deliverable.
+            "pdf": str(rendered) if keep_pdf else "",
             "renders": sheets,
             "per_page": pages,
             "counts": global_summary.get("counts", {}),
@@ -451,6 +458,10 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
         "pages": total,
         "findings": findings[:60],
         "render": str(rendered),
+        # The artefact whose every page was measured and whose images the
+        # reviewer approved — not a fresh render made later, which can lay out
+        # differently under another backend or a font fallback.
+        "pdf": str(rendered) if keep_pdf else "",
         "renders": sheets,
         "per_page": pages,
         "counts": global_summary.get("counts", {}),
@@ -500,6 +511,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     p_check.add_argument("--work", required=True, help="the working directory")
     p_check.add_argument("--docx", required=True, help="the assembled document")
     p_check.add_argument("--dpi", type=int, default=pagecheck.DEFAULT_DPI)
+    p_check.add_argument(
+        "--keep-pdf", action="store_true",
+        help="name the rendered PDF in the report and keep it; off by default, "
+             "because the .docx is the deliverable")
 
     p_review = sub.add_parser(
         "review", help="file what a reviewer saw in the finished book")
@@ -534,7 +549,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if filed["ok"] else 2
 
     written = check_document(Path(args.work), Path(args.book), Path(args.docx),
-                             dpi=args.dpi)
+                             dpi=args.dpi, keep_pdf=args.keep_pdf)
     print(json.dumps(written, ensure_ascii=False, indent=1))
     return 0 if written["ok"] else 1
 
