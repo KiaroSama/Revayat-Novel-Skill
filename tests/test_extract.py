@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -121,6 +123,44 @@ def test_launcher_and_language_reach_the_command(tmp_path):
     assert command[:3] == ["python", "-m", "ocrmypdf"]
     assert command[command.index("--language") + 1] == "fas+eng"
     assert command[-2:] == [str(tmp_path / "i"), str(tmp_path / "o")]
+
+
+def test_a_timed_out_ocr_kills_the_tree_not_just_the_launcher(monkeypatch, tmp_path):
+    """ocrmypdf is a launcher; Tesseract is the process that was working.
+
+    `subprocess.run(timeout=)` signals the direct child only, so the real
+    worker survived with nothing left to reap it — the same defect plan 004
+    fixed on the renderer, on the stage that runs a subprocess per page.
+    """
+    import extract
+
+    killed = []
+
+    def record_and_kill(process):
+        # It has to kill as well as record: a stub that only records leaves the
+        # sleeper below running for its full 30s, and the guarded runner fails
+        # the whole run for a leaked process.
+        killed.append(process)
+        process.kill()
+
+    monkeypatch.setattr(ir, "kill_tree", record_and_kill)
+    monkeypatch.setattr(
+        extract, "find_ocrmypdf",
+        lambda: [sys.executable, "-c", "import time; time.sleep(30)"])
+
+    started = time.monotonic()
+    with pytest.raises(ExtractError) as caught:
+        run_ocr(tmp_path / "in.pdf", tmp_path / "out.pdf",
+                kind="scanned", timeout=1)
+    elapsed = time.monotonic() - started
+
+    assert "exceeded" in str(caught.value)
+    assert killed, "the tree was never killed; only the direct child was signalled"
+    # When the thing under test is a *bound*, assert the bound. `killed` says
+    # the code noticed; the clock says it acted.
+    assert elapsed < 10.0, (
+        f"bounded at 1s and took {elapsed:.1f}s: it waited for the child "
+        f"instead of returning when the bound expired")
 
 
 def test_the_ocr_subprocess_is_given_the_tools_doctor_found(monkeypatch, tmp_path):

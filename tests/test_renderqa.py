@@ -872,7 +872,13 @@ def test_a_timed_out_render_kills_the_whole_tree_not_just_the_launcher(
         killed.append(process)
         process.kill()
 
-    monkeypatch.setattr(wordrender, "_kill_tree", record_and_kill)
+    # Patched on `bookir`, which is where the call happens. `run_bounded` moved
+    # there so the OCR stage could share it, and it calls the bare name
+    # `kill_tree` — resolved in *its* globals. `wordrender._kill_tree` is an
+    # alias bound at import, so rebinding it reaches nothing. Every assertion
+    # below is unchanged; only the seam moved. This test failing loudly on that
+    # move, rather than passing vacuously, is what caught it.
+    monkeypatch.setattr(ir, "kill_tree", record_and_kill)
 
     # A command that outlives its timeout without doing anything else.
     slow = [sys.executable, "-c", "import time; time.sleep(30)"]

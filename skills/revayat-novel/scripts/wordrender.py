@@ -20,13 +20,21 @@ tree and reports a named failure instead of waiting.
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+
+# Bounding a launcher and killing what it started moved to `bookir`: the OCR
+# stage needs exactly the same thing, and neither module should depend on the
+# other — this one is a render backend, that one is an extraction stage. Kept
+# under the old private names because they are this module's published surface
+# for its tests, which monkeypatch `wordrender._kill_tree` to prove the kill.
+from bookir import (  # noqa: F401
+    kill_tree as _kill_tree,
+    run_bounded as _run_bounded,
+)
 
 #: Word's own "save as PDF" format code.
 WORD_PDF_FORMAT = 17
@@ -101,58 +109,6 @@ def unavailable_reason() -> str:
     return ("LibreOffice is not installed, and Word cannot be driven off "
             "Windows (Debian: apt install libreoffice-writer · "
             "macOS: brew install --cask libreoffice)")
-
-
-def _run_bounded(command: list[str], timeout: float) -> subprocess.CompletedProcess:
-    """Run ``command`` and, on timeout, kill it *and everything it started*.
-
-    `subprocess.run(timeout=...)` kills only the direct child. Both renderers
-    are launchers: the Word path's child is a Python worker whose grandchild is
-    WINWORD.EXE, started through COM; `soffice` forks `soffice.bin` and returns.
-    So the documented promise above - "the parent kills the process tree" - was
-    not kept by the call that made it, and a timeout left a hidden renderer
-    running with its COM teardown never reached. A book is hundreds of renders,
-    so one leak per timeout is how a machine quietly runs out of memory.
-    """
-    popen_extra: dict[str, Any] = {}
-    if os.name == "posix":
-        # Its own process group, so one signal reaches the launcher and the
-        # process it forked.
-        popen_extra["start_new_session"] = True
-    else:
-        popen_extra["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-
-    process = subprocess.Popen(command, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, **popen_extra)
-    try:
-        out, err = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _kill_tree(process)
-        # Drain, so the pipes are closed and the handles released before the
-        # caller reports; the process is already dead so this cannot block.
-        try:
-            process.communicate(timeout=10)
-        except subprocess.TimeoutExpired:
-            pass
-        raise
-    return subprocess.CompletedProcess(command, process.returncode, out, err)
-
-
-def _kill_tree(process: subprocess.Popen) -> None:
-    """Kill ``process`` and its descendants, on either platform."""
-    if os.name == "nt":
-        # Windows has no process groups that survive a launcher, so ask the OS
-        # to walk the tree. /T is the whole point; /F because a wedged renderer
-        # is not going to honour a polite request.
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                       capture_output=True, check=False)
-        process.kill()
-        return
-    import signal  # noqa: PLC0415
-    try:
-        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-    except (ProcessLookupError, PermissionError, OSError):
-        process.kill()
 
 
 # --------------------------------------------------------------------------- #
