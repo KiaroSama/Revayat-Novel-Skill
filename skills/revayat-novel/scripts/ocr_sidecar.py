@@ -55,7 +55,7 @@ class SidecarError(RuntimeError):
 
 
 def find_tesseract() -> str | None:
-    """Tesseract's path — on PATH, or where its installer left it.
+    r"""Tesseract's path — on PATH, or where its installer left it.
 
     `shutil.which` alone refused to run this stage on a machine with Tesseract
     under `C:\Program Files\Tesseract-OCR`, while `doctor` reported it present

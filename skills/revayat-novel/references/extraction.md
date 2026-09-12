@@ -75,6 +75,11 @@ routinely not on PATH: a tool installed beside the skill's other dependencies �
 OCRmyPDF being the usual one — is invisible to a PATH search on every platform,
 not only on Windows.
 
+OCRmyPDF itself looks in fewer places than this does — on Windows the system
+drive and the registry, and off Windows only `PATH` — so the directories found
+here are prepended to the `PATH` of the process it runs in. `ocr.tool_path` in
+the extract report says which ones they were.
+
 The pipeline asks the same function `doctor` does, so a tool `doctor` reports
 present is one the `ocr-sidecar` stage will find — see `troubleshooting.md`.
 
