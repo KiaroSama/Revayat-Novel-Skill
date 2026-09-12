@@ -91,6 +91,20 @@ copy is written to `$WORK/cleaned.pdf`, with a per-page record in `clean_scan`
 of what was removed and what was left alone. Pass `--clean-scan off` to skip it
 entirely, or `--clean-scan force` when a stamp survived.
 
+When a stamp needs its own attention, the `clean-scan` stage does the same work
+on its own, outside `extract`:
+
+```bash
+$PY $SKILL_DIR/scripts/revayat-novel.py clean-scan survey --pdf "<input file>"
+```
+
+`survey` reports per page what cleaning would do and writes nothing — start
+there, it is the question nothing else answers. `clean-scan run --pdf … --out
+$WORK/cleaned.pdf` writes the cleaned copy that `extract` then reuses, and
+`clean-scan preview --pdf … --page N --out <dir>` writes before/after PNGs of
+one page, so a lossy removal is judged by looking at it. Read
+`references/watermarks.md` before reaching for `--ghost-threshold`.
+
 **If the book was scanned, do these two extra passes now.**
 
 *Recognition confidence* — without it a misread word is indistinguishable from
@@ -660,6 +674,7 @@ Read these only when the step points at them:
 - `references/translation-policy.md` — what to give the translating sub-agent
 - `references/persian-typography.md` — RTL, ZWNJ, punctuation, mixed scripts
 - `references/extraction.md` — OCR routing, watermarks, difficult books
+- `references/watermarks.md` — the `clean-scan` stage, its verdicts and limits
 - `references/glossary-and-voice.md` — naming policy, aliases, character voice
 - `references/docx-and-ooxml.md` — every build option and what it produces
 - `references/troubleshooting.md` — the failures you are most likely to hit
