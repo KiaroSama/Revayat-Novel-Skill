@@ -126,3 +126,97 @@ def test_every_question_asks_for_something_geometry_cannot_answer(tmp_path):
     for name, asked in review.QUESTIONS.items():
         assert asked.endswith("?") or "?" in asked, f"{name} is not a question"
         assert len(asked) > 60, f"{name} is too terse to answer honestly"
+
+
+# --------------------------------------------------------------------------- #
+# The comparison sheet: a convenience, never the evidence
+# --------------------------------------------------------------------------- #
+
+def test_a_landscape_source_sits_beside_a_portrait_target(tmp_path):
+    """The case the sheet exists for: two shapes, one common height.
+
+    Measured (spike 010): a 612x396 source beside a 396x612 target comes out
+    2494x1138 and 26 KB, both legible, neither distorted.
+    """
+    pytest.importorskip("PIL.Image")
+    from PIL import Image
+
+    source = tmp_path / "source.png"
+    target = tmp_path / "target.png"
+    Image.new("RGB", (1224, 792), (250, 250, 250)).save(source)   # landscape
+    Image.new("RGB", (792, 1224), (250, 250, 250)).save(target)   # portrait
+
+    made = review.compare([("source", source), ("target 1/1", target)],
+                          tmp_path / "compare.png", height=400)
+    assert made["ok"], made
+    with Image.open(tmp_path / "compare.png") as composed:
+        assert composed.height == (400 + review.COMPARE_LABEL_BAND
+                                   + 2 * review.COMPARE_PAD)
+        assert composed.width > 400, "the panels were not placed side by side"
+
+
+def test_too_many_panels_sends_the_reviewer_to_the_files_instead(tmp_path):
+    """Six panels is a strip nobody can read. The sheet says so rather than
+    silently not existing."""
+    pytest.importorskip("PIL.Image")
+    from PIL import Image
+
+    panels = []
+    for index in range(6):
+        path = tmp_path / f"p{index}.png"
+        Image.new("RGB", (400, 600), (250, 250, 250)).save(path)
+        panels.append((f"sheet {index}", path))
+
+    made = review.compare(panels, tmp_path / "compare.png")
+    assert made["ok"] is False
+    assert made["panels"] == 6
+    assert "ceiling" in made["detail"]
+    assert not (tmp_path / "compare.png").exists()
+
+
+def test_a_missing_panel_is_drawn_as_absent_not_skipped(tmp_path):
+    """`evidence_digest` counts a missing file as ABSENT; the sheet agrees."""
+    pytest.importorskip("PIL.Image")
+    from PIL import Image
+
+    present = tmp_path / "present.png"
+    Image.new("RGB", (400, 600), (250, 250, 250)).save(present)
+
+    made = review.compare([("source", tmp_path / "gone.png"),
+                           ("target 1/1", present)],
+                          tmp_path / "compare.png", height=200)
+    assert made["ok"], made
+    assert made["panels"] == 2, "the missing panel was skipped instead of drawn"
+
+
+def test_composing_a_sheet_cannot_stop_a_page_being_reported(tmp_path, monkeypatch):
+    """Producing evidence must never be what stops a page being reported on."""
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(review, "_panels", boom)
+    made = review.compare([("source", tmp_path / "a.png")], tmp_path / "c.png")
+    assert made["ok"] is False
+    assert "boom" in made["detail"]
+
+
+def test_the_sheet_is_not_part_of_the_review_identity(tmp_path):
+    """The digest stays over the panels.
+
+    The composition depends on Pillow's resize filter and its default bitmap
+    font, neither pinned across versions, so a digest over the sheet would stale
+    every standing review on a Pillow upgrade.
+    """
+    pytest.importorskip("PIL.Image")
+    from PIL import Image
+
+    source = tmp_path / "source.png"
+    target = tmp_path / "target.png"
+    for path in (source, target):
+        Image.new("RGB", (400, 600), (250, 250, 250)).save(path)
+
+    before = review.evidence_digest([source, target])
+    review.compare([("source", source), ("target 1/1", target)],
+                   tmp_path / "compare.png", height=200)
+    after = review.evidence_digest([source, target])
+    assert before == after, "composing a sheet changed the review identity"
