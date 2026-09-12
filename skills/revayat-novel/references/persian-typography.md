@@ -58,10 +58,19 @@ and `می رود` are different; so are `کتاب‌ها` and `کتاب ها`.
 Because it carries meaning, the fixer only inserts it for patterns that are
 unambiguous:
 
-- verb prefixes: `می` and `نمی` followed by a Persian word
+- verb prefixes: `می` and `نمی`, and only when the following word can be a
+  finite verb. `می` is also the noun *wine*, so `می ناب` (fine wine) and
+  `می رود` (goes) are the same shape; every finite `می`-form ends in a personal
+  ending, so the test is the last letter of the word after it.
 - plural and possessive suffixes: `ها`, `های`, `هایی`, `هایم`, `هایت`, `هایش`,
   `هایمان`, `هایتان`, `هایشان`
-- comparatives: `تر`, `تری`, `ترین`
+- comparatives: `تری` and `ترین` only
+
+**Bare `تر` is reported, not joined.** On its own it is also the adjective
+*wet*, so `موی تر` (wet hair) and `بزرگ تر` (bigger) differ only in the part of
+speech of the word before them, which this pass cannot know. `falint lint`
+reports it as `zwnj-comparative` and a reader decides; joining it blindly turned
+`دست تر را خشک کرد` into a comparative that says nothing.
 
 It never removes an existing ZWNJ, and it never guesses at `بی`, `ای`, `تان`,
 `شان` or `مان`, where a blind rule would corrupt real words. Anything beyond

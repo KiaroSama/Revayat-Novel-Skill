@@ -81,6 +81,7 @@ Read the JSON it prints and follow the table:
 | --- | --- |
 | `"kind": "digital"` | nothing; no OCR was needed |
 | `"kind": "scanned"` or `"mixed"` | OCR ran automatically; check `ocr.probe_after.text_share` is above `0.7` |
+| `probe.scan_candidates` is not empty | those page numbers are prose that exists only as pixels; they are why the book is `mixed` even when almost every page has text |
 | an error naming OCRmyPDF | install it as the message says, then re-run this step |
 | `clean_scan.cleaned` above 0 | a colour watermark was removed from that many pages |
 | `ocr.warning` is not null | read it; the file was still usable, so continue |
@@ -305,6 +306,15 @@ nobody ever set beside the page it came from. `--source-pdf` will not override
 a page that has a manifest: the artefact `pages build` cut, and its recorded
 hash, are what the comparison uses.
 
+**Editing the Persian after a page passed QA un-accepts it.** `pages accept`
+hashes the page's translated text again, from the book as it is, and compares it
+with what render QA actually measured; if they differ it refuses with
+`translation-changed`. Every other gate it consults describes an earlier moment —
+the run record's label, the report on disk, a review bound to render files nobody
+re-made — so without this an improved sentence or a second typography pass could
+be accepted having never been laid out. Run `render-qa` and `pages review` again
+and the page accepts. A page whose QA predates this record is not refused.
+
 **And `pages build` itself refuses if the source PDF has moved**
 (`source-pdf-unavailable`). Building anyway produced a run with every source
 path empty, which reads exactly like a DOCX or an EPUB — a format that has no
@@ -350,6 +360,15 @@ If you have already translated some worksheets and an input has changed since,
 this refuses with `"refused": "stale-worksheets"` rather than quietly handing
 you worksheets that no longer match the book. Re-read the reason it gives; add
 `--force` only once you have decided the existing translations are still good.
+
+The budget bounds the **whole rendered worksheet** — its glossary rows, the
+surrounding-text context and the headers, not just the prose. A unit longer than
+the budget is cut into segments that rejoin exactly, and a run of units that
+would not fit becomes several worksheets. When even one unit cannot be made to
+fit, it refuses with `"refused": "over-budget"` and the real numbers rather than
+writing an oversized worksheet; nothing is written in that case. The prose is
+never shortened. Expect a few hundred characters of furniture per worksheet, so
+a budget under about 1,200 is not useful.
 
 ## Step 5 — Translate
 
@@ -401,6 +420,13 @@ $PY $SKILL_DIR/scripts/revayat-novel.py chunk status --chunks $WORK/chunks
 $PY $SKILL_DIR/scripts/revayat-novel.py pages status --pages  $WORK/pages
 ```
 
+`chunk status` reads each reply rather than trusting that the file exists, and
+sorts the worksheets into `pending` (no file), `empty`, `malformed` (content that
+answers none of the units asked for — a refusal from the model, a crash log), and
+`partial` (some units answered). `translated` counts only the worksheets that
+answered **every** unit, and `next` is the earliest one that is not finished,
+whichever of those it is. A run is done when `next` is `null`.
+
 ## Step 6 — Merge
 
 **Page route: you have already done this.** `pages merge` merges a page into
@@ -429,7 +455,18 @@ exactly one. `first_mentions.introduced` in the report says where each landed.
 | `missing_outputs` | those chunks were never translated | translate them |
 | `missing_units` | headers were dropped | re-run those chunks |
 | `unknown_units` | headers were invented | re-run those chunks |
+| `malformed` | a reply broke the protocol: an id answered twice, answered under the wrong kind, or the headers came back reordered | re-run that chunk; the message names the unit |
+| `coverage` | a block split across worksheets had only some of its parts answered | translate the other parts before merging; merging one would replace the block with part of itself |
+| `stale` | the source those units were cut from has changed since the worksheet was written | re-cut the worksheets (`chunk build --force`) and translate them against the current text |
+| `unverified_freshness` / `unverified_kinds` | that worksheet's manifest predates the recorded source hash or kinds, so merge could not check them | nothing to do; it is a statement about what was checked, not a problem |
 | `first_mentions.unplaceable` | a locked name appears nowhere in the Persian | check that name's translation |
+
+**Nothing is written unless the whole thing validates.** A merge that reports
+`"ok": false` leaves `book.json` byte-identical, so the file you would fix
+against is still the file you had. `--lenient` does not relax that into
+"write what you can": it applies every worksheet that validates and skips every
+worksheet that does not, and still reports `ok: false`. The unit of trust is the
+reply, because a reply whose structure cannot be trusted cannot be half trusted.
 
 Re-running merge after a fix is always safe; the first-mention pass is
 idempotent.
@@ -562,6 +599,7 @@ is put together, and that check asks the one question no page can.
 | `first-mention-missing` | a locked name's introduction appears nowhere | re-run merge with `--glossary` |
 | `first-mention-misplaced` | the introduction is in a different block from the first mention | re-run merge with `--glossary`; it is idempotent |
 | `first-mention-forbidden` | policy says never introduce parenthetically, and one appears | remove it, or change the glossary policy |
+| `glossary-policy` | the glossary's `original_parenthetical` is not one of `first_mention`, `first_per_chapter` or `never` | fix the value; a policy nothing can interpret is not enforced either |
 | `possible-padding` (warning) | the Persian is far longer than the source | read it; usually an explanation the translator added |
 | `emphasis-unrecoverable` (warning) | the source's bold and italic could not be read at all | emphasis parity cannot be checked for this book; check a page by eye |
 | `ocr-disputed-text` | the confidence pass read this block differently from the text layer | open the page image and compare |
