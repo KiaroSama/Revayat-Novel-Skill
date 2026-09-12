@@ -300,6 +300,10 @@ def check(
         # though the render had never happened.
         state.set_page(page, "rendered",
                        hashes={"render": evidence(work_dir, renders)})
+        # A convenience for the reviewer, composed *after* the digest is recorded
+        # so that failing to compose one cannot cost the page its state. The
+        # digest stays over the panels — see `review.compare`.
+        _compose_comparison(work_dir, page, renders)
 
     try:
         # A missing source page is "we could not look", exactly like a missing
@@ -390,6 +394,34 @@ def check(
         error="" if written["ok"] else _first_problem(written),
     )
     return written
+
+
+def _compose_comparison(work_dir: Path, page: int, renders: dict[str, Any]) -> None:
+    """One sheet with the source page beside each target sheet, if it is small.
+
+    The five review questions are answered by looking at two images, and until
+    this existed they lived in two directories at two zoom levels — which is
+    worst in exactly the case that matters most, a landscape source page beside a
+    portrait translation. Scaling to a common height makes those comparable.
+
+    Records the path, or the reason there is none, into ``renders``. Never
+    raises: this is a convenience and must not be able to affect the page's
+    report. The review itself stays bound to the individual PNGs.
+    """
+    panels: list[tuple[str, Path]] = []
+    if renders.get("source"):
+        panels.append(("source", work_dir / renders["source"]))
+    sheets = renders.get("target_sheets") or []
+    for number, sheet in enumerate(sheets, start=1):
+        panels.append((f"target {number}/{len(sheets)}", work_dir / sheet))
+
+    composed = review.compare(
+        panels, work_dir / "renders" / "compare" / f"page-{page:04d}.png")
+    if composed["ok"]:
+        renders["compare"] = str(
+            Path(composed["sheet"]).relative_to(work_dir).as_posix())
+    else:
+        renders["compare_detail"] = composed.get("detail", "")
 
 
 def render_docx(docx: Path, out_dir: Path,

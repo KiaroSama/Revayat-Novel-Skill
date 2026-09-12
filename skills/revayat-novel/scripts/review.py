@@ -188,3 +188,97 @@ def verdict(work_dir: Path, page: int | str, *,
                           f"{', '.join(found.get('failed') or ['no reason given'])}"
                           + (f" - {found['note']}" if found.get("note") else "")}
     return {"ok": True, **found}
+
+
+# --------------------------------------------------------------------------- #
+# A convenience over the evidence, never the evidence
+# --------------------------------------------------------------------------- #
+
+#: Above this many panels the sheet stops being readable. Measured (spike 010):
+#: two panels — a landscape source beside a portrait target — is 2494x1138 and
+#: 26 KB, which is exactly the comparison that is awkward in two windows. Six
+#: panels is a 4386px strip nobody can read without scrolling sideways, and
+#: stacking them instead is 6788px tall, which is worse than the six separate
+#: files it replaced. So: a source plus up to three sheets.
+MAX_COMPARE_PANELS = 4
+
+#: Panel height in pixels. Every panel is scaled to a common *height*, which is
+#: what puts a 612x396 landscape source beside a 396x612 portrait target without
+#: distorting either — the strongest argument for the sheet existing at all.
+COMPARE_HEIGHT = 1100
+
+COMPARE_LABEL_BAND = 22
+COMPARE_PAD = 8
+
+
+def _panels(paths: list[tuple[str, Path]], height: int) -> list[tuple[str, Any]]:
+    """Each panel scaled to one height. A missing file is drawn, not skipped."""
+    from PIL import Image, ImageDraw  # noqa: PLC0415
+
+    out: list[tuple[str, Any]] = []
+    for label, path in paths:
+        path = Path(path)
+        if path.exists():
+            # `ir.open_image`, not `Image.open`: Pillow only *warns* in the band
+            # between one and two times its pixel ceiling and decodes anyway.
+            image = ir.open_image(path).convert("RGB")
+            scale = height / image.height
+            image = image.resize((max(1, round(image.width * scale)), height))
+        else:
+            # A missing render is a *state*, not a gap: `evidence_digest` counts
+            # it as ABSENT, and the sheet should say the same thing to a person.
+            image = Image.new("RGB", (round(height * 0.7), height), (240, 240, 240))
+            ImageDraw.Draw(image).text((10, 10), "(not rendered)", fill=(120, 0, 0))
+            label += " — absent"
+        out.append((label, image))
+    return out
+
+
+def compare(panels: list[tuple[str, Path]], destination: Path, *,
+            height: int = COMPARE_HEIGHT) -> dict[str, Any]:
+    """One sheet with the source page beside its target sheets, or a reason why not.
+
+    A convenience over the evidence, never the evidence. `evidence_digest` stays
+    bound to the panel files: the composition depends on Pillow's resize filter
+    and its default bitmap font, neither pinned across platforms or versions, so
+    a digest over the sheet would stale every standing review in a book at once
+    on a Pillow upgrade — the same failure that got "hash the split one-page PDF"
+    rejected for `page_fingerprint`.
+
+    Never raises. Producing evidence must not be the thing that stops a page
+    being reported on, and that rule covers a convenience even more plainly than
+    it covers the evidence.
+    """
+    count = len(panels)
+    if not count:
+        return {"ok": False, "sheet": "", "panels": 0,
+                "detail": "nothing to compose"}
+    if count > MAX_COMPARE_PANELS:
+        return {"ok": False, "sheet": "", "panels": count,
+                "detail": f"{count} panels is past the {MAX_COMPARE_PANELS}-panel "
+                          f"ceiling; open the individual renders instead"}
+    try:
+        from PIL import Image, ImageDraw  # noqa: PLC0415
+
+        drawn = _panels(panels, height)
+        width = sum(panel.width + COMPARE_PAD for _, panel in drawn) + COMPARE_PAD
+        total = height + COMPARE_LABEL_BAND + 2 * COMPARE_PAD
+        sheet = Image.new("RGB", (width, total), (255, 255, 255))
+        pen = ImageDraw.Draw(sheet)
+        x = y = COMPARE_PAD
+        for label, panel in drawn:
+            pen.text((x, y), label, fill=(0, 0, 0))
+            sheet.paste(panel, (x, y + COMPARE_LABEL_BAND))
+            x += panel.width + COMPARE_PAD
+        destination = Path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        sheet.save(destination, format="PNG")
+    except ImportError as missing:
+        return {"ok": False, "sheet": "", "panels": count,
+                "detail": f"Pillow is not installed: {missing}"}
+    except Exception as failure:
+        # Deliberately broad, and one of the few places that is right here: the
+        # alternative is a composition bug stopping a page being reported on.
+        return {"ok": False, "sheet": "", "panels": count,
+                "detail": f"{type(failure).__name__}: {failure}"}
+    return {"ok": True, "sheet": str(destination), "panels": count}
