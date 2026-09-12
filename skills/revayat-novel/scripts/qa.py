@@ -311,7 +311,14 @@ def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
         report.add(ERROR, "glossary-policy", "glossary", str(error))
         return
 
-    targets = [(block["id"], block.get("target") or "")
+    # Counted over the **prose**, with verbatim runs removed, because that is the
+    # text the enforcement pass is allowed to touch: it masks literals through
+    # `falint.mask_literals` before inserting anything. Counting the raw target
+    # instead made the two disagree — a technical passage quoting «علی (Ali)»
+    # inside backticks read as a placement, so the gate demanded the removal of
+    # something the pass had correctly left alone, and no amount of re-running
+    # could satisfy both.
+    targets = [(block["id"], _prose(block.get("target") or ""))
                for block in ir.iter_text_blocks(book)]
 
     for entry in glossary.get("entries", []):
@@ -325,7 +332,12 @@ def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
         # anyone has ticked the box yet.
         introduction = match.group(0)
         name = entry.get("id") or introduction
-        owner = entry.get("first_block_id") or ""
+        # The same resolver the enforcement pass uses. Asking for
+        # `first_block_id` instead is what made the gate demand an
+        # introduction in a block whose Persian is a nickname, while the
+        # pass correctly put it in the first block that names her — two
+        # answers to one question, and no re-run could satisfy both.
+        owner = gl.introduction_owner(entry, list(ir.iter_text_blocks(book)))
 
         # Counted, not merely located. A block-level list cannot tell one
         # introduction from three inside the same paragraph, which is exactly
@@ -402,6 +414,20 @@ def _check_structure_parity(book: dict[str, Any], report: Report,
         if source_emphasis != target_emphasis:
             report.add(ERROR if strict else WARNING, "emphasis-parity", block["id"],
                        f"(bold, italic, verbatim) {source_emphasis} -> {target_emphasis}")
+
+        # The signature counts verbatim runs; it cannot see inside them. A
+        # count is not a content hash, and `ABC-123` becoming `XYZ-999` keeps
+        # every number it reports while changing the one thing a verbatim span
+        # exists to protect — a code identifier, a filename, a command.
+        source_literal = ir.verbatim_spans(source)
+        target_literal = ir.verbatim_spans(target)
+        if source_literal != target_literal:
+            changed = [pair for pair in zip(source_literal, target_literal)
+                       if pair[0] != pair[1]]
+            report.add(ERROR if strict else WARNING,
+                       "verbatim-content-changed", block["id"],
+                       f"literal text must come back byte for byte: "
+                       f"{changed[:3] if changed else (source_literal, target_literal)}")
 
 
 def _check_lengths(book: dict[str, Any], report: Report) -> None:
@@ -771,6 +797,22 @@ def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
 # CLI
 # --------------------------------------------------------------------------- #
 
+def _named_glossary(given: str | None) -> tuple[dict[str, Any] | None, Path | None]:
+    """``(glossary, the path that was named and is absent)``.
+
+    `gl.load` returns a fresh empty glossary for a path that does not exist, which
+    is right for "no glossary was asked for" and wrong for "this glossary was asked
+    for and is missing": an empty glossary reports no drift and no first-mention
+    problem, so the run reads clean because nothing was checked.
+    """
+    if not given:
+        return None, None
+    path = Path(given)
+    if not path.exists():
+        return None, path
+    return gl.load(path), None
+
+
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     parser = argparse.ArgumentParser(prog="revayat-novel qa", description=__doc__)
@@ -796,11 +838,32 @@ def main(argv: list[str] | None = None) -> int:
         book_path = Path(args.book)
         book = ir.load_book(book_path)
         assets = Path(args.assets) if args.assets else book_path.parent / "assets"
-        glossary = gl.load(Path(args.glossary)) if args.glossary else None
-        report = check_book(book, assets=assets if assets.exists() else None,
+        glossary, missing_glossary = _named_glossary(args.glossary)
+        # A named dependency that is not there is a **failure**, never a reason to
+        # switch off the validator that would have noticed. `assets.exists()`
+        # deciding whether to check assets at all meant the check was skipped in
+        # exactly the situation it exists for — every picture in the book missing
+        # — and a book with figures then passed QA with nothing to render.
+        needs_assets = any(block.get("type") == "image"
+                           for block in book.get("blocks", []))
+        checkable = assets if assets.is_dir() else None
+        report = check_book(book, assets=checkable,
                             glossary=glossary,
                             require_complete=not args.allow_incomplete,
                             strict=args.strict)
+        if checkable is None and (needs_assets or args.assets):
+            report.add(ERROR, "assets-missing", str(assets),
+                       f"{assets} is not there, so no asset could be checked. "
+                       f"The book declares "
+                       f"{sum(1 for b in book.get('blocks', []) if b.get('type') == 'image')}"
+                       f" picture(s); a directory that is absent is a failed "
+                       f"check, not a check that does not apply.")
+        if missing_glossary:
+            report.add(ERROR, "glossary-missing", str(missing_glossary),
+                       f"--glossary named {missing_glossary}, which is not there. "
+                       f"An absent glossary loads as an empty one, and an empty "
+                       f"glossary reports no drift and no first-mention problem — "
+                       f"so the run would look clean because nothing was checked.")
     else:
         book = ir.load_book(args.book) if args.book else None
         report = check_docx(Path(args.file), book)

@@ -44,6 +44,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from itertools import groupby
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -659,6 +660,24 @@ def parse_markup(text: str) -> list[dict[str, Any]]:
             "footnote": footnote,
         })
 
+    def nest(body: str, *, bold: bool = False, italic: bool = False) -> None:
+        """An emphasised run is parsed by the same grammar, then styled.
+
+        This used to push the body as one literal span, which is how a footnote
+        inside emphasis disappeared: ``*واژه [[fn:fn0001]]*`` produced a single
+        italic span whose *text* contained the marker, so `write_markup` — which
+        only makes a note from a footnote span — had nothing to make. Meanwhile
+        `footnote_refs` still counted the marker by regex, so parity passed and
+        the note was simply gone from the DOCX.
+
+        Verbatim does not recurse, deliberately: a marker inside backticks is an
+        example of a marker and has to stay literal.
+        """
+        for span in parse_markup(body):
+            spans.append({**span,
+                          "bold": span["bold"] or bold,
+                          "italic": span["italic"] or italic})
+
     cursor = 0
     for match in _INLINE.finditer(text):
         push(_unescape(text[cursor:match.start()]))
@@ -667,11 +686,11 @@ def parse_markup(text: str) -> list[dict[str, Any]]:
         elif match.group("code") is not None:
             push(match.group("code_body"), verbatim=True)
         elif match.group("bi") is not None:
-            push(_unescape(match.group("bi_body")), bold=True, italic=True)
+            nest(match.group("bi_body"), bold=True, italic=True)
         elif match.group("bold") is not None:
-            push(_unescape(match.group("bold_body")), bold=True)
+            nest(match.group("bold_body"), bold=True)
         else:
-            push(_unescape(match.group("italic_body")), italic=True)
+            nest(match.group("italic_body"), italic=True)
         cursor = match.end()
     push(_unescape(text[cursor:]))
     return spans
@@ -684,21 +703,45 @@ def render_spans(spans: Iterable[dict[str, Any]]) -> str:
     spans while emphasis, verbatim runs and footnote tokens are carried through
     untouched — the markup cannot be damaged by a regex that never sees it.
     """
-    out: list[str] = []
-    for span in spans:
+    def content(span: dict[str, Any]) -> str:
+        """One span's own text, with no emphasis wrapper — the group adds that."""
         if span.get("footnote"):
-            out.append(f"[[fn:{span['footnote']}]]")
-        elif span.get("verbatim"):
-            out.append(f"`{span['text']}`")
-        elif span.get("bold") and span.get("italic"):
-            out.append(f"***{escape_markup(span['text'])}***")
-        elif span.get("bold"):
-            out.append(f"**{escape_markup(span['text'])}**")
-        elif span.get("italic"):
-            out.append(f"*{escape_markup(span['text'])}*")
+            return f"[[fn:{span['footnote']}]]"
+        if span.get("verbatim"):
+            return f"`{span['text']}`"
+        return escape_markup(span["text"])
+
+    out: list[str] = []
+    # Consecutive spans sharing a style are wrapped **once**, because emphasis
+    # nests: a footnote or a verbatim run inside an italic phrase is now its own
+    # span carrying `italic`, and one wrapper per span would emit
+    # `*واژه *[[fn:fn0001]]` where the source read `*واژه [[fn:fn0001]]*`.
+    for (bold, italic), group in groupby(
+            spans, key=lambda s: (bool(s.get("bold")), bool(s.get("italic")))):
+        inner = "".join(content(span) for span in group)
+        if not inner:
+            continue
+        if bold and italic:
+            out.append(f"***{inner}***")
+        elif bold:
+            out.append(f"**{inner}**")
+        elif italic:
+            out.append(f"*{inner}*")
         else:
-            out.append(escape_markup(span["text"]))
+            out.append(inner)
     return "".join(out)
+
+
+def verbatim_spans(text: str) -> list[str]:
+    """The verbatim runs of ``text``, in order, as their exact contents.
+
+    :func:`emphasis_signature` counts them, and a count is not a content check:
+    ```ABC-123``` becoming ```XYZ-999``` keeps every number the
+    signature reports while changing the one thing a verbatim span exists to
+    protect. A code identifier, a filename or a command is not translatable, so
+    it has to come back byte for byte.
+    """
+    return [span["text"] for span in parse_markup(text) if span.get("verbatim")]
 
 
 def plain_text(text: str) -> str:
