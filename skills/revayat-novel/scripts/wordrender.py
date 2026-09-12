@@ -227,9 +227,165 @@ def render(docx: Path, out_dir: Path, *,
     return produced, chosen
 
 
+def render_many(docs: list[Path], out_dir: Path, *,
+                timeout: float = DEFAULT_TIMEOUT
+                ) -> tuple[dict[Path, Path], dict[Path, str], str]:
+    """Lay several documents out in one renderer session.
+
+    Returns ``(produced, failed, backend)``: a path per document that rendered, a
+    reason per document that did not, and which program did it. A document in
+    neither map was **never reached** — the batch was bounded before it got there
+    — and that is a third state on purpose: reporting it as failed would blame a
+    page for a wedge in front of it.
+
+    ``timeout`` bounds the **batch**, not each document. That is deliberate and is
+    the only honest bound available: a per-document timeout inside a warm session
+    needs a cancellable COM call and there is none, which is the whole reason the
+    worker is a subprocess. The worker reports each document as it finishes, so
+    when the parent kills the tree the pages that were done are still known.
+
+    Measured (spike 011, reproduced 2026-09-12): 7.30s per page cold against
+    0.66s warm, 91%, and a wedge at document 3 of 5 still left 1 and 2 recorded.
+    """
+    docs = [Path(d).resolve() for d in docs]
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    produced: dict[Path, Path] = {}
+    failed: dict[Path, str] = {}
+    if not docs:
+        return produced, failed, backend()
+
+    chosen = backend()
+    if not chosen:
+        raise RenderError(unavailable_reason())
+
+    if chosen == "libreoffice":
+        launcher = find_libreoffice()
+        # One invocation, every path on the command line, in a private profile —
+        # the same isolation the single path uses and for the same measured
+        # reason. LibreOffice carries none of Word's COM state between documents,
+        # which is why this is the smaller risk of the two backends.
+        with tempfile.TemporaryDirectory(prefix="revayat-novel-soffice-") as profile:
+            try:
+                _run_bounded(
+                    [launcher,
+                     f"-env:UserInstallation={Path(profile).resolve().as_uri()}",
+                     "--headless", "--norestore", "--invisible", "--nolockcheck",
+                     "--convert-to", "pdf", "--outdir", str(out_dir),
+                     *[str(d) for d in docs]],
+                    timeout,
+                )
+            except subprocess.TimeoutExpired:
+                pass    # whatever landed before the bound is still counted below
+        for docx in docs:
+            candidate = out_dir / (docx.stem + ".pdf")
+            if candidate.exists():
+                produced[docx] = candidate
+        return produced, failed, chosen
+
+    command = [sys.executable, str(Path(__file__).resolve()), "--batch",
+               str(out_dir), *[str(d) for d in docs]]
+    try:
+        finished = _run_bounded(command, timeout)
+        out, err = finished.stdout or b"", finished.stderr or b""
+    except subprocess.TimeoutExpired as wedge:
+        # The pages the worker had already reported are still known, which is the
+        # whole point of it reporting per document rather than at the end.
+        out, err = wedge.stdout or b"", wedge.stderr or b""
+
+    by_name = {docx.name: docx for docx in docs}
+    for line in out.decode("utf-8", "replace").splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3 and parts[0] == "OK" and parts[1] in by_name:
+            produced[by_name[parts[1]]] = out_dir / parts[2]
+    for line in err.decode("utf-8", "replace").splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3 and parts[0] == "FAIL" and parts[1] in by_name:
+            failed[by_name[parts[1]]] = parts[2]
+    return produced, failed, chosen
+
+
+def _with_word_batch(docs: list[Path], out_dir: Path) -> int:
+    """N documents through **one** Word session. Runs in the worker only.
+
+    The loop lives here rather than in the parent because COM has no
+    cancellation: the only reliable bound is the parent killing this tree, and
+    that stays true however many documents are inside. Measured (spike 011,
+    reproduced 2026-09-12): the first document costs 1.98s and every one after it
+    0.31-0.34s, against 7.30s each when every page gets its own process — about
+    33 minutes on a 300-page book.
+
+    Each document gets its own try/finally around Open/Close, which is what makes
+    one bad document one bad document: measured, a corrupt file raised
+    ``com_error`` in 0.04s and the two after it rendered normally.
+
+    One line per document on stdout, flushed immediately, so a parent that has to
+    kill this process still knows exactly which pages were done — that is how a
+    wedge is attributed to the page that wedged rather than to the pages behind
+    it.
+    """
+    import pythoncom  # noqa: PLC0415
+    import win32com.client  # noqa: PLC0415
+
+    failures = 0
+    pythoncom.CoInitialize()
+    word = None
+    try:
+        word = win32com.client.DispatchEx("Word.Application")
+        word.Visible = False
+        word.DisplayAlerts = False
+        for docx in docs:
+            produced = (out_dir / (docx.stem + ".pdf")).resolve()
+            document = None
+            try:
+                document = word.Documents.Open(str(docx.resolve()), ReadOnly=True,
+                                               AddToRecentFiles=False)
+                document.Fields.Update()
+                document.Repaginate()
+                document.SaveAs2(str(produced), FileFormat=WORD_PDF_FORMAT)
+            except Exception as error:  # com_error is not an OSError
+                failures += 1
+                print(f"FAIL\t{docx.name}\t{type(error).__name__}: {error}",
+                      file=sys.stderr, flush=True)
+            else:
+                print(f"OK\t{docx.name}\t{produced.name}", flush=True)
+            finally:
+                if document is not None:
+                    try:
+                        document.Close(SaveChanges=False)
+                    except Exception:
+                        pass
+    finally:
+        if word is not None:
+            word.Quit()
+        pythoncom.CoUninitialize()
+    return 1 if failures else 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    """The worker: one document, one PDF, one process to kill if it wedges."""
+    """The worker: one process to kill if it wedges.
+
+    Two invocations, and the single-document one is unchanged because the
+    per-page path every gate depends on uses it:
+
+        wordrender.py <input.docx> <output-dir>
+        wordrender.py --batch <output-dir> <doc.docx> [<doc.docx> ...]
+    """
     argv = list(sys.argv[1:] if argv is None else argv)
+
+    if argv and argv[0] == "--batch":
+        if len(argv) < 3:
+            print(f"usage: {Path(__file__).name} --batch <output-dir> <doc.docx>…",
+                  file=sys.stderr)
+            return 2
+        out_dir = Path(argv[1])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            return _with_word_batch([Path(a) for a in argv[2:]], out_dir)
+        except Exception as error:  # a failure to start Word at all
+            print(f"{type(error).__name__}: {error}", file=sys.stderr)
+            return 1
+
     if len(argv) != 2:
         print(f"usage: {Path(__file__).name} <input.docx> <output-dir>",
               file=sys.stderr)

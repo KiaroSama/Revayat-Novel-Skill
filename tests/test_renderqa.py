@@ -1106,3 +1106,129 @@ def test_a_posix_install_location_is_searched_too(tmp_path, monkeypatch):
     monkeypatch.setattr(extract, "BUNDLED_TOOLS",
                         {"ghostscript": (os.path.join("~", ".local", "bin", "gs"),)})
     assert extract.find_tool(["gs"], "ghostscript") == str(home_tool)
+
+
+# --------------------------------------------------------------------------- #
+# A batch in one renderer session (plan 028, phase 1)
+# --------------------------------------------------------------------------- #
+
+def _five_documents(tmp_path, count=3):
+    """Small real documents, built the way the preview path builds them."""
+    import build_docx
+    import preview
+
+    book = ir.new_book(title="t", source_format="text", pages=1)
+    book["blocks"] = [ir.make_block("paragraph", n, page=1, text="x",
+                                    target=PERSIAN)
+                      for n in range(1, 4)]
+    made = []
+    out = tmp_path / "docs"
+    out.mkdir(parents=True, exist_ok=True)
+    for index in range(count):
+        dest = out / f"p{index:02d}.docx"
+        build_docx.Builder(book, tmp_path / "assets",
+                           preview.production_options()).build(dest)
+        made.append(dest)
+    return made
+
+
+def test_a_batch_renders_every_document_identically_to_one_at_a_time(tmp_path):
+    """Identical output is the premise the whole saving rests on.
+
+    Measured in spike 011 on five documents: same page count, same text, same
+    embedded fonts, same page width. Re-asserted here because state leaking
+    between documents in one session is the correctness risk of batching.
+    """
+    pytest.importorskip("pymupdf")
+    import pymupdf
+
+    if not wordrender.backend():
+        pytest.skip(f"no renderer here: {wordrender.unavailable_reason()}")
+    docs = _five_documents(tmp_path)
+
+    produced, failed, backend = wordrender.render_many(docs, tmp_path / "batch")
+    assert not failed, failed
+    assert set(produced) == set(docs), "the batch did not render every document"
+
+    for docx in docs:
+        alone, _ = wordrender.render(docx, tmp_path / "alone")
+        with pymupdf.open(produced[docx]) as batched, pymupdf.open(alone) as single:
+            assert len(batched) == len(single)
+            assert ([p.get_text("text") for p in batched]
+                    == [p.get_text("text") for p in single])
+            assert [round(p.rect.width, 2) for p in batched] == \
+                   [round(p.rect.width, 2) for p in single]
+
+
+def test_one_corrupt_document_does_not_take_the_batch_down(tmp_path):
+    """Measured: `com_error` in 0.04s, and the documents after it rendered.
+
+    A batch that loses its tail to one bad page is worse than no batch — the
+    per-page design gets that isolation for free and batching must not give it up.
+    """
+    pytest.importorskip("pymupdf")
+    if wordrender.backend() != "word":
+        pytest.skip("the COM isolation this proves is the Word path's")
+
+    docs = _five_documents(tmp_path, count=3)
+    docs[1].write_bytes(b"PK\x03\x04 this is not a document at all")
+
+    produced, failed, _ = wordrender.render_many(docs, tmp_path / "batch")
+    assert docs[1] in failed, "the corrupt document was not reported as failed"
+    assert docs[0] in produced and docs[2] in produced, (
+        f"a bad document took its neighbours down: produced={list(produced)}")
+
+
+def test_a_batch_timeout_still_kills_the_whole_tree(tmp_path):
+    """Same property as the single path, which a batch must not quietly drop."""
+    killed = []
+
+    def record_and_kill(process):
+        killed.append(process)
+        process.kill()
+
+    docs = [tmp_path / "a.docx"]
+    docs[0].write_bytes(b"not really a document")
+
+    import bookir
+    original = bookir.run_bounded
+
+    def wedge(command, timeout, **kwargs):
+        # A command that outlives its bound, with the real runner underneath so
+        # the kill path is the production one.
+        return original([sys.executable, "-c", "import time; time.sleep(30)"],
+                        timeout, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(bookir, "kill_tree", record_and_kill)
+        patch.setattr(wordrender, "backend", lambda: "word")
+        patch.setattr(wordrender, "_run_bounded", wedge)
+        started = time.monotonic()
+        produced, failed, _ = wordrender.render_many(docs, tmp_path / "batch",
+                                                    timeout=1)
+        elapsed = time.monotonic() - started
+
+    assert killed, "the batch's tree was never killed"
+    assert elapsed < 10.0, f"bounded at 1s and took {elapsed:.1f}s"
+    # Nothing was reported, and nothing is claimed: a document the worker never
+    # got to is in neither map, which is the third state the design needs.
+    assert not produced and not failed
+
+
+def test_a_document_never_reached_is_in_neither_map(tmp_path):
+    """Reporting it as failed would blame a page for a wedge in front of it."""
+    docs = [tmp_path / f"{name}.docx" for name in ("a", "b", "c")]
+    for path in docs:
+        path.write_bytes(b"not really a document")
+
+    def only_the_first(command, timeout, **kwargs):
+        import subprocess as sp
+        return sp.CompletedProcess(command, 0, b"OK\ta.docx\ta.pdf\n", b"")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(wordrender, "backend", lambda: "word")
+        patch.setattr(wordrender, "_run_bounded", only_the_first)
+        produced, failed, _ = wordrender.render_many(docs, tmp_path / "batch")
+
+    assert list(produced) == [docs[0]]
+    assert not failed, "b and c were never reached; they are not failures"
