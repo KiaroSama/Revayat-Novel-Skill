@@ -512,7 +512,13 @@ def build(
                 "source_pdf": source_pdf.get("file", ""),
                 "source_pdf_page": source_pdf.get("source_page", 0),
                 "source_pdf_sha256": source_pdf.get("sha256", ""),
-                "source_sha256": digest,
+                # Tagged with the formula, because the chunk route writes its
+                # own digest under this key and merge must not recompute one
+                # against the other. Only the manifest copy is tagged: the value
+                # handed to `note_page_source` above is compared with what is
+                # already stored per page, and prefixing that would invalidate
+                # every page on disk for no reason.
+                "source_sha256": f"page:{digest}",
                 "status": (state.page(page) or {}).get("state", "pending"),
             })
 
@@ -690,14 +696,17 @@ def merge_page(book_path: Path, out_dir: Path, page: int, *,
                 "detail": f"page {page} is still waiting on "
                           f"{', '.join(waiting)}; nothing was merged"}
 
-    state.set_page(page, "translated", hashes={
-        "translation": ir.sha256_bytes("\n".join(answers).encode("utf-8")),
-    })
+    state.set_page(page, "translated")
     report = merging.merge(book_path, out_dir,
                            only=[entry["id"] for entry in entries],
                            glossary_path=glossary_path)
     if report["ok"]:
-        state.set_page(page, "merged")
+        # Hashed from the book, now that the Persian is in it, with the one
+        # definition render QA and `accept` also use. Recording it here is what
+        # makes a *corrected* reply earn another attempt while re-merging the
+        # same reply earns none.
+        state.set_page(page, "merged",
+                       hashes={"translation": translation_hash(book_path, page)})
     else:
         state.set_page(page, "failed", error=_merge_problem(report))
     return {"page": page, "jobs": len(entries), **report}
@@ -760,6 +769,42 @@ def missing_source_render(out_dir: Path, page: int) -> dict[str, Any] | None:
                       f"compared the translation with it; re-run render-qa"}
 
 
+def translation_hash(book_path: Path, page: int) -> str:
+    """Identity of one page's Persian, as the book currently holds it.
+
+    **One definition, for everyone who records or checks it.** The page record
+    has a single ``translation`` hash and it used to be written two different
+    ways — ``merge_page`` hashed the worksheet *answers* while ``renderqa``
+    hashed the page's *texts as laid out*. Two formulas under one key always
+    disagree, and the way this pair disagreed was silent: every merge looked
+    like a changed translation, which is exactly the signal the retry cap and the
+    acceptance check read.
+
+    ``pagecheck`` is imported here rather than at the top because it imports this
+    module; the dependency points one way at import time, and this is the one
+    place that needs to look back along it.
+    """
+    import pagecheck
+
+    expected = pagecheck.expectations(ir.load_book(book_path), page)
+    return ir.sha256_bytes("\n".join(expected["texts"]).encode("utf-8"))
+
+
+def _translation_moved(book_path: Path, page: int,
+                       record: dict[str, Any]) -> str:
+    """Why this page's Persian is no longer what render QA saw, or ``""``."""
+    recorded = (record.get("hashes") or {}).get("translation", "")
+    if not recorded:
+        # A page whose QA predates this record. Refusing would strand it, and
+        # claiming it is current would be the defect restated.
+        return ""
+    current = translation_hash(book_path, page)
+    if current == recorded:
+        return ""
+    return (f"the page's translated text now hashes {current[:12]} against the "
+            f"{recorded[:12]} that was checked")
+
+
 def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
     """Finish one page — only once every gate it has to clear actually has.
 
@@ -816,6 +861,20 @@ def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
     if not seen["ok"]:
         return {"ok": False, "page": page, "refused": seen["refused"],
                 "detail": seen["detail"]}
+
+    # Every gate above this line describes an earlier moment: the record's label,
+    # a report written then, a review bound to render files nobody re-made. None
+    # of them notices the Persian itself changing in between — and `untranslated`
+    # only asks whether there is *some*. So the page's translation is hashed again
+    # here, from the book as it is now, and compared with what render QA actually
+    # looked at. Edited since: the page is unverified again, not accepted.
+    moved = _translation_moved(book_path, page, record)
+    if moved:
+        return {"ok": False, "page": page, "refused": "translation-changed",
+                "detail": f"page {page} passed render QA, and its Persian has "
+                          f"changed since — {moved}. Nothing re-rendered, so "
+                          f"what passed is not what would print: run render-qa "
+                          f"on it again and look at it again."}
 
     state.set_page(page, "accepted")
     return {"ok": True, "page": page, "state": "accepted",

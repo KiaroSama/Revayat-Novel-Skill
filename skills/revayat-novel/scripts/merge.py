@@ -360,9 +360,20 @@ def merge(
 
         problems, rejected = validate_reply(entries, expected, kinds)
 
-        recorded = entry.get("source_sha256")
+        # The manifest says which formula produced its digest, because the two
+        # routes record different ones under the same key.
+        recorded = str(entry.get("source_sha256") or "")
+        form = recorded.partition(":")[0]
         if not recorded:
             report["unverified_freshness"].append(entry["id"])
+        elif form == "page":
+            # The page run checks this itself, at build time, against a digest
+            # that also covers the page raster and the page geometry — richer
+            # than anything recomputable here from block ids — and invalidates
+            # the page when it moves. Re-deriving it here would mean copying a
+            # formula this module cannot see, which is how the two came to
+            # disagree in the first place.
+            pass
         elif recorded != unit_fingerprint(book, entry.get("block_ids") or []):
             report["stale"].append(entry["id"])
             problems.append(
