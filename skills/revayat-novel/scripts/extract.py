@@ -56,6 +56,11 @@ from rasters import crop_from_source  # noqa: F401
 PAGE_TEXT_THRESHOLD = 80
 #: Fraction of pages that must carry text before a PDF counts as born-digital.
 DIGITAL_PAGE_SHARE = 0.92
+
+#: How much of a page one image must cover for a textless page to be a scan of
+#: prose rather than a blank leaf or a plate. A scan is one raster over the whole
+#: page; half is well clear of an illustration and well below a full-bleed scan.
+SCAN_PAGE_COVERAGE = 0.5
 #: Wall-clock ceiling for one OCRmyPDF run (a 400-page scan is slow but finite).
 OCR_TIMEOUT_SECONDS = 5400
 
@@ -79,6 +84,43 @@ def detect_format(path: Path) -> str:
     )
 
 
+def ocr_inputs(args: Any) -> dict[str, str]:
+    """Everything that decides what ``cleaned.pdf`` and ``ocr.pdf`` contain.
+
+    One definition, written by the extraction that produced them and read by the
+    next run deciding whether to believe them. A key missing an option means that
+    option can move without the cache noticing, which is the whole defect: the
+    two files used to be reused because they existed, and existence says nothing
+    about what produced them.
+    """
+    return {
+        "source": runstate.file_hash(getattr(args, "input", "") or None),
+        "ocr": str(getattr(args, "ocr", "")),
+        "ocr_lang": str(getattr(args, "ocr_lang", "")),
+        "deskew": str(getattr(args, "deskew", None)),
+        "clean_scan": str(getattr(args, "clean_scan", "")),
+        "ghost_threshold": str(getattr(args, "ghost_threshold", None)),
+    }
+
+
+def _raster_coverage(page: Any) -> float:
+    """The largest share of this page covered by a single image.
+
+    Used to tell a scanned page of prose from a blank one. Measured from the
+    image rectangles rather than by decoding anything, so it costs nothing and
+    needs no image library — a scan is one raster laid over the whole page, and
+    that is a geometric fact about the PDF.
+    """
+    area = abs(page.rect.get_area())
+    if not area:
+        return 0.0
+    widest = 0.0
+    for image in page.get_images(full=True):
+        for rect in page.get_image_rects(image[0]):
+            widest = max(widest, abs(rect.get_area()) / area)
+    return widest
+
+
 def probe_pdf(path: Path) -> dict[str, Any]:
     """Per-page text census, used to decide whether and how to OCR."""
     try:
@@ -90,6 +132,7 @@ def probe_pdf(path: Path) -> dict[str, Any]:
     try:
         counts = [len(page.get_text("text").strip()) for page in doc]
         image_counts = [len(page.get_images(full=True)) for page in doc]
+        covered = [_raster_coverage(page) for page in doc]
     finally:
         doc.close()
 
@@ -101,18 +144,32 @@ def probe_pdf(path: Path) -> dict[str, Any]:
     without_text = [i + 1 for i, n in enumerate(counts) if n < PAGE_TEXT_THRESHOLD]
     share = len(with_text) / pages
 
-    if share >= DIGITAL_PAGE_SHARE:
-        kind = "digital"
-    elif not with_text:
+    # A page with no text and a raster across most of it is prose nobody can
+    # read yet. A page with no text and no such raster is a blank verso, a
+    # half-title or a plate — there is nothing for OCR to find on it.
+    #
+    # The distinction is what makes the share safe to use. Twelve textual pages
+    # and one scanned page of prose is 0.923, which clears the digital
+    # threshold, so the book was called digital and the one page that needed
+    # OCR never got it: a page of the novel simply absent, and downstream
+    # indistinguishable from a short page.
+    scan_candidates = [i + 1 for i, n in enumerate(counts)
+                       if n < PAGE_TEXT_THRESHOLD
+                       and covered[i] >= SCAN_PAGE_COVERAGE]
+
+    if not with_text:
         kind = "scanned"
-    else:
+    elif scan_candidates or share < DIGITAL_PAGE_SHARE:
         kind = "mixed"
+    else:
+        kind = "digital"
 
     return {
         "pages": pages,
         "kind": kind,
         "pages_with_text": len(with_text),
         "pages_without_text": without_text[:60],
+        "scan_candidates": scan_candidates[:60],
         "text_share": round(share, 3),
         "total_images": sum(image_counts),
         "median_chars_per_page": sorted(counts)[pages // 2],
@@ -490,12 +547,8 @@ def extract(args: argparse.Namespace) -> dict[str, Any]:
 
     # What this extraction was run against, so a later stage can tell whether
     # the book it is reading came from the file and settings it thinks it did.
-    runstate.RunState(out_dir).record("extract", {
-        "source": runstate.file_hash(args.input) if args.input else "",
-        "ocr_lang": str(getattr(args, "ocr_lang", "")),
-        "ocr": str(getattr(args, "ocr", "")),
-        "clean_scan": str(getattr(args, "clean_scan", "")),
-    }, {"book": runstate.source_digest(book)})
+    runstate.RunState(out_dir).record(
+        "extract", ocr_inputs(args), {"book": runstate.source_digest(book)})
 
     report.update({
         "book": str(book_path),
@@ -530,6 +583,18 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
     probe = probe_pdf(source)
     report["probe"] = probe
     read_from = source
+
+    # Whether `cleaned.pdf` and `ocr.pdf` may be believed. They used to be
+    # reused because they *existed*, which is not a claim about what produced
+    # them: a corrected scan dropped in place of the old one, or a different
+    # --ocr-lang, produced a book whose text came from the previous file with
+    # the new file's provenance recorded against it.
+    state = runstate.RunState(out_dir)
+    inputs = ocr_inputs(args)
+    cache_stale, cache_reason = state.is_stale("extract", inputs)
+    reusable = not (cache_stale or args.force_ocr)
+    if cache_stale and state.recorded("extract") is not None:
+        report["cache"] = {"rebuilt": cache_reason}
     #: True only once the text actually being read came out of an OCR pass.
     #: Deriving this from ``report["ocr"]`` was wrong: the *skipped* branch
     #: writes there too, so `--ocr off` claimed `from_ocr` in the book's own
@@ -543,7 +608,7 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
         import scan_clean
         try:
             cleaned_pdf = out_dir / "cleaned.pdf"
-            if cleaned_pdf.exists() and not args.force_ocr:
+            if cleaned_pdf.exists() and reusable:
                 report["clean_scan"] = {"reused": str(cleaned_pdf)}
             else:
                 report["clean_scan"] = scan_clean.clean_pdf(
@@ -559,14 +624,19 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
 
     if probe["kind"] != "digital" and args.ocr != "off":
         ocr_pdf = out_dir / "ocr.pdf"
-        if ocr_pdf.exists() and not args.force_ocr:
+        if ocr_pdf.exists() and reusable:
             report["ocr"] = {"reused": str(ocr_pdf)}
         else:
+            # Written beside the destination and promoted only once it is a
+            # readable PDF. A converter that falls over halfway must not leave
+            # something that the next run's existence check would believe.
+            fresh = ocr_pdf.with_suffix(".pdf.new")
             report["ocr"] = run_ocr(
-                read_from, ocr_pdf, kind=probe["kind"], language=args.ocr_lang,
+                read_from, fresh, kind=probe["kind"], language=args.ocr_lang,
                 deskew=args.deskew, timeout=args.ocr_timeout,
             )
-            report["ocr"]["probe_after"] = probe_pdf(ocr_pdf)
+            report["ocr"]["probe_after"] = probe_pdf(fresh)
+            fresh.replace(ocr_pdf)
         read_from = ocr_pdf
         from_ocr = True
     elif probe["kind"] != "digital":
