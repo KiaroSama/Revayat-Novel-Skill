@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,123 +30,11 @@ from typing import Any
 import bookir as ir
 import glossary as gl
 import segments
-from chunk import HEADER, TRANSLATOR_NOTE, unit_fingerprint
-
-#: A fenced reply. Models wrap their output in one, and the closing fence is not
-#: part of the novel. Taking the slice *between* fences also discards whatever
-#: pleasantry follows the closing one, which is the other half of the same
-#: problem: trailing prose lands inside the last unit.
-FENCE = re.compile(r"^\s*(?:```|~~~)\s*[A-Za-z0-9_+-]*\s*$")
-
-#: :func:`chunk.escape_payload`'s mark on a source line that would otherwise
-#: parse as a header, removed on the way back in.
-ESCAPED_HEADER = re.compile(r"^(\s*)\\(@@\s)")
-
-
-# --------------------------------------------------------------------------- #
-# Reading a reply
-# --------------------------------------------------------------------------- #
-
-def _payload(text: str) -> list[str]:
-    """The lines that are the answer, with any outer code fence removed."""
-    lines = text.splitlines()
-    opening = next((i for i, line in enumerate(lines) if FENCE.match(line)), None)
-    if opening is None:
-        return lines
-    closing = next((i for i in range(opening + 1, len(lines))
-                    if FENCE.match(lines[i])), len(lines))
-    return lines[opening + 1:closing]
-
-
-def read_worksheet(text: str) -> list[dict[str, str]]:
-    """Ordered ``{id, kind, text}``, one entry per ``@@`` header.
-
-    Ordered and typed on purpose. Every check worth making — answered twice,
-    answered as the wrong kind, answered out of order — is a question about the
-    sequence of headers, and a dict keyed by id cannot answer any of them: by
-    the time the dict exists the duplicate has already overwritten its twin and
-    the order is gone.
-    """
-    entries: list[dict[str, str]] = []
-    buffer: list[str] = []
-
-    def flush() -> None:
-        if entries:
-            entries[-1]["text"] = "\n".join(buffer).strip()
-
-    for line in _payload(text):
-        match = HEADER.match(line.strip())
-        if match:
-            flush()
-            entries.append({"id": match.group("id"),
-                            "kind": match.group("kind"), "text": ""})
-            buffer = []
-            continue
-        if not entries:
-            # Scaffolding the model echoed before the first header. It cannot
-            # corrupt a unit, so it is dropped rather than refused — a reply
-            # that restates the instructions is still a good reply.
-            continue
-        stripped = line.strip()
-        if stripped.startswith("<!--") and stripped.endswith("-->"):
-            continue
-        buffer.append(ESCAPED_HEADER.sub(r"\1\2", line))
-    flush()
-    return entries
-
-
-def parse_worksheet(text: str) -> dict[str, str]:
-    """``unit id -> translated text``.
-
-    The flat view, for callers that only want the mapping. A duplicate id
-    resolves to its last occurrence here; :func:`merge` reads the ordered form
-    and refuses it by name instead.
-    """
-    return {entry["id"]: entry["text"] for entry in read_worksheet(text)}
-
-
-def validate_reply(
-    entries: list[dict[str, str]],
-    expected: list[str],
-    kinds: dict[str, str],
-) -> tuple[list[str], set[str]]:
-    """``(problems, unit ids that must not be written)``.
-
-    ``kinds`` may be empty for a manifest written before kinds were recorded;
-    the check is then skipped and the caller says so in its report rather than
-    inventing a kind to compare against.
-    """
-    expected_set = set(expected)
-    problems: list[str] = []
-    rejected: set[str] = set()
-    seen: list[str] = []
-
-    for item in entries:
-        if item["id"] in seen:
-            problems.append(
-                f"{item['id']}: answered more than once — which of the two "
-                f"translations is the paragraph cannot be guessed")
-            rejected.add(item["id"])
-        seen.append(item["id"])
-
-        wanted = kinds.get(item["id"])
-        if wanted and item["kind"] != wanted:
-            problems.append(
-                f"{item['id']}: answered as {item['kind']!r} but asked as "
-                f"{wanted!r}")
-            rejected.add(item["id"])
-
-    first_seen = list(dict.fromkeys(seen))
-    answered_order = [i for i in first_seen if i in expected_set]
-    wanted_order = [i for i in expected if i in set(answered_order)]
-    if answered_order != wanted_order:
-        problems.append(
-            f"headers came back in a different order: {answered_order} "
-            f"against the {wanted_order} the worksheet asked for")
-        rejected |= set(seen)
-
-    return problems, rejected
-
+from chunk import unit_fingerprint
+from worksheet import (  # noqa: F401  (this module's published surface)
+    ESCAPED_HEADER, FENCE, HEADER, TRANSLATOR_NOTE, parse_worksheet,
+    read_reply, read_worksheet, validate_reply,
+)
 
 # --------------------------------------------------------------------------- #
 # Translator notes
@@ -245,9 +132,73 @@ def _resolve_local_tokens(texts: dict[str, str],
     }
 
 
+#: What a translator may call their own note. ``footnote`` is what `SKILL.md` and
+#: the translation policy actually ask for; ``note`` is the obvious near-miss of
+#: that word and is accepted rather than refused, because the intent is
+#: unambiguous and the hazard this check exists for is elsewhere — a note answered
+#: as ``heading1``, ``para`` or ``alt`` would be filed as structure.
+NOTE_KINDS = frozenset(("footnote", "note"))
+
+
+def validate_note_graph(
+    texts: dict[str, str],
+    offered: dict[str, str],
+    kinds: dict[str, str],
+) -> list[str]:
+    """Does this reply's footnote graph resolve? Checked before anything is written.
+
+    Four shapes used to reach the book unchallenged, and each one prints: a marker
+    with no body left a literal ``[[fn:tr-01]]`` in the finished prose, a body with
+    no marker became a note nothing refers to, the same marker twice made ownership
+    unguessable, and ``@@ tr-01 heading1`` was adopted as a footnote on the strength
+    of its id alone.
+
+    They share an omission rather than a cause: notes were committed one reply at a
+    time and nobody asked whether the result made sense as a graph.
+    """
+    problems: list[str] = []
+    used: list[str] = []
+    for text in texts.values():
+        used += [ref for ref in ir.ANY_FOOTNOTE_TOKEN.findall(text or "")
+                 if TRANSLATOR_NOTE.match(ref)]
+
+    for local_id in dict.fromkeys(used):
+        if local_id not in offered:
+            problems.append(
+                f"{local_id}: the translation refers to this note and the reply "
+                f"carries no `@@ {local_id} footnote` body for it — merging would "
+                f"leave the marker itself in the book")
+        if used.count(local_id) > 1:
+            problems.append(
+                f"{local_id}: referred to {used.count(local_id)} times. One note "
+                f"cannot belong to two places, and picking one silently drops the "
+                f"other")
+
+    for local_id in offered:
+        if local_id not in used:
+            problems.append(
+                f"{local_id}: a note body no translation refers to. It would print "
+                f"at the foot of a page with no number pointing at it")
+        kind = kinds.get(local_id)
+        if kind is not None and kind not in NOTE_KINDS:
+            problems.append(
+                f"{local_id}: answered as {kind!r}, which is not a note kind "
+                f"({' or '.join(sorted(NOTE_KINDS))}). Adopting it would file a "
+                f"heading, a paragraph or an alt text as a footnote")
+    return problems
+
+
 def _anchor_notes(book: dict[str, Any], notes: list[dict[str, Any]]) -> None:
-    """Bind each new note to the block whose translation actually refers to it."""
-    wanted = {note["id"]: note for note in notes if not note.get("anchor_block")}
+    """Bind each note this merge touched to the block that now refers to it.
+
+    Every note handed over is re-anchored, not only the ones without an anchor.
+    Skipping the anchored ones is what left a **reused** note claiming the
+    paragraph its marker had moved away from: the note was correctly updated in
+    place, the caller passed only the newly allocated notes, and the stale anchor
+    was never revisited — so the note printed under a paragraph that does not
+    refer to it.
+    """
+    wanted = {note["id"]: note for note in notes}
     if not wanted:
         return
     for block in ir.iter_text_blocks(book):
@@ -342,6 +293,8 @@ def merge(
     accepted: dict[str, str] = {}
     new_notes: list[dict[str, Any]] = []
     retired: set[str] = set()
+    #: Notes this merge created *or* reused, so re-anchoring can see both.
+    touched: list[dict[str, Any]] = []
 
     for entry in chunks:
         if only and entry["id"] not in only:
@@ -405,11 +358,32 @@ def merge(
             # footnote number either, so a corrected reply gets the same one.
             continue
 
+        # The graph is checked against the candidate translation, before any note
+        # is allocated or any text is accepted. A reply whose notes do not resolve
+        # contributes nothing and consumes no footnote number, so a corrected
+        # reply still gets the same one.
+        offered = {item["id"]: item["text"].strip() for item in entries
+                   if item["id"] not in expected_set
+                   and TRANSLATOR_NOTE.match(item["id"])
+                   and item["text"].strip()}
+        note_kinds = {item["id"]: item["kind"] for item in entries
+                      if item["id"] not in expected_set
+                      and TRANSLATOR_NOTE.match(item["id"])}
+        graph = validate_note_graph(answered, offered, note_kinds)
+        if graph:
+            report["malformed"][entry["id"]] = graph
+            continue
+
         chunk_notes, mapping, gone = adopt_translator_notes(
             book, entries, reply=entry["id"], expected=expected_set,
             allocated=new_notes)
         new_notes += chunk_notes
         retired |= gone
+        # Every note this reply touched, reused ones included, so `_anchor_notes`
+        # can move an anchor that followed its marker to another paragraph.
+        touched.extend(
+            note for note in book.get("footnotes", [])
+            if note.get("id") in set(mapping.values()))
         if mapping:
             report.setdefault("translator_notes", {})[entry["id"]] = mapping
         accepted.update(_resolve_local_tokens(answered, mapping))
@@ -426,7 +400,7 @@ def merge(
     # A truncated block is never acceptable, in either mode: writing part of a
     # paragraph over the whole of it loses the rest with nothing to recover from.
     if report["coverage"] or (strict and problems_found):
-        accepted, new_notes, retired = {}, [], set()
+        accepted, new_notes, retired, touched = {}, [], set(), []
 
     if accepted or new_notes or retired:
         book["footnotes"] = [note for note in book.get("footnotes", [])
@@ -438,7 +412,7 @@ def merge(
             # for it, and counting the chunk as merged would be a lie.
             report["unresolved_units"] = sorted(outcome["unknown"])
             report["ok"] = False
-        _anchor_notes(book, new_notes)
+        _anchor_notes(book, new_notes + touched)
 
         # Asking each chunk to introduce a name only where the worksheet says so
         # is a request, and parallel agents that cannot see each other all answer

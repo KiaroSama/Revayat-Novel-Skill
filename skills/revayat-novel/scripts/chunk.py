@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +21,10 @@ import bookir as ir
 import glossary as gl
 import runstate
 import segments
+import worksheet
+from worksheet import (  # noqa: F401  (this module's published surface)
+    HEADER, TRANSLATOR_NOTE, classify, comment, escape_payload,
+)
 
 #: Target source characters per chunk. Small enough for one focused context,
 #: large enough that a scene is not shredded across three agents.
@@ -30,18 +33,6 @@ DEFAULT_BUDGET = 6000
 OVERSHOOT = 0.35
 #: Characters of neighbouring source shown for pronoun/entity resolution.
 CONTEXT_CHARS = 450
-
-#: The worksheet unit header. The id character set has to cover every shape an
-#: id can take: ``b00042`` blocks, ``b00075#alt`` image captions, ``fn0007``
-#: source footnotes and ``tr-01`` notes the translator adds. Omitting the
-#: hyphen did not reject a translator's note — it stopped the header being
-#: recognised at all, so the note's body was silently swallowed into the
-#: previous paragraph and merge still reported success.
-HEADER = re.compile(r"^@@\s+(?P<id>[A-Za-z0-9_#-]+)\s+(?P<kind>[a-z0-9]+)\s*$")
-
-#: A footnote the translator introduced, numbered per chunk. Merge allocates it
-#: a real book-wide id.
-TRANSLATOR_NOTE = re.compile(r"^tr-[A-Za-z0-9_-]+$")
 
 _KIND_BY_TYPE = {
     "paragraph": "para",
@@ -168,24 +159,6 @@ def unit_fingerprint(book: dict[str, Any], ids: list[str]) -> str:
         .encode("utf-8"))
 
 
-def escape_payload(text: str) -> str:
-    """Protect a source line that would otherwise parse as a worksheet header.
-
-    A line of a novel beginning ``@@`` is vanishingly rare, and the damage is
-    silent: the unit ends there and a second unit appears, made of source text,
-    under an id the manifest really does expect. So such a line is emitted with
-    a leading backslash, which ``merge`` removes again.
-
-    If a translator drops the backslash the line comes back as a *duplicate*
-    header and the merge refuses it by name. That is the point of choosing an
-    escape over trusting the shape of the text: the failure mode is loud.
-    """
-    return "\n".join(
-        "\\" + line if HEADER.match(line.strip()) else line
-        for line in text.split("\n")
-    )
-
-
 def render_worksheet(
     book: dict[str, Any],
     glossary: dict[str, Any],
@@ -209,10 +182,11 @@ def render_worksheet(
     source_blob = "\n".join(text for _, _, text in units)
 
     lines: list[str] = [
-        f"<!-- revayat-novel worksheet {index:04d}/{total:04d} "
-        f"| units {len(units)} | {len(source_blob)} source chars -->",
-        "<!-- Reply with the same @@ headers, in the same order, Persian text "
-        "underneath each. Do not add, drop, merge or reorder headers. -->",
+        comment(f"worksheet {index:04d}/{total:04d} | units {len(units)} "
+                f"| {len(source_blob)} source chars"),
+        comment("Reply with the same @@ headers, in the same order, Persian "
+                "text underneath each. Do not add, drop, merge or reorder "
+                "headers."),
         "",
     ]
 
@@ -248,11 +222,10 @@ def render_worksheet(
     for unit_id, kind, text in units:
         block = lookup.get(unit_id.split("#")[0])
         if block is not None and block["type"] == "image":
-            lines.append(
-                f"<!-- illustration {block['asset']} is anchored here; the picture "
+            lines.append(comment(
+                f"illustration {block['asset']} is anchored here; the picture "
                 f"itself needs nothing from you. The alt header below is its "
-                f"caption text and does need translating. -->"
-            )
+                f"caption text and does need translating."))
         lines.append(f"@@ {unit_id} {kind}")
         lines.append(escape_payload(text))
         lines.append("")
@@ -370,6 +343,69 @@ def _refuse_if_translations_would_be_orphaned(
     )
 
 
+def _supersede_stale_answers(out_dir: Path,
+                             manifest: dict[str, Any]) -> list[dict[str, str]]:
+    """Move answers whose question changed out of the way of the next merge.
+
+    The freshness check merge does cannot see this case. It compares the
+    manifest's recorded identity against the book — and `build` writes that
+    manifest *from* that book, so after a rebuild both sides are the same value
+    by construction. It catches "the book moved after the build" and is blind to
+    "this answer was written before the build", which is the one that reverses a
+    sentence's meaning and reports success.
+
+    So the rebuild, which is the only step that knows both revisions, resolves it
+    here: an answer whose worksheet revision changed is **moved**, never deleted,
+    to `superseded/` under a name carrying the revision it answered. Nobody's
+    translation is thrown away to make a gate pass; it simply stops sitting where
+    the next merge would read it as an answer to a question nobody asked it.
+
+    An answer whose id has disappeared entirely — a segmentation change leaving
+    fewer worksheets — is filed the same way. Merge would never look at it again,
+    which makes it silent loss rather than safety.
+    """
+    previous = out_dir / "manifest.json"
+    if not previous.is_file():
+        return []
+    try:
+        old = json.loads(previous.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []        # unreadable: the build is about to replace it anyway
+
+    fresh = {entry["id"]: entry.get("source_sha256") or ""
+             for entry in manifest["chunks"]}
+    filed: list[dict[str, str]] = []
+    for entry in old.get("chunks") or ():
+        answer = out_dir / (entry.get("output") or "")
+        if not entry.get("output") or not answer.is_file():
+            continue
+        if not answer.read_text(encoding="utf-8").strip():
+            continue     # an empty placeholder is not work
+        was = entry.get("source_sha256") or ""
+        now = fresh.get(entry["id"])
+        # No recorded identity on either side is not evidence of sameness, so an
+        # unverifiable pair is filed rather than assumed good.
+        if now is not None and was and now and was == now:
+            continue
+        store = out_dir / "superseded"
+        store.mkdir(parents=True, exist_ok=True)
+        tag = (was.partition(":")[2] or was or "unrecorded")[:12]
+        destination = store / f"{answer.stem}.{tag}{answer.suffix}"
+        index = 2
+        while destination.exists():
+            destination = store / f"{answer.stem}.{tag}-{index}{answer.suffix}"
+            index += 1
+        answer.replace(destination)
+        filed.append({
+            "id": entry["id"],
+            "answered": was or "unrecorded",
+            "kept_at": str(destination.relative_to(out_dir)).replace("\\", "/"),
+            "because": "the worksheet is gone" if now is None
+                       else "the worksheet was cut again from changed input",
+        })
+    return filed
+
+
 def build(
     book_path: Path,
     out_dir: Path,
@@ -465,6 +501,9 @@ def build(
         })
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    superseded = _supersede_stale_answers(out_dir, manifest)
+    if superseded:
+        manifest["superseded"] = superseded
     for name, worksheet in written:
         ir.write_text(out_dir / name, worksheet)
     ir.write_text(out_dir / "manifest.json",
@@ -523,35 +562,19 @@ def _staleness(out_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def _state_of(out_dir: Path, entry: dict[str, Any]) -> str:
-    """How far this one worksheet has got.
+    """How far this one worksheet has got, by the same rules merge applies.
 
-    ``missing`` no file · ``empty`` a blank one · ``malformed`` content that
-    answers none of the units asked for · ``partial`` some of them · ``answered``
-    all of them.
-
-    The reply is *parsed*, because existence is not an answer: any non-blank
-    bytes used to count as a finished worksheet, so a crash log, a refusal from
-    the model or a half-written file all read as done and the job was never
-    offered again.
+    The verdict is :func:`worksheet.classify`, shared with merge, because the two
+    sides disagreeing is the defect. This built a dict of the replies and counted
+    the populated expected ids — and a dict keyed by id has already dropped the
+    duplicate and the order by the time it exists, so a reply merge refuses came
+    back ``answered`` here, ``status`` reported nothing left to do, and the job
+    was never offered again.
     """
     output = out_dir / entry["output"]
-    if not output.exists():
-        return "missing"
-    text = output.read_text(encoding="utf-8")
-    if not text.strip():
-        return "empty"
-
-    # Local import: `merge` imports this module, so the dependency runs one way
-    # at import time. Worth it to keep one worksheet parser — two copies of the
-    # reply format is how the two sides come to disagree about what an answer is.
-    import merge
-
-    answered = {item["id"]: item["text"] for item in merge.read_worksheet(text)}
-    wanted = entry.get("unit_ids") or []
-    present = [u for u in wanted if (answered.get(u) or "").strip()]
-    if not present:
-        return "malformed"
-    return "answered" if len(present) == len(wanted) else "partial"
+    text = output.read_text(encoding="utf-8") if output.exists() else None
+    return classify(text, entry.get("unit_ids") or [],
+                    entry.get("unit_kinds") or {})
 
 
 def status(out_dir: Path) -> dict[str, Any]:
@@ -573,14 +596,21 @@ def status(out_dir: Path) -> dict[str, Any]:
     def listed(*names: str) -> list[str]:
         return [chunk_id for chunk_id in order if states[chunk_id] in names]
 
-    unfinished = listed("missing", "empty", "malformed", "partial")
+    # ``invalid`` belongs here: a reply merge will refuse is work still to do,
+    # and leaving it out is what let ``next`` report nothing outstanding while a
+    # repairable ingestion failure sat on disk. ``nothing-to-translate`` is the
+    # opposite — finished the moment it was cut, and asking for prose it does not
+    # contain is how an invented sentence gets into a book.
+    unfinished = listed("missing", "empty", "malformed", "partial", "invalid")
     return {
         "total": len(order),
-        "translated": len(listed("answered")),
+        "translated": len(listed("answered", worksheet.NOTHING_TO_TRANSLATE)),
         "pending": listed("missing"),
         "empty": listed("empty"),
         "malformed": listed("malformed"),
         "partial": listed("partial"),
+        "invalid": listed("invalid"),
+        "nothing_to_translate": listed(worksheet.NOTHING_TO_TRANSLATE),
         "next": unfinished[0] if unfinished else None,
         **_staleness(out_dir, manifest),
     }

@@ -166,11 +166,30 @@ def test_merge_reports_a_dropped_unit_instead_of_losing_it(translated_book, tmp_
     assert "b99999" in report["unknown_units"][entry["id"]]
 
 
-def test_parse_worksheet_ignores_echoed_comments():
+def test_parse_worksheet_ignores_the_scaffolding_it_wrote_itself():
+    """Our own comments come back echoed and must not reach the book.
+
+    They are recognised by the mark `render_worksheet` puts on them, not by
+    being comment-shaped: this used to drop *every* standalone comment, which
+    deletes a line of the novel that happens to look like one. Identifying
+    scaffolding by "we wrote it" is the only rule that can tell the difference.
+    """
     units = merging.parse_worksheet(
-        "<!-- header -->\n@@ b00001 para\n<!-- note -->\nمتن فارسی\n\n@@ b00002 para\nدوم\n"
+        "<!-- revayat-novel: header -->\n"
+        "@@ b00001 para\n<!-- revayat-novel: note -->\nمتن فارسی\n\n"
+        "@@ b00002 para\nدوم\n"
     )
     assert units == {"b00001": "متن فارسی", "b00002": "دوم"}
+
+
+def test_parse_worksheet_keeps_a_comment_the_book_actually_contains():
+    """The other half, and the reason the rule above is narrow. A comment-shaped
+    line nobody generated is content — HTML in an EPUB, a markup example in a
+    technical passage — and silently deleting it is unrecoverable."""
+    units = merging.parse_worksheet(
+        "@@ b00001 para\n<!-- this belongs to the book -->\nمتن فارسی\n"
+    )
+    assert units == {"b00001": "<!-- this belongs to the book -->\nمتن فارسی"}
 
 
 # --------------------------------------------------------------------------- #

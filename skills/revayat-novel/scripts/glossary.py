@@ -192,6 +192,34 @@ def surface_forms(entry: dict[str, Any]) -> list[str]:
     return [form for form in [entry.get("source"), *entry.get("aliases", [])] if form]
 
 
+def alias_map(entry: dict[str, Any]) -> dict[str, str]:
+    """``source alias -> approved Persian``, however the entry spells it.
+
+    Two parallel lists could not express this. ``aliases`` is stored
+    ``sorted(set(...))`` and ``alias_targets`` was a flat list beside it, so
+    position carried no meaning and nothing in the file said *which* Persian
+    belonged to "Lizzy". The worksheet could therefore only print "keep these
+    distinct" without saying what to keep them as, and the drift check had no way
+    to tell a preserved nickname from an expanded one.
+
+    A mapping is accepted now. A bare list is still read — an older glossary
+    stays valid — but it can only contribute *accepted* forms, not a pairing, and
+    that is exactly the limitation that motivated the change.
+    """
+    targets = entry.get("alias_targets")
+    if isinstance(targets, dict):
+        return {str(k): str(v) for k, v in targets.items() if k and v}
+    return {}
+
+
+def alias_accepted(entry: dict[str, Any]) -> list[str]:
+    """Every approved Persian form for this entry's aliases, mapped or not."""
+    targets = entry.get("alias_targets")
+    if isinstance(targets, dict):
+        return [str(v) for v in targets.values() if v]
+    return [str(form) for form in (targets or ()) if form]
+
+
 def canonical(entry: dict[str, Any]) -> str:
     return (entry.get("later_form") or entry.get("target") or "").strip()
 
@@ -353,6 +381,21 @@ def entries_for_text(glossary: dict[str, Any], text: str, *,
     return hit
 
 
+def _alias_column(entry: dict[str, Any]) -> str:
+    """``Lizzy → لیزی`` where the Persian is approved, the bare alias otherwise.
+
+    The column used to list the English aliases alone, under the heading "keep
+    distinct" — which tells a translator that "Lizzy" must not become "Elizabeth"
+    while never saying what Persian "Lizzy" should be. Left to invent one, each
+    parallel chunk invents a different one, and the drift check then rejects all
+    of them.
+    """
+    mapping = alias_map(entry)
+    shown = [f"{alias} → {mapping[alias]}" if alias in mapping else alias
+             for alias in entry.get("aliases", [])]
+    return "، ".join(shown) or "—"
+
+
 def render_term_table(entries: list[dict[str, Any]], policy: dict[str, Any],
                       *, block_ids: Iterable[str] = ()) -> str:
     """A compact Markdown table for injection into a translation prompt.
@@ -377,7 +420,7 @@ def render_term_table(entries: list[dict[str, Any]], policy: dict[str, Any],
     here = set(block_ids)
 
     lines = [
-        "| English | Aliases (keep distinct) | Use exactly this |",
+        "| English | Aliases — use exactly these | Use exactly this |",
         "| --- | --- | --- |",
     ]
     for entry in sorted(rows, key=lambda e: -int(e.get("frequency", 0))):
@@ -391,7 +434,7 @@ def render_term_table(entries: list[dict[str, Any]], policy: dict[str, Any],
         lines.append(
             "| {source} | {aliases} | {form}{note} |".format(
                 source=entry["source"],
-                aliases="، ".join(entry.get("aliases", [])) or "—",
+                aliases=_alias_column(entry),
                 form=form,
                 note=note,
             )
@@ -568,6 +611,36 @@ def _introduce_in_prose(target: str, later_form: str,
     return None
 
 
+def introduction_owner(entry: dict[str, Any],
+                       blocks: list[dict[str, Any]]) -> str:
+    """Which block should carry this name's original spelling. One answer, asked
+    by the enforcement pass and by the QA gate.
+
+    The scan pins ``first_block_id`` to where the *entity* first appears in the
+    **source** — which may be a block whose Persian is a nickname. The
+    parenthetical attaches to the canonical form, so it cannot go there, and
+    :func:`_place_once` has always fallen back to the first block that actually
+    names her. That fallback is right; the defect was that the gate did not know
+    about it.
+
+    With "Lizzy/لیزی" in block one and "Elizabeth Bennet/الیزابت بنت" in block two,
+    enforcement introduced the name in block two and QA demanded block one, so
+    three identical passes left the same error and no number of re-runs converged.
+    The rule is now stated once, here: **the pinned block if it is eligible,
+    otherwise the first eligible one** — and the nickname is never expanded to
+    make a block eligible.
+    """
+    later_form = canonical(entry)
+    if not later_form:
+        return ""
+    eligible = [block for block in blocks
+                if later_form in (block.get("target") or "")]
+    pinned = entry.get("first_block_id") or ""
+    if any(block["id"] == pinned for block in eligible):
+        return pinned
+    return eligible[0]["id"] if eligible else ""
+
+
 def _place_once(group: list[dict[str, Any]], owner_id: str, later_form: str,
                 first_form: str) -> dict[str, Any] | None:
     """Introduce the name once inside ``group``, the owning block first.
@@ -696,8 +769,37 @@ def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]
                      if re.search(rf"\b{re.escape(f)}\b", source)]
             if not forms:
                 continue
-            accepted = [canonical(entry)]
-            accepted += [a for a in entry.get("alias_targets", []) if a]
+            # Which Persian this block owes depends on which English it used.
+            # The accepted set used to be "canonical plus every alias target"
+            # regardless, so a source block saying "Lizzy" passed on the full
+            # «الیزابت بنت» — the opposite of what `keep_aliases_distinct` asks
+            # for, and a nickname expanded to satisfy a gate is a changed voice.
+            mapping = alias_map(entry)
+            distinct = bool((glossary.get("policy") or {})
+                            .get("keep_aliases_distinct", True))
+            accepted: list[str] = []
+            for form in forms:
+                if form == entry.get("source"):
+                    # The source used the full name, so the canonical is owed.
+                    accepted.append(canonical(entry))
+                    if not distinct:
+                        accepted += alias_accepted(entry)
+                elif form in mapping:
+                    # A paired alias: this is the one case where the glossary
+                    # actually says which Persian this English owes.
+                    accepted.append(mapping[form])
+                    if not distinct:
+                        accepted.append(canonical(entry))
+                else:
+                    # An alias with no pairing — an older glossary's flat list, or
+                    # one nobody has finished. Which form it owes is **unknown**,
+                    # so every approved form is accepted. Guessing strictly here
+                    # would reject a faithful translation on evidence the file
+                    # does not contain, which is why the mapping exists at all.
+                    accepted.append(canonical(entry))
+                    accepted += alias_accepted(entry)
+            if not accepted:
+                accepted = [canonical(entry), *alias_accepted(entry)]
             # Boundary-aware, never substring. «علی» sits inside «علیرضا», a
             # different person, and inside «علی‌اکبر», a different name again —
             # U+200C glues word parts, so a form flanked by one is a fragment of
@@ -716,7 +818,12 @@ def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]
                 "block": block["id"],
                 "entry": entry["id"],
                 "source_forms": forms,
-                "expected": canonical(entry),
+                # What *this* block owes, which is not always the canonical form.
+                # Reporting the canonical where the source used a nickname is how
+                # a reader gets talked into expanding it — the message itself was
+                # asking for the drift the check exists to prevent.
+                "expected": accepted[0] if accepted else canonical(entry),
+                "accepted": sorted(set(accepted)),
                 "excerpt": target_plain[:120],
             })
     return violations

@@ -28,6 +28,7 @@ import shutil
 import string
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -414,6 +415,26 @@ def ocr_environment(env: dict[str, str] | None = None) -> dict[str, str]:
     return environment
 
 
+def _quarantine_stale_staging(out_dir: Path) -> list[str]:
+    """Move aside any staging PDF an earlier attempt left behind.
+
+    A run interrupted between writing `*.pdf.new` and promoting it leaves a valid
+    PDF on disk. It is somebody's OCR output and may be worth recovering by hand,
+    so it is renamed rather than deleted — but it must not be sitting where a
+    later attempt's artefact test could mistake it for that attempt's own work.
+    """
+    moved: list[str] = []
+    for stale in sorted(out_dir.glob("*.pdf.new")):
+        kept = stale.with_suffix(".new.orphaned")
+        index = 2
+        while kept.exists():
+            kept = stale.with_suffix(f".new.orphaned{index}")
+            index += 1
+        stale.replace(kept)
+        moved.append(kept.name)
+    return moved
+
+
 def run_ocr(
     source: Path,
     destination: Path,
@@ -440,6 +461,15 @@ def run_ocr(
         )
 
     destination.parent.mkdir(parents=True, exist_ok=True)
+    # The artefact test below asks whether the destination is a readable PDF that
+    # gained text. That is only evidence about *this* invocation if the file did
+    # not already exist: a run interrupted between writing its staging file and
+    # promoting it leaves a perfectly valid one behind, and the next run — whose
+    # converter failed and produced nothing — then judged that file and promoted
+    # it as its own output. So the destination is cleared first, and a readable
+    # file afterwards can only have come from the command below.
+    if destination.exists():
+        destination.unlink()
     command = ocr_command(launcher, source, destination, kind=kind,
                           language=language, deskew=deskew)
 
@@ -628,15 +658,28 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
             report["ocr"] = {"reused": str(ocr_pdf)}
         else:
             # Written beside the destination and promoted only once it is a
-            # readable PDF. A converter that falls over halfway must not leave
-            # something that the next run's existence check would believe.
-            fresh = ocr_pdf.with_suffix(".pdf.new")
-            report["ocr"] = run_ocr(
-                read_from, fresh, kind=probe["kind"], language=args.ocr_lang,
-                deskew=args.deskew, timeout=args.ocr_timeout,
-            )
-            report["ocr"]["probe_after"] = probe_pdf(fresh)
-            fresh.replace(ocr_pdf)
+            # readable PDF this attempt produced. The name is unique per attempt:
+            # a fixed `ocr.pdf.new` meant an interrupted run left a valid staging
+            # file that the *next* run — converter failed, nothing written — found,
+            # judged usable and promoted as its own output. Same directory, so the
+            # promotion stays an atomic rename on one filesystem.
+            quarantined = _quarantine_stale_staging(out_dir)
+            fresh = out_dir / f"ocr.{os.getpid():d}-{uuid.uuid4().hex[:8]}.pdf.new"
+            try:
+                report["ocr"] = run_ocr(
+                    read_from, fresh, kind=probe["kind"], language=args.ocr_lang,
+                    deskew=args.deskew, timeout=args.ocr_timeout,
+                )
+                report["ocr"]["probe_after"] = probe_pdf(fresh)
+                fresh.replace(ocr_pdf)
+            except BaseException:
+                # An incomplete attempt is kept out of the way rather than left
+                # where a later existence check could believe it.
+                if fresh.exists():
+                    fresh.replace(fresh.with_suffix(".new.failed"))
+                raise
+            if quarantined:
+                report["ocr"]["quarantined"] = quarantined
         read_from = ocr_pdf
         from_ocr = True
     elif probe["kind"] != "digital":

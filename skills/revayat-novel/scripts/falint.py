@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import bookir as ir
+import famorph
 import runstate
 
 ZWNJ = "‌"
@@ -76,16 +77,16 @@ _ZWNJ_PREFIXES = ("می", "نمی")
 _SUFFIX_SPACE = re.compile(
     rf"([{PERSIAN_LETTER}]{{2,}}) +({'|'.join(_ZWNJ_SUFFIXES)})\b"
 )
-#: «می» is the verbal prefix *and* the noun *wine*, so the word after it decides:
-#: joined only when that word can be a finite verb. Every finite می-form ends in
-#: a personal ending (ـم، ـی، ـد، ـیم، ـید، ـند) or, in the third-person past,
-#: in the past stem's own ـد/ـت — so its last letter is always one of م/ی/د/ت.
-#: «ناب» in «می ناب» is not, and nor is any other adjective the noun takes.
-#: ponytail: a last-letter test, not a verb lexicon. It still joins «می» before
-#: a non-verb that happens to end in one of those letters; a stem list is the
-#: upgrade if that ever shows up in a real book.
+#: «می» is the verbal prefix *and* the noun *wine*, so the word after it decides.
+#: This finds the *candidates* only; :mod:`famorph` decides each one, and a join
+#: needs positive evidence that the following word is a finite verb form.
+#:
+#: The rule this replaces tested that word's **last letter**, on the reasoning
+#: that every finite می-form ends in م/ی/د/ت. True, and not sufficient: «سفید» and
+#: «تلخی» do too, so «می سفید نوشید» — *he drank white wine* — came out as
+#: «می‌سفید نوشید». Its own comment named the upgrade, and this is it.
 _PREFIX_SPACE = re.compile(
-    rf"\b({'|'.join(_ZWNJ_PREFIXES)}) +([{PERSIAN_LETTER}]+[میدت])\b"
+    rf"\b({'|'.join(_ZWNJ_PREFIXES)}) +([{PERSIAN_LETTER}]+)\b"
 )
 
 # --- Punctuation --------------------------------------------------------------
@@ -185,8 +186,8 @@ def fix_prose(text: str, options: Options) -> str:
     if options.zwnj:
         # Repeat: "کتاب ها ی" style chains need more than one pass to settle.
         for _ in range(3):
-            replaced = _SUFFIX_SPACE.sub(rf"\1{ZWNJ}\2", masked)
-            replaced = _PREFIX_SPACE.sub(rf"\1{ZWNJ}\2", replaced)
+            replaced = _SUFFIX_SPACE.sub(_join_suffix, masked)
+            replaced = _PREFIX_SPACE.sub(_join_prefix, replaced)
             if replaced == masked:
                 break
             masked = replaced
@@ -243,6 +244,30 @@ def _pair_quotes(spans: list[dict[str, Any]]) -> None:
             span["text"] = span["text"][:index] + mark + span["text"][index + 1:]
 
 
+def _join_prefix(match: re.Match[str]) -> str:
+    """Join «می»/«نمی» to the next word only when that word reads as a verb.
+
+    A word the stem list does not recognise comes back untouched, and
+    :func:`lint_text` reports it — so the uncertainty reaches a reader instead of
+    being settled by guessing. An unjoined prefix is a blemish a proofreader
+    fixes; a wrongly joined one is a different sentence nobody notices.
+    """
+    prefix, word = match.group(1), match.group(2)
+    if famorph.is_verb_form(word):
+        return f"{prefix}{ZWNJ}{word}"
+    return match.group(0)
+
+
+def _join_suffix(match: re.Match[str]) -> str:
+    """Join a suffix to the word before it, except where «تری»/«ترین» is itself
+    the noun — «از تری موهایش» is *from the wetness of her hair*, and a
+    preposition has no comparative."""
+    stem, suffix = match.group(1), match.group(2)
+    if suffix in ("تری", "ترین") and not famorph.takes_comparative(stem):
+        return match.group(0)
+    return f"{stem}{ZWNJ}{suffix}"
+
+
 def fix_text(text: str, options: Options | None = None) -> str:
     """Fix a full marked-up string, leaving markup and verbatim spans alone."""
     if not text:
@@ -292,6 +317,27 @@ def lint_text(text: str) -> list[dict[str, str]]:
 
     if _DOUBLE_PUNCT.search(plain):
         note("double-punctuation", "repeated punctuation mark")
+
+    # Every ambiguous join the fix pass declined, so the uncertainty reaches a
+    # reader rather than being settled by a guess. These are reports, not errors:
+    # «می سفید» is correct Persian and so is «می رفت», and only the sentence says
+    # which «می» this is.
+    undecided = [
+        match.group(0) for match in _PREFIX_SPACE.finditer(plain)
+        if not famorph.is_verb_form(match.group(2))
+    ]
+    for phrase in undecided[:3]:
+        note("zwnj-prefix-undecided",
+             f"«{phrase}»: left as written. «می» is the verb prefix and the noun "
+             f"*wine*, and the following word is not a verb form this pass "
+             f"recognises — joining it would change the sentence")
+
+    for match in _SUFFIX_SPACE.finditer(plain):
+        if match.group(2) in ("تری", "ترین") and not famorph.takes_comparative(
+                match.group(1)):
+            note("zwnj-comparative-undecided",
+                 f"«{match.group(0)}»: left as written. «تری» is also the noun "
+                 f"*wetness*, and «{match.group(1)}» cannot take a comparative")
 
     bare = _BARE_COMPARATIVE.search(plain)
     if bare:
