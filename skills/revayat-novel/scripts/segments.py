@@ -196,6 +196,58 @@ def rejoin(units: dict[str, str]) -> dict[str, str]:
     return whole
 
 
+def segments_by_owner(unit_ids: Iterable[str]) -> dict[str, set[int]]:
+    """``owner -> the segment indices these ids cover``.
+
+    A whole unit contributes nothing: it has no index to cover. So an owner
+    absent from the result is one nobody split.
+    """
+    found: dict[str, set[int]] = {}
+    for unit_id in unit_ids:
+        match = SEGMENT.match(unit_id)
+        if match:
+            found.setdefault(match.group("base"), set()).add(
+                int(match.group("index")))
+    return found
+
+
+def coverage_problems(known: dict[str, set[int]],
+                      answered: Iterable[str]) -> list[str]:
+    """Why these answers may not be written onto their owners yet.
+
+    ``rejoin`` joins whatever parts it is handed, so one part of a two-part
+    paragraph arrives as the entire paragraph and the rest is gone with nothing
+    said. The only thing that knows the paragraph was split is the manifest, so
+    ``known`` must come from **every** chunk in it and not only the chunks being
+    merged: a block split between two worksheets, with one of them selected by
+    ``--only``, has nothing missing from the selected set.
+
+    A gap is refused rather than repaired. Staging the part without touching the
+    owner would also be safe, and is the other half of this contract — the
+    caller decides, this function only says what is incomplete.
+    """
+    answered = list(answered)
+    whole = {unit_id for unit_id in answered if not SEGMENT.match(unit_id)}
+    got = segments_by_owner(answered)
+
+    problems: list[str] = []
+    for owner, indices in sorted(got.items()):
+        expected = known.get(owner, indices)
+        missing = sorted(expected - indices)
+        if missing:
+            problems.append(
+                f"{owner}: segments {sorted(indices)} answered but the "
+                f"manifest splits it into {sorted(expected)}; writing this "
+                f"would replace the block with part of itself "
+                f"(missing {missing})")
+        if owner in whole:
+            problems.append(
+                f"{owner}: answered both as a whole unit and as segments "
+                f"{sorted(indices)}; those are two different claims about what "
+                f"the unit is")
+    return problems
+
+
 def owners(unit_ids: Iterable[str]) -> list[str]:
     """The blocks these units belong to, deduplicated, in order.
 
