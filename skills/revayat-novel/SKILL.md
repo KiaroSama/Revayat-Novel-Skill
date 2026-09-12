@@ -485,8 +485,16 @@ were written.
 
 **Open `renders/source/page-0012.png` and `renders/target/page-0012.png` and
 look at them side by side.** If the Persian ran onto a second sheet there is a
-`page-0012-2.png` beside them; look at that too. Then answer all five, and mean
-it — the command is step 5 of the page loop:
+`page-0012-2.png` beside them; look at that too.
+
+`render-qa` also composes them onto one sheet, `renders/compare/page-0012.png`,
+with the source beside each target sheet at a common height — which is how a
+landscape plate and a portrait translation become comparable at all. It is a
+convenience: the review is bound to the individual renders, not to the sheet, and
+a page that reflowed onto more than three sheets gets no sheet and says why in
+`renders.compare_detail`. Open the individual PNGs when you want full resolution.
+
+Then answer all five, and mean it — the command is step 5 of the page loop:
 
 | Question | What you are looking for |
 | --- | --- |
