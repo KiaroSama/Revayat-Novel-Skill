@@ -93,3 +93,75 @@ def test_the_second_scan_proposes_the_names_the_first_minimum_excluded(tmp_path)
     first = {entry["source"] for entry in gl.load(out)["entries"]}
     gl.main(["scan", "--book", str(book_path), "--out", str(out), "--min-count", "2"])
     assert {entry["source"] for entry in gl.load(out)["entries"]} > first
+
+
+# --------------------------------------------------------------------------- #
+# Compliance
+# --------------------------------------------------------------------------- #
+
+def _one_block(source: str, target: str) -> dict:
+    book = ir.new_book()
+    block = ir.make_block("paragraph", 1, page=1, text=source)
+    block["target"] = target
+    book["blocks"] = [block]
+    return book
+
+
+def _locked(source: str, target: str, **extra) -> dict:
+    glossary = gl.new_glossary()
+    entry = gl.make_entry(1, source, category="person", frequency=5)
+    entry.update({"target": target, "later_form": target,
+                  "first_form": f"{target} ({source})", "locked": True})
+    entry.update(extra)
+    glossary["entries"] = [entry]
+    return glossary
+
+
+def test_a_name_that_is_only_the_start_of_another_is_not_compliant():
+    """«علیرضا» is a different person who happens to begin with «علی».
+
+    Accepting it is the worst kind of pass: the gate exists to catch a name that
+    drifted, and here it certifies the wrong man as the right one.
+    """
+    book = _one_block("Ali said nothing.", "علیرضا چیزی نگفت.")
+    violations = gl.check(_locked("Ali", "علی"), book)
+    assert [v["entry"] for v in violations] == ["g0001"], violations
+
+
+def test_a_zero_width_non_joiner_compound_is_not_compliant():
+    """U+200C glues word parts, so «علی‌اکبر» is one name and it is not «علی»."""
+    book = _one_block("Ali said nothing.", "علی‌اکبر چیزی نگفت.")
+    assert [v["entry"] for v in gl.check(_locked("Ali", "علی"), book)] == ["g0001"]
+
+
+def test_a_standalone_occurrence_is_still_compliant():
+    book = _one_block("Ali said nothing.", "علی چیزی نگفت.")
+    assert gl.check(_locked("Ali", "علی"), book) == []
+
+
+def test_the_first_mention_parenthetical_is_still_compliant():
+    book = _one_block("Ali said nothing.", "علی (Ali) چیزی نگفت.")
+    assert gl.check(_locked("Ali", "علی"), book) == []
+
+
+def test_an_approved_alias_target_is_still_compliant():
+    """The book says only the surname, so the translation may too."""
+    glossary = _locked("John Ashcroft", "جان اشکرافت",
+                       aliases=["Ashcroft"], alias_targets=["اشکرافت"])
+    book = _one_block("Ashcroft arrived late.", "اشکرافت دیر رسید.")
+    assert gl.check(glossary, book) == []
+
+
+def test_two_people_sharing_a_surname_are_not_conflated():
+    """A guard on the fix, not a second defect: boundary awareness must not be
+    bought by accepting any alias of any entry. Naming the other Ashcroft is
+    still drift."""
+    glossary = _locked("Mary Ashcroft", "مری اشکرافت")
+    other = gl.make_entry(2, "John Ashcroft", category="person")
+    other.update({"target": "جان اشکرافت", "later_form": "جان اشکرافت",
+                  "aliases": ["Ashcroft"], "alias_targets": ["اشکرافت"],
+                  "locked": True})
+    glossary["entries"].append(other)
+
+    book = _one_block("Mary Ashcroft left the room.", "جان اشکرافت از اتاق رفت.")
+    assert [v["entry"] for v in gl.check(glossary, book)] == ["g0001"]
