@@ -265,6 +265,7 @@ def render_many(docs: list[Path], out_dir: Path, *,
         # the same isolation the single path uses and for the same measured
         # reason. LibreOffice carries none of Word's COM state between documents,
         # which is why this is the smaller risk of the two backends.
+        wedged = False
         with tempfile.TemporaryDirectory(prefix="revayat-novel-soffice-") as profile:
             try:
                 _run_bounded(
@@ -276,11 +277,18 @@ def render_many(docs: list[Path], out_dir: Path, *,
                     timeout,
                 )
             except subprocess.TimeoutExpired:
-                pass    # whatever landed before the bound is still counted below
+                wedged = True   # whatever landed before the bound still counts
         for docx in docs:
             candidate = out_dir / (docx.stem + ".pdf")
             if candidate.exists():
                 produced[docx] = candidate
+            elif not wedged:
+                # The run completed, so every document was attempted and this one
+                # has no output: that is a failure, not a document nobody reached.
+                # LibreOffice gives no per-document progress, so only the absence
+                # of a timeout lets those two states be told apart — and telling
+                # them apart is the whole point of the third state.
+                failed[docx] = "LibreOffice produced no PDF for it"
         return produced, failed, chosen
 
     command = [sys.executable, str(Path(__file__).resolve()), "--batch",
