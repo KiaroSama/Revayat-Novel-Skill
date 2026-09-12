@@ -367,7 +367,13 @@ def render_term_table(entries: list[dict[str, Any]], policy: dict[str, Any],
     rows = [entry for entry in entries if canonical(entry)]
     if not rows:
         return ""
-    parenthetical = policy.get("original_parenthetical", "first_mention")
+    # Under `first_per_chapter` a worksheet cannot be told the whole truth from
+    # here: which chapter a block belongs to is a property of the book, and this
+    # has only the chunk's block ids. So it asks the chunk that owns the
+    # book-wide first mention, exactly as for `first_mention`, and the
+    # enforcement pass adds the remaining chapters once every chunk is back —
+    # which is the division of labour this module is built on anyway.
+    parenthetical = parenthetical_policy(policy)
     here = set(block_ids)
 
     lines = [
@@ -453,6 +459,66 @@ def standalone_spans(text: str, needle: str) -> list[tuple[int, int]]:
     return spans
 
 
+#: The values ``policy.original_parenthetical`` may take. They place the
+#: original spelling in different numbers of places, so they are not
+#: interchangeable and an unknown one cannot be guessed.
+PARENTHETICAL_POLICIES = ("first_mention", "first_per_chapter", "never")
+
+
+def parenthetical_policy(policy: dict[str, Any]) -> str:
+    """The validated ``original_parenthetical`` value.
+
+    An unrecognised value is refused rather than quietly read as
+    ``first_mention``. Silently falling back is the worst of the three
+    behaviours: it rewrites the book to a policy nobody chose, and the gate then
+    agrees with it, so there is nothing left to notice the mistake.
+    """
+    value = (policy or {}).get("original_parenthetical", "first_mention")
+    if value not in PARENTHETICAL_POLICIES:
+        raise ValueError(
+            f"unknown original_parenthetical policy {value!r}; expected one of "
+            f"{', '.join(PARENTHETICAL_POLICIES)}"
+        )
+    return value
+
+
+def chapters_by_block(book: dict[str, Any]) -> dict[str, str]:
+    """Block id -> the id of the heading that opens its chapter.
+
+    :func:`bookir.chapter_key` is what this project means by "a new chapter
+    starts here", and the same answer has to serve the enforcement pass and the
+    gate or they will disagree about how many introductions a book should have.
+    Whatever precedes the first heading is a section of its own, keyed
+    ``front``: a name introduced in a preface is introduced again in chapter one,
+    which is what a reader who skipped the preface needs.
+    """
+    chapters: dict[str, str] = {}
+    current = "front"
+    for block in book.get("blocks", []):
+        if ir.chapter_key(block):
+            current = block["id"]
+        chapters[block["id"]] = current
+    return chapters
+
+
+def mentioned_in_prose(target: str, form: str) -> bool:
+    """True when ``form`` stands alone somewhere a rewrite is allowed to touch.
+
+    The gate and the rewrite must mean the same thing by "this names her". A
+    name that occurs only inside a verbatim span or a URL is not a place an
+    introduction can go, so it must not be a place the gate demands one.
+    """
+    if not form:
+        return False
+    for span in ir.parse_markup(target):
+        if span["verbatim"] or span["footnote"]:
+            continue
+        masked, _keep = falint.mask_literals(span["text"])
+        if standalone_spans(masked, form):
+            return True
+    return False
+
+
 def _flatten_in_prose(target: str, first_form: str,
                       later_form: str) -> tuple[str, int]:
     """Long form down to short form, in prose spans only.
@@ -502,6 +568,27 @@ def _introduce_in_prose(target: str, later_form: str,
     return None
 
 
+def _place_once(group: list[dict[str, Any]], owner_id: str, later_form: str,
+                first_form: str) -> dict[str, Any] | None:
+    """Introduce the name once inside ``group``, the owning block first.
+
+    Falling back to the first block of the group that actually names her keeps a
+    book usable when the owning block was cut or never translated. Returns the
+    block it landed in, or ``None`` when the name stands alone nowhere here.
+    """
+    pinned = next((block for block in group if block["id"] == owner_id), None)
+    for block in ([pinned] if pinned else []) + group:
+        # The cheap test first: parsing every block's markup for every entry is
+        # the one place this pass could get expensive.
+        if later_form not in (block.get("target") or ""):
+            continue
+        rewritten = _introduce_in_prose(block["target"], later_form, first_form)
+        if rewritten is not None:
+            block["target"] = rewritten
+            return block
+    return None
+
+
 def enforce_first_mentions(glossary: dict[str, Any],
                            book: dict[str, Any]) -> dict[str, Any]:
     """Give each locked name its original spelling once, where it belongs.
@@ -518,20 +605,31 @@ def enforce_first_mentions(glossary: dict[str, Any],
     standalone occurrence inside the block the glossary scan already chose. Run
     it twice and the second run changes nothing.
 
+    ``first_per_chapter`` changes only how many places "once" means: the same
+    placement runs inside every chapter that names her, because a reader who
+    opens at chapter nine never saw chapter one's parenthetical. ``never``
+    flattens and places nothing.
+
     Aliases are left alone. When a book gives a character a nickname with its
     own spelling, that is a translation decision, not a drift to normalise —
     ``policy.keep_aliases_distinct`` says so explicitly.
     """
-    policy = (glossary.get("policy") or {}).get("original_parenthetical", "first_mention")
+    policy = parenthetical_policy(glossary.get("policy") or {})
     report: dict[str, Any] = {"policy": policy, "introduced": {}, "flattened": 0,
                               "unplaceable": [], "skipped": 0}
-    if policy == "never":
-        # Then the introduction is not wanted anywhere, and flattening is the
-        # whole job.
-        pass
 
     blocks = [b for b in ir.iter_text_blocks(book)]
-    by_id = {b["id"]: b for b in blocks}
+
+    if policy == "first_per_chapter":
+        chapters = chapters_by_block(book)
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for block in blocks:
+            grouped.setdefault(chapters.get(block["id"], "front"), []).append(block)
+        # Insertion order is reading order, so the first chapter is placed first
+        # and `introduced` names the earliest block for each entry.
+        groups = list(grouped.values())
+    else:
+        groups = [blocks]
 
     for entry in glossary.get("entries", []):
         first_form = (entry.get("first_form") or "").strip()
@@ -557,31 +655,17 @@ def enforce_first_mentions(glossary: dict[str, Any],
         if policy == "never":
             continue
 
-        # 2. Re-introduce once, in the block the scan chose. Falling back to the
-        #    first block that actually mentions the name keeps a book usable
-        #    when the owning block was cut or never translated.
+        # 2. Re-introduce once per group: the whole book, or each chapter.
+        key = entry.get("id") or entry.get("source")
         owner_id = entry.get("first_block_id") or ""
-        owner = by_id.get(owner_id)
-        rewritten = _introduce_in_prose(
-            owner.get("target") or "", later_form, first_form) if owner else None
-        if rewritten is None:
-            owner = None
-            for block in blocks:
-                # The cheap test first: parsing every block's markup for every
-                # entry is the one place this pass could get expensive.
-                if later_form not in (block.get("target") or ""):
-                    continue
-                rewritten = _introduce_in_prose(
-                    block["target"], later_form, first_form)
-                if rewritten is not None:
-                    owner = block
-                    break
-        if owner is None or rewritten is None:
-            report["unplaceable"].append(entry.get("id") or entry.get("source"))
-            continue
-
-        owner["target"] = rewritten
-        report["introduced"][entry.get("id") or entry.get("source")] = owner["id"]
+        placed = False
+        for group in groups:
+            landed = _place_once(group, owner_id, later_form, first_form)
+            if landed is not None:
+                placed = True
+                report["introduced"].setdefault(key, landed["id"])
+        if not placed:
+            report["unplaceable"].append(key)
 
     return report
 

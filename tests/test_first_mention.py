@@ -15,6 +15,8 @@ outside: flatten every introduction, then re-introduce exactly one.
 from __future__ import annotations
 
 
+import pytest
+
 import bookir as ir
 import glossary as gl
 import qa
@@ -232,6 +234,105 @@ def test_a_name_split_across_two_styled_spans_is_left_alone():
     report = gl.enforce_first_mentions(_glossary(first_block_id="b00001"), book)
     assert _targets(book) == ["**الیزابت** بنت را دید."]
     assert report["unplaceable"] == ["g0001"]
+
+
+# --------------------------------------------------------------------------- #
+# One introduction per chapter
+# --------------------------------------------------------------------------- #
+
+def _chaptered(chapters: list[list[str]]) -> dict:
+    """A heading then its paragraphs, per chapter — what ``ir.chapter_key`` reads."""
+    book = ir.new_book()
+    blocks: list[dict] = []
+    for number, targets in enumerate(chapters, start=1):
+        heading = ir.make_block("heading", len(blocks) + 1, page=1,
+                                text=f"Chapter {number}", level=1)
+        heading["target"] = f"فصل {number}"
+        blocks.append(heading)
+        for target in targets:
+            block = ir.make_block("paragraph", len(blocks) + 1, page=1,
+                                  text="Source sentence mentioning her.")
+            block["target"] = target
+            blocks.append(block)
+    book["blocks"] = blocks
+    return book
+
+
+def _paragraphs(book) -> list[str]:
+    return [b["target"] for b in book["blocks"] if b["type"] == "paragraph"]
+
+
+def _per_chapter(first_block_id="b00002") -> dict:
+    return _glossary(first_block_id=first_block_id, policy="first_per_chapter")
+
+
+def test_first_per_chapter_introduces_the_name_in_each_chapter():
+    """The whole point of the policy, and what it did not do.
+
+    A reader who opens at chapter nine has not seen chapter one's parenthetical,
+    which is the reason to choose this policy over the book-wide one.
+    """
+    book = _chaptered([[f"او {ELIZABETH} را دید."], [f"باز {ELIZABETH} آمد."]])
+    gl.enforce_first_mentions(_per_chapter(), book)
+    assert _paragraphs(book) == [f"او {INTRODUCED} را دید.", f"باز {INTRODUCED} آمد."]
+
+
+def test_first_per_chapter_still_introduces_it_only_once_inside_a_chapter():
+    book = _chaptered([[f"او {INTRODUCED} را دید.", f"سپس {INTRODUCED} برخاست."],
+                       [f"باز {ELIZABETH} آمد."]])
+    gl.enforce_first_mentions(_per_chapter(), book)
+    assert _paragraphs(book) == [f"او {INTRODUCED} را دید.",
+                                 f"سپس {ELIZABETH} برخاست.",
+                                 f"باز {INTRODUCED} آمد."]
+
+
+def test_first_per_chapter_skips_a_chapter_that_never_names_her():
+    book = _chaptered([[f"او {ELIZABETH} را دید."], ["هیچ نامی در این فصل نیست."]])
+    gl.enforce_first_mentions(_per_chapter(), book)
+    assert _paragraphs(book) == [f"او {INTRODUCED} را دید.",
+                                 "هیچ نامی در این فصل نیست."]
+
+
+def test_first_per_chapter_is_idempotent():
+    book = _chaptered([[f"او {ELIZABETH} را دید."], [f"باز {INTRODUCED} آمد."]])
+    glossary = _per_chapter()
+    gl.enforce_first_mentions(glossary, book)
+    once = _paragraphs(book)
+    gl.enforce_first_mentions(glossary, book)
+    assert _paragraphs(book) == once
+
+
+def test_qa_accepts_one_introduction_in_each_chapter():
+    """Enforcement and the gate have to agree, or one of them is wrong."""
+    book = _chaptered([[f"او {ELIZABETH} را دید."], [f"باز {ELIZABETH} آمد."]])
+    glossary = _per_chapter()
+    gl.enforce_first_mentions(glossary, book)
+    codes = _codes(book, glossary)
+    assert not any(code.startswith("first-mention") for code in codes), codes
+
+
+def test_qa_rejects_two_introductions_inside_one_chapter():
+    book = _chaptered([[f"او {INTRODUCED} را دید.", f"سپس {INTRODUCED} برخاست."],
+                       [f"باز {INTRODUCED} آمد."]])
+    assert _codes(book, _per_chapter()).get("first-mention-repeated") == qa.ERROR
+
+
+def test_qa_rejects_a_chapter_that_names_her_without_introducing_her():
+    book = _chaptered([[f"او {INTRODUCED} را دید."], [f"باز {ELIZABETH} آمد."]])
+    assert _codes(book, _per_chapter()).get("first-mention-missing") == qa.ERROR
+
+
+def test_an_unsupported_policy_is_refused_not_guessed():
+    """Silently reading it as book-wide produces a book nobody asked for, and a
+    gate that agrees with it."""
+    book = _chaptered([[f"او {ELIZABETH} را دید."], [f"باز {ELIZABETH} آمد."]])
+    glossary = _glossary(first_block_id="b00002", policy="per_page")
+
+    before = _paragraphs(book)
+    with pytest.raises(ValueError, match="per_page"):
+        gl.enforce_first_mentions(glossary, book)
+    assert _paragraphs(book) == before, "nothing may be rewritten under a bad policy"
+    assert _codes(book, glossary).get("glossary-policy") == qa.ERROR
 
 
 # --------------------------------------------------------------------------- #
