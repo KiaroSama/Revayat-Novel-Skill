@@ -107,9 +107,16 @@ def _work(tmp_path: Path, *, paragraphs: int = 6) -> tuple[Path, Path]:
 
 
 def _translate_everything(chunks: Path, manifest: dict) -> None:
+    """A well-formed reply: the manifest's own ids, order and kinds.
+
+    The kind matters. Merge checks it against what the worksheet asked, because
+    a heading answered as a paragraph is how a chapter title becomes body text.
+    """
     for entry in manifest["chunks"]:
+        kinds = entry["unit_kinds"]
         ir.write_text(chunks / entry["output"],
-                      "\n".join(f"@@ {u} x\nمتن\n" for u in entry["unit_ids"]))
+                      "\n".join(f"@@ {u} {kinds[u]}\nمتن\n"
+                                for u in entry["unit_ids"]))
 
 
 def _edit(book_path: Path) -> None:
@@ -335,6 +342,112 @@ def test_the_glossary_is_keyed_on_the_source_side_so_merge_cannot_stale_it():
     assert runstate.source_digest(book) != before, (
         "re-extracting with different text did not change the digest"
     )
+
+
+def test_a_translator_note_does_not_change_the_source_digest():
+    """The same bug as above, one step further in.
+
+    A translator's footnote is written *by* merge, so counting it as source makes
+    the digest move on a successful merge — and the next ``chunk build`` refuses
+    over a book whose source text never moved. Measured as a real
+    ``build -> merge -> build`` false refusal before this was separated.
+    """
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, page=1, text="Ali arrived.")]
+    book["footnotes"] = [
+        ir.make_footnote(1, anchor_block="b00001", text="A source note.")
+    ]
+    before = runstate.source_digest(book)
+
+    note = ir.make_footnote(2, anchor_block="b00001", text="مترجم گفت.",
+                            origin="translator")
+    book["footnotes"].append(note)
+
+    assert runstate.source_digest(book) == before, (
+        "a note merge itself wrote was counted as source")
+
+
+def test_translating_a_source_footnote_does_not_change_the_source_digest():
+    """Its source text is identity; its translation is not."""
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, page=1, text="Ali arrived.")]
+    book["footnotes"] = [
+        ir.make_footnote(1, anchor_block="b00001", text="A source note.")
+    ]
+    before = runstate.source_digest(book)
+
+    book["footnotes"][0]["target"] = "یادداشت منبع."
+    assert runstate.source_digest(book) == before
+
+    book["footnotes"][0]["text"] = "A different source note."
+    assert runstate.source_digest(book) != before, (
+        "re-extracting a footnote with different text did not move the digest")
+
+
+def test_a_record_from_an_older_digest_does_not_refuse_a_rebuild(tmp_path):
+    """Correcting the formula must not read as "the book changed".
+
+    The refusal this avoids is the expensive one: a working directory holding
+    real translations, told it cannot be rebuilt, over a digest definition that
+    moved underneath it rather than any text the author wrote.
+    """
+    book_path, chunks = _work(tmp_path)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    _translate_everything(chunks, manifest)
+
+    # Forge the record the previous definition would have written: the same
+    # shape, without the version stamp.
+    state_path = runstate.RunState(tmp_path).path
+    data = json.loads(state_path.read_text(encoding="utf-8"))
+    recorded = data["stages"]["chunk"]["inputs"]
+    recorded["book"] = recorded["book"].split(":", 1)[1]
+    assert not recorded["book"].startswith(runstate.DIGEST_VERSION + ":")
+    ir.write_text(state_path,
+                  json.dumps(data, ensure_ascii=False, indent=1) + "\n")
+
+    # Rebuilds instead of raising StaleWorksheets.
+    chunking.build(book_path, chunks, glossary_path=None, budget=400)
+
+
+def test_a_recorded_digest_that_really_moved_still_refuses(tmp_path):
+    """The positive control: the refusal must still fire on a real change."""
+    book_path, chunks = _work(tmp_path)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    _translate_everything(chunks, manifest)
+    _edit(book_path)
+
+    with pytest.raises(chunking.StaleWorksheets):
+        chunking.build(book_path, chunks, glossary_path=None, budget=400)
+
+
+def test_editing_a_translatable_running_head_changes_the_source_digest():
+    """A running head is a unit a worksheet is cut from, so it is identity too.
+
+    It was invisible to the digest, which is the other direction of the same
+    defect: a real source change that the staleness check could not see.
+    """
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, page=1, text="Ali arrived.")]
+    book["sections"] = [{
+        "index": 0,
+        "start_block": "b00001",
+        "headers": {"default": {"paragraphs": [{"pieces": [
+            {"id": "s0h0", "text": "PRIDE AND PREJUDICE", "target": None},
+        ]}]}},
+    }]
+    before = runstate.source_digest(book)
+
+    heads = ir.running_heads(book)
+    assert heads, "the fixture must offer a running head to be a valid test"
+    piece = next(iter(heads.values()))
+
+    piece["target"] = "غرور و تعصب"
+    assert runstate.source_digest(book) == before, (
+        "translating a running head moved the source digest")
+
+    piece["text"] = "SENSE AND SENSIBILITY"
+    assert runstate.source_digest(book) != before, (
+        "editing a translatable running head did not move the source digest")
 
 
 def test_the_build_records_the_document_it_produced(translated_book, tmp_path):

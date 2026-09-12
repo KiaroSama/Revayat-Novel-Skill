@@ -143,6 +143,42 @@ def translatable_units(book: dict[str, Any], ids: list[str]) -> list[tuple[str, 
     return units
 
 
+def unit_fingerprint(book: dict[str, Any], ids: list[str]) -> str:
+    """Identity of the source a worksheet for ``ids`` is cut from.
+
+    One definition, recorded by :func:`build` and re-checked by ``merge``. Two
+    copies of this formula would drift, and the direction it drifts in is
+    "merge believes a stale reply is fresh" — so it lives here, once, and both
+    sides call it.
+
+    Source text only. A translation, a translator's footnote or an accepted page
+    must not change it, or every successful merge would report the worksheets it
+    came from as stale.
+    """
+    units = translatable_units(book, ids)
+    return ir.sha256_bytes(
+        "\n".join(f"{unit_id}\x00{text}" for unit_id, _, text in units)
+        .encode("utf-8"))
+
+
+def escape_payload(text: str) -> str:
+    """Protect a source line that would otherwise parse as a worksheet header.
+
+    A line of a novel beginning ``@@`` is vanishingly rare, and the damage is
+    silent: the unit ends there and a second unit appears, made of source text,
+    under an id the manifest really does expect. So such a line is emitted with
+    a leading backslash, which ``merge`` removes again.
+
+    If a translator drops the backslash the line comes back as a *duplicate*
+    header and the merge refuses it by name. That is the point of choosing an
+    escape over trusting the shape of the text: the failure mode is loud.
+    """
+    return "\n".join(
+        "\\" + line if HEADER.match(line.strip()) else line
+        for line in text.split("\n")
+    )
+
+
 def render_worksheet(
     book: dict[str, Any],
     glossary: dict[str, Any],
@@ -193,7 +229,7 @@ def render_worksheet(
                 f"caption text and does need translating. -->"
             )
         lines.append(f"@@ {unit_id} {kind}")
-        lines.append(text)
+        lines.append(escape_payload(text))
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
@@ -264,8 +300,18 @@ def _refuse_if_translations_would_be_orphaned(
     has to behave exactly as it always did — a first run must never be blocked
     by bookkeeping that does not exist yet.
     """
-    if state.recorded("chunk") is None or not (out_dir / "manifest.json").exists():
+    recorded = state.recorded("chunk")
+    if recorded is None or not (out_dir / "manifest.json").exists():
         return
+
+    was = str((recorded.get("inputs") or {}).get("book") or "")
+    if was and not was.startswith(f"{runstate.DIGEST_VERSION}:"):
+        # Recorded by an older definition of the source digest, so the two
+        # values cannot be compared. An incomparable record is not evidence the
+        # book moved, and refusing on it would strand real translations over a
+        # corrected formula.
+        return
+
     stale, reason = state.is_stale("chunk", inputs)
     if not stale:
         return
@@ -331,13 +377,15 @@ def build(
             "output": f"out_chunk{index:04d}.md",
             "block_ids": ids,
             "unit_ids": [unit_id for unit_id, _, _ in units],
+            # The kind is part of the question, so it has to be part of the
+            # record: a heading answered as a paragraph is how a chapter title
+            # becomes body text, and without this merge cannot tell.
+            "unit_kinds": {unit_id: kind for unit_id, kind, _ in units},
             "units": len(units),
             "source_chars": sum(len(text) for _, _, text in units),
             # Identity of the source this worksheet was built from, so a later
             # run can tell "already translated" from "source changed".
-            "source_sha256": ir.sha256_bytes(
-                "\n".join(f"{i}\x00{t}" for i, _, t in units).encode("utf-8")
-            ),
+            "source_sha256": unit_fingerprint(book, ids),
         })
 
     ir.write_text(out_dir / "manifest.json",

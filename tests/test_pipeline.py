@@ -131,7 +131,8 @@ def test_worksheet_round_trip_including_image_captions(translated_book, tmp_path
 
     for entry in manifest["chunks"]:
         body = "\n".join(
-            f"@@ {unit_id} x\nترجمهٔ {unit_id}\n" for unit_id in entry["unit_ids"]
+            f"@@ {unit_id} {entry['unit_kinds'][unit_id]}\nترجمهٔ {unit_id}\n"
+            for unit_id in entry["unit_ids"]
         )
         (chunks / entry["output"]).write_text(body, encoding="utf-8", newline="")
 
