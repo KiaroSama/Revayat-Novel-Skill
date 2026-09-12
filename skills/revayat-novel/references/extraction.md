@@ -116,6 +116,16 @@ corrected scan, or change the OCR language, and both are rebuilt; they used to b
 reused merely because they existed, which attached the new file's provenance to
 the old file's text. `--force-ocr` still overrides the cache.
 
+Each OCR attempt writes to its **own** staging file beside the destination and is
+promoted only once it is a readable PDF *that attempt produced*. The destination is
+cleared before the converter starts, so a readable file afterwards can only have come
+from it. A fixed staging name let an interrupted run leave a valid PDF that the next
+attempt — converter failed, nothing written — judged and promoted as its own output,
+certifying old bytes as new-source OCR. A staging file from an earlier run is
+**quarantined** as `*.new.orphaned` rather than deleted, and a failed attempt's own
+becomes `*.new.failed`: that is somebody's OCR output, it simply must not sit where an
+artefact test can mistake it for this run's.
+
 ## Colour watermarks on a scan
 
 A scanned book is one raster per page, so a watermark is burned into the pixels:
