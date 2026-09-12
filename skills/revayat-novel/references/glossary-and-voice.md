@@ -75,8 +75,23 @@ distinction matters:
 
 ```json
 "aliases": ["Lizzy"],
-"alias_targets": ["لیزی"]
+"alias_targets": {"Lizzy": "لیزی"}
 ```
+
+**A mapping, not a list.** Two parallel arrays could not say which Persian belonged
+to which English — `aliases` is stored sorted, so position carried no meaning — and
+that pairing is the whole point: the term table prints `Lizzy → لیزی` so a translator
+is told what to use, and with `keep_aliases_distinct` on, answering a source
+«Lizzy» with the full canonical name is reported as drift. A bare list still loads
+for an older glossary, but it can only mark forms *acceptable*, which is exactly the
+looseness the mapping removes.
+
+The original spelling is introduced where the **canonical** form first appears: the
+scan pins the block where the entity first appears in the source, which may be a
+block whose Persian is a nickname, and the parenthetical attaches to the canonical
+form. The rule — pinned block if eligible, otherwise the first eligible one — is
+used by the enforcement pass and the QA gate alike, and a nickname is never expanded
+to make a block eligible.
 
 `scan` folds single-word forms into a longer name automatically — `Elizabeth`
 becomes an alias of `Elizabeth Bennet` rather than competing with it as a

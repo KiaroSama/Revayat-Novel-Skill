@@ -42,13 +42,15 @@ tests/              pytest; fixtures are generated, never committed
 | `ocr_sidecar.py` | per-word OCR confidence and boxes |
 | `scan_clean.py` | removing a colour watermark from a scan |
 | `glossary.py` | name candidates, term tables, drift checking |
-| `chunk.py` | worksheets by character budget; owns the `@@` header format |
+| `chunk.py` | worksheets by character budget, and superseding an answer whose worksheet was re-cut |
+| `worksheet.py` | the transport: the `@@` grammar, the escape, the reader, and **one** verdict on a reply that merge and status both ask |
 | `pagerun.py` | the page lifecycle: one job per source page, and the gates a page must clear |
 | `pagecli.py` | the `pages` command line; `pagerun.main` forwards here |
 | `sourcepages.py` | the source PDF as an artefact: a page's visual identity, one file per page |
 | `segments.py` | one unit longer than the whole budget, cut reversibly; and grouping units into worksheets that fit, for both routes |
 | `merge.py` | worksheets back into the IR, as one transaction, with named failures |
 | `falint.py` | Persian typography lint and fix |
+| `famorph.py` | whether a Persian space may become a ZWNJ: verb-form and comparative evidence |
 | `qa.py` | deterministic gates over the IR and over the built package |
 | `preview.py` | one source page laid out alone, with the production builder |
 | `pagecheck.py` | the measurements both render scopes share |
@@ -79,9 +81,13 @@ tests/              pytest; fixtures are generated, never committed
    character.
 6. **Write files with `ir.write_text`.** It is atomic and uses `newline=""`, so
    files do not silently become CRLF on Windows.
-7. **A worksheet id must round-trip.** If `chunk.py` offers `@@ b00042#alt`,
-   `merge.py` must accept it — the `#` in `HEADER` is deliberate, and the
-   regression is covered.
+7. **A worksheet id must round-trip.** If a worksheet offers `@@ b00042#alt`,
+   merge must accept it — the `#` in `HEADER` is deliberate, and the regression is
+   covered. The grammar lives in `worksheet.py` precisely so there is one of it:
+   `chunk` owned the header and the escape while `merge` owned the fence, the
+   reader and the validator, and every disagreement between the two sides came
+   from that split — a reply status called finished and merge refused, an escape
+   written one way and stripped another.
 8. **A merge that reports failure changes nothing.** `merge` validates the whole
    selected transaction and commits once; `"ok": false` means `book.json` is
    byte-identical. `--lenient` skips the worksheets that do not validate, it does
