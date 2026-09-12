@@ -46,8 +46,8 @@ tests/              pytest; fixtures are generated, never committed
 | `pagerun.py` | the page lifecycle: one job per source page, and the gates a page must clear |
 | `pagecli.py` | the `pages` command line; `pagerun.main` forwards here |
 | `sourcepages.py` | the source PDF as an artefact: a page's visual identity, one file per page |
-| `segments.py` | one unit longer than the whole budget, cut reversibly |
-| `merge.py` | worksheets back into the IR, with named failures |
+| `segments.py` | one unit longer than the whole budget, cut reversibly; and grouping units into worksheets that fit, for both routes |
+| `merge.py` | worksheets back into the IR, as one transaction, with named failures |
 | `falint.py` | Persian typography lint and fix |
 | `qa.py` | deterministic gates over the IR and over the built package |
 | `preview.py` | one source page laid out alone, with the production builder |
@@ -82,6 +82,17 @@ tests/              pytest; fixtures are generated, never committed
 7. **A worksheet id must round-trip.** If `chunk.py` offers `@@ b00042#alt`,
    `merge.py` must accept it — the `#` in `HEADER` is deliberate, and the
    regression is covered.
+8. **A merge that reports failure changes nothing.** `merge` validates the whole
+   selected transaction and commits once; `"ok": false` means `book.json` is
+   byte-identical. `--lenient` skips the worksheets that do not validate, it does
+   not write half of one.
+9. **One formula per named value, or tag it.** Three bugs here came from two
+   modules computing the same key differently — the footnote id rule, the
+   manifest's `source_sha256` (chunk route vs page route), and a page record's
+   `translation` hash (worksheet answers vs laid-out text). Share the function
+   where you can; where a cycle prevents it, prefix the value with the formula
+   that produced it (`units:`, `page:`) and check only the form you can
+   recompute. See `.ai/LESSON.md`.
 
 ## Working on it
 

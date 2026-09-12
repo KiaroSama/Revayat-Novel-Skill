@@ -87,6 +87,35 @@ present is one the `ocr-sidecar` stage will find — see `troubleshooting.md`.
 text layer. Say so explicitly to the user — a book that comes back suspiciously
 short is usually this.
 
+## One scanned page in an otherwise digital book
+
+The page census does not decide on the share of pages with text alone. Twelve
+textual pages and one scanned page of prose is 0.923, which clears the digital
+threshold — and the digital route does no OCR, so that page contributed nothing
+and the book was short by a page with nothing said about it.
+
+So a page with no text is also asked whether it *looks like* a scan: whether one
+image covers at least half of it. That distinction is what makes the share safe
+to use, because the alternative — treating any textless page as a scan — would
+send a book through OCR because of a blank verso.
+
+- a page with no text and a page-sized raster is **prose nobody can read yet**,
+  and it appears in `probe.scan_candidates`
+- a page with no text and no such raster is a blank leaf, a half-title or a
+  plate, and there is nothing on it for OCR to find
+
+Any scan candidate makes the book `mixed`, which runs OCR with `--skip-text`: the
+pages that already have a text layer keep their accurate characters and only the
+scan is recognised. Deskewing stays off for a mixed book, because it rewrites the
+page raster and would damage the good pages.
+
+`cleaned.pdf` and `ocr.pdf` are reused between runs, but only when the inputs
+that produced them are unchanged — the source file's hash, `--ocr`, `--ocr-lang`,
+`--deskew`, `--clean-scan` and `--ghost-threshold`. Replace the source with a
+corrected scan, or change the OCR language, and both are rebuilt; they used to be
+reused merely because they existed, which attached the new file's provenance to
+the old file's text. `--force-ocr` still overrides the cache.
+
 ## Colour watermarks on a scan
 
 A scanned book is one raster per page, so a watermark is burned into the pixels:
