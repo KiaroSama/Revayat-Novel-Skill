@@ -591,3 +591,33 @@ def test_the_documented_page_subcommands_are_the_real_ones():
     assert not missing, (
         f"these `pages` subcommands exist and no documentation names them: "
         f"{missing}")
+
+
+#: Every module that reports findings, and the documents a reader consults for
+#: them. A code with no row is a gate that fired correctly and that nothing
+#: could act on: an agent gets a name and a detail and no instruction, so it
+#: guesses, pastes the JSON, or treats the finding as cosmetic. 35 of the 62
+#: codes were in that state at b773143.
+SCRIPTS_DIR = SKILL.parent / "scripts"
+
+#: `.add(<severity>, "<code>", …)`. The severity may be a name, a qualified
+#: name, a ternary or a plain variable — `untranslated-block` is emitted with a
+#: variable and a stricter pattern reported it as uncovered.
+_EMITTED = re.compile(r"\.add\(\s*[^,]+,\s*\"([a-z][a-z0-9-]+)\"")
+
+
+def test_every_finding_code_the_pipeline_emits_is_documented():
+    """The contract is: a gate names a code, and a document says what to do."""
+    codes = set()
+    for path in sorted(SCRIPTS_DIR.glob("*.py")):
+        codes |= set(_EMITTED.findall(path.read_text(encoding="utf-8")))
+    assert len(codes) > 40, (
+        f"only {len(codes)} codes matched — the emission pattern has drifted "
+        f"and this guard is no longer reading the code")
+
+    prose = "\n".join(path.read_text(encoding="utf-8") for path in DOCS)
+    undocumented = sorted(code for code in codes if code not in prose)
+    assert not undocumented, (
+        f"{len(undocumented)} finding code(s) appear in no document:\n  "
+        + "\n  ".join(undocumented)
+        + "\nAdd a row saying what each means and what to do about it.")

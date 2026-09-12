@@ -199,6 +199,31 @@ manifest's own artefact wins, deliberately, because an override let any
 readable PDF stand in as a page's evidence. It is still honoured where there is
 no page run at all, which is how one-off diagnostics work.
 
+## `render-qa` or `doc-qa` reported a code on a page
+
+These come from the one source page laid out on its own (`render-qa`) or from a
+page of the assembled book (`doc-qa check`). Both measure geometry against what
+`book.json` says belongs there.
+
+| Code | What it means | What to do |
+| --- | --- | --- |
+| `text-missing` | a block that belongs on this page is not on the rendered page | re-translate that page; if it recurs, the block has no Persian yet |
+| `text-duplicated` | a block appears more than once on one page | a worksheet reply was pasted twice; re-run that page |
+| `text-clipped` | text runs off the edge of the paper | a long unbreakable run — usually a URL or a Latin name; check that paragraph |
+| `text-overflow` | text is on the page but outside the body area | a style lost its indents; re-build |
+| `text-image-overlap` | text is printed on top of a picture | re-build; if it recurs the illustration is wider than the text block |
+| `blank-region` | a hole in the body area, or nothing on the page at all | the build failed partway, or a plate pushed a page empty; re-build and look |
+| `image-missing` / `image-extra` | the page carries fewer or more illustrations than it owns | re-extract, then re-build |
+| `image-reordered` | the right pictures in the wrong order — a caption now sits under the wrong plate | re-build from `book.json` |
+| `image-aspect` | an illustration's shape is not the book's | the picture was resized; re-extract |
+| `preview-empty` | the page's preview rendered no pages at all | the renderer produced nothing; check `doctor` under `optional_tools.render` |
+| `font-unverified` (warning) | the render reported no font names, so which face was used was not checked | nothing to fix; it describes the renderer, not the book |
+| `font-fallback` (warning) | the page asked for one face and was set in another | install the face, or build with `--font Tahoma` — see the section above |
+
+`font-unverified` and `font-fallback` are the two codes that describe **the
+machine that rendered**, not the book, so neither decides the verdict — see
+`MACHINE_DEPENDENT_CODES` in `docqa.py`.
+
 ## LibreOffice is installed, but `render-qa` says it is not
 
 `wordrender` looks for `soffice` on `PATH` first, then in the places an ordinary
