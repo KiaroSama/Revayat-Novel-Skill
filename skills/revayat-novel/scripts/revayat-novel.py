@@ -46,15 +46,17 @@ REQUIRED = {
     "PIL": "removing a colour watermark from a scan (package: pillow)",
 }
 
-#: Optional binaries, each as the list of names it may go by. Ghostscript is
-#: ``gs`` on Unix but ``gswin64c`` / ``gswin32c`` on Windows — checking only the
-#: Unix name reports it missing on every Windows machine that has it.
-OPTIONAL_TOOLS = {
-    "ocrmypdf": (["ocrmypdf"], "adds a text layer to scanned or mixed PDFs"),
-    "tesseract": (["tesseract"], "the OCR engine OCRmyPDF drives"),
-    "ghostscript": (["gs", "gswin64c", "gswin32c"], "required by OCRmyPDF"),
-    "mineru": (["mineru", "magic-pdf"], "stronger extraction for difficult scans"),
-}
+def optional_tools() -> dict[str, tuple[list[str], str]]:
+    """Which optional tools to report, asked of the stage that drives them.
+
+    The table used to be duplicated here, joined to `extract.BUNDLED_TOOLS` by a
+    label string with nothing checking the two agreed — and a label that did not
+    match silently searched no install locations, which is the defect the table
+    exists to fix.
+    """
+    import extract  # noqa: PLC0415  (the scripts directory is on sys.path)
+
+    return extract.OPTIONAL_TOOLS
 
 
 def render_backend() -> str:
@@ -121,7 +123,7 @@ def doctor() -> dict[str, object]:
             modules[name] = f"MISSING — needed for {why}"
 
     tools = {}
-    for label, (names, why) in OPTIONAL_TOOLS.items():
+    for label, (names, why) in optional_tools().items():
         found = (ocrmypdf_launcher() if label == "ocrmypdf"
                  else find_tool(names, label))
         tools[label] = found or f"not found — {why}"
