@@ -206,6 +206,7 @@ The skill loads these on demand rather than up front:
 - [`translation-policy.md`](skills/revayat-novel/references/translation-policy.md) — what a faithful literary translation requires
 - [`persian-typography.md`](skills/revayat-novel/references/persian-typography.md) — RTL, ZWNJ, punctuation, mixed scripts
 - [`extraction.md`](skills/revayat-novel/references/extraction.md) — OCR routing, difficult books, the IR schema
+- [`watermarks.md`](skills/revayat-novel/references/watermarks.md) — removing a colour stamp from a scan, and what it cannot do
 - [`glossary-and-voice.md`](skills/revayat-novel/references/glossary-and-voice.md) — naming policy, aliases, character voice
 - [`docx-and-ooxml.md`](skills/revayat-novel/references/docx-and-ooxml.md) — every build option and what Word structure it produces
 - [`troubleshooting.md`](skills/revayat-novel/references/troubleshooting.md) — the failures you are most likely to hit
