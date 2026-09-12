@@ -528,3 +528,66 @@ def test_every_ci_install_step_uses_the_recorded_dependency_set():
         "these CI install steps do not use the recorded dependency set:\n  "
         + "\n  ".join(unconstrained)
         + "\nAdd `-c constraints-ci.txt`, or exempt it here with a reason.")
+
+
+#: The slash commands a host exposes. They are not "just documentation": a user
+#: types one and an agent executes what it says. `translate-book` sent every
+#: book — PDFs included — down the chunk route, which has no per-page
+#: comparison, so a PDF could be delivered having never been set beside its
+#: source page.
+COMMAND_FILES = sorted((SKILL.parents[2] / "commands").glob("*.md"))
+
+#: The ones that describe how to process a book, as opposed to how to check one.
+ROUTING_COMMANDS = {"translate-book.md", "revayat-novel-resume.md"}
+
+
+def test_every_command_file_that_routes_a_book_knows_the_page_route():
+    """SKILL.md step 4: the source decides the route, and a PDF goes by page.
+
+    An agent follows the first route it is given, so naming the page route at
+    all is the floor and naming it first is the intent.
+    """
+    assert COMMAND_FILES, "no command files found at all"
+    wrong = []
+    for path in COMMAND_FILES:
+        if path.name not in ROUTING_COMMANDS:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "pages" not in text:
+            wrong.append(f"{path.name} never mentions the page route")
+        elif "chunk" in text and text.index("chunk") < text.index("pages"):
+            wrong.append(
+                f"{path.name} names the chunk route before the page route; a PDF "
+                f"is the common case and an agent takes the first route it reads")
+    assert not wrong, "\n".join(wrong)
+
+
+@pytest.mark.parametrize("path", COMMAND_FILES, ids=lambda p: p.name)
+def test_no_command_file_hard_codes_python3(path: Path):
+    """`python3` does not exist on most Windows installations."""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        assert "python3 " not in line, f"{path.name}: {line.strip()}"
+
+
+def test_the_documented_page_subcommands_are_the_real_ones():
+    """A subcommand nothing documents is one nobody runs — `preview` was one."""
+    import argparse
+
+    import pagecli
+
+    parser = argparse.ArgumentParser()
+    pagecli.add_arguments(parser)
+    real = set()
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            real |= set(action.choices)
+
+    documented = set()
+    for path in [SKILL] + COMMAND_FILES:
+        text = path.read_text(encoding="utf-8")
+        documented |= {name for name in real if f"pages {name}" in text}
+
+    missing = sorted(real - documented)
+    assert not missing, (
+        f"these `pages` subcommands exist and no documentation names them: "
+        f"{missing}")
