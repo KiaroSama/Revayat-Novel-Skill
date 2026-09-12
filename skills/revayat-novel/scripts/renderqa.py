@@ -392,15 +392,6 @@ def check(
     return written
 
 
-def word_available() -> str:
-    """Kept as the module's own name for "can a page be laid out here at all".
-
-    Delegates: which backend is used is `wordrender`'s decision, and the answer
-    differs per platform. Returns the reason it cannot, or ``""``.
-    """
-    return wordrender.unavailable_reason()
-
-
 def render_docx(docx: Path, out_dir: Path,
                 *, timeout: float = wordrender.DEFAULT_TIMEOUT) -> Path:
     """Lay the built document out, so there is something to look at.

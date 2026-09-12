@@ -26,6 +26,7 @@ import bookir as ir  # noqa: E402  (must follow the sys.path bootstrap)
 
 STAGES = {
     "extract": "extract",
+    "clean-scan": "scan_clean",
     "ocr-sidecar": "ocr_sidecar",
     "glossary": "glossary",
     "chunk": "chunk",
