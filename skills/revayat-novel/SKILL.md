@@ -23,6 +23,8 @@ Set four variables once, then use them everywhere:
   - macOS / Linux: `PY=python3`
   - Windows: `PY=python` — or `PY="py -3"` if the launcher is what is installed
   - if neither runs, `doctor` in step 1 will not start, and that is the signal
+  - any Python **3.10 or newer** works; `doctor` prints the version it is
+    running under `"python"`, so a version problem is visible in step 1
 - `OCR_LANG` — the Tesseract code for the language **printed in the book you are
   translating**, not the language you are translating into. For the usual
   English → Persian job that is `eng`. A Persian source is `fas`; German `deu`,

@@ -621,3 +621,45 @@ def test_every_finding_code_the_pipeline_emits_is_documented():
         f"{len(undocumented)} finding code(s) appear in no document:\n  "
         + "\n  ".join(undocumented)
         + "\nAdd a row saying what each means and what to do about it.")
+
+
+#: The documented floor has to be a version CI actually runs. Before this,
+#: nothing in the repository stated a supported Python at all — `ruff.toml`'s
+#: target-version and the CI matrix were the only records, and a reader reads
+#: neither. A floor nobody tests is a guess.
+_FLOOR = re.compile(r"Python ?(3\.\d+) or newer", re.I)
+
+
+def test_the_documented_python_floor_is_one_ci_runs():
+    """And the scripts really do parse at it."""
+    import ast
+
+    root = Path(__file__).resolve().parents[1]
+    stated = set()
+    for path in (root / "README.md", root / "skills" / "revayat-novel"
+                 / "requirements.txt"):
+        stated |= set(_FLOOR.findall(path.read_text(encoding="utf-8")))
+    assert stated, "no document states a supported Python version"
+    assert len(stated) == 1, f"documents disagree about the floor: {stated}"
+    floor = stated.pop()
+
+    matrix = re.search(
+        r"python: \[(.+?)\]",
+        (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+    assert matrix, "could not read the CI matrix"
+    tested = {value.strip().strip('"\'') for value in matrix.group(1).split(",")}
+    assert floor in tested, (
+        f"the documented floor {floor} is not in the CI matrix {sorted(tested)}")
+
+    # And it is a floor the code can actually meet.
+    version = tuple(int(part) for part in floor.split("."))
+    unparsable = []
+    for path in sorted((root / "skills" / "revayat-novel" / "scripts").glob("*.py")):
+        try:
+            ast.parse(path.read_text(encoding="utf-8"), str(path),
+                      feature_version=version)
+        except SyntaxError as error:
+            unparsable.append(f"{path.name}: {error}")
+    assert not unparsable, (
+        f"these do not parse at the documented floor {floor}:\n  "
+        + "\n  ".join(unparsable))
