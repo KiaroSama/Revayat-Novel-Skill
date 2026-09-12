@@ -109,6 +109,15 @@ OCR and a real Word render are genuinely slower, and each says so.
 Tests generate their own PDF, EPUB and DOCX fixtures. Do not commit book files:
 they bloat the repository and the content is usually someone else's.
 
+The shared fixtures in `tests/conftest.py` are session-scoped, and pytest caches a
+fixture's **exception** as well as its value — one transient failure is re-raised
+for every later request without retrying, so it becomes a setup error on every test
+that asked for that fixture, reported in modules with nothing wrong with them. Wrap
+a new shared fixture's expensive step in `tests_support.building("name", path)` so
+the failure names the fixture rather than its victims. Keep `pytest.importorskip`
+outside the wrapper: `Skipped` is not an `Exception`, so an optional dependency
+still skips instead of erroring.
+
 Keep the three plugin manifests at the same `version` — CI enforces it.
 
 Every tracked text file must be UTF-8; CI enforces that too.
