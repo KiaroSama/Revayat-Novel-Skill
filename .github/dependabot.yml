@@ -11,6 +11,18 @@ updates:
       interval: weekly
     open-pull-requests-limit: 0
 
+  # The pins CI installs against. These are exact versions, so an update here
+  # is a real, reviewable change — unlike the floors in requirements.txt, which
+  # are deliberately not raised (see the entry above). Grouped, because the
+  # point of reading them is whether the suite is still green as a set.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      ci-constraints:
+        patterns: ["*"]
+
   # Actions are pinned by major tag, so these updates are real and worth having:
   # a deprecated runner action breaks CI silently otherwise.
   - package-ecosystem: github-actions

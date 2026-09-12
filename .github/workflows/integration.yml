@@ -44,8 +44,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r skills/revayat-novel/requirements.txt
-          pip install pytest pytest-timeout ocrmypdf
+          pip install -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
+          pip install pytest pytest-timeout ocrmypdf -c constraints-ci.txt
 
       - name: The tools are actually here
         # Without this, every test would skip itself and the job would pass
@@ -133,7 +133,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r skills/revayat-novel/requirements.txt
+          python -m pip install -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
 
       - name: Which backend this runner will use
         shell: bash
