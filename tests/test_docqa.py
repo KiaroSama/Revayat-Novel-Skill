@@ -143,6 +143,59 @@ def test_every_final_page_is_kept_as_an_image(tmp_path):
         assert (tmp_path / name).exists(), f"{name} was reported but not written"
 
 
+def test_the_checked_pdf_is_named_only_when_asked(tmp_path):
+    """Off by default: the .docx is the deliverable.
+
+    When it is on, the reader gets the one artefact whose every page was measured
+    and whose images the reviewer approved — not a fresh render made later from
+    the same document, which may lay out differently under another backend or a
+    font fallback. Measured in spike 012 on a real Word export: 4 pages, 50.4 KB,
+    Vazir embedded, text selectable — and 0 PDF outline objects, so the contents
+    page is text rather than clickable.
+    """
+    pytest.importorskip("pymupdf")
+    book_path = _book(tmp_path)
+    docx = _built(tmp_path, book_path)
+
+    default = docqa.check_document(tmp_path, book_path, docx)
+    if any(tool in str(default.get("unverified", ""))
+           for tool in ("LibreOffice", "Word", "PyMuPDF")):
+        pytest.skip("nothing on this machine can lay a document out")
+    assert default.get("pdf", "") == "", "the PDF was named without being asked for"
+
+    kept = docqa.check_document(tmp_path, book_path, docx, keep_pdf=True)
+    assert kept["pdf"], "--keep-pdf named no path"
+    assert Path(kept["pdf"]).exists()
+    assert Path(kept["pdf"]).stat().st_size > 0
+    # Recorded alongside, because the two backends do not paginate identically.
+    assert kept["laid_out_by"] in {"word", "libreoffice"}
+
+
+def test_the_kept_pdf_carries_the_persian_and_an_embedded_face(tmp_path):
+    """A PDF that cannot be searched, or that embedded a fallback face, is not
+    the artefact the check approved — and a reader cannot fix a PDF."""
+    pytest.importorskip("pymupdf")
+    import pymupdf
+
+    book_path = _book(tmp_path)
+    docx = _built(tmp_path, book_path)
+    report = docqa.check_document(tmp_path, book_path, docx, keep_pdf=True)
+    if any(tool in str(report.get("unverified", ""))
+           for tool in ("LibreOffice", "Word", "PyMuPDF")):
+        pytest.skip("nothing on this machine can lay a document out")
+
+    document = pymupdf.open(report["pdf"])
+    try:
+        assert len(document) >= 1
+        text = "".join(page.get_text("text") for page in document)
+        fonts = {entry[3] for index in range(len(document))
+                 for entry in document[index].get_fonts()}
+    finally:
+        document.close()
+    assert text.strip(), "the kept PDF has no selectable text at all"
+    assert fonts, "the kept PDF embeds no fonts"
+
+
 def test_opening_once_measures_the_same_pages_as_opening_per_page(tmp_path):
     """The fast path and the per-page path must not disagree about a page.
 

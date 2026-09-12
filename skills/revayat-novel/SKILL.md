@@ -587,6 +587,17 @@ $PY $SKILL_DIR/scripts/revayat-novel.py doc-qa check \
   --book $WORK/book.json --work $WORK --docx out/book.fa.docx
 ```
 
+Add `--keep-pdf` to that second command and the report's `pdf` key names the
+rendered PDF, kept beside the page images. It is the artefact whose every page
+was just measured and whose images the reviewer approved — not a fresh render
+made later, which can lay out differently under another backend or a font
+fallback. `laid_out_by` says which program produced it, because Word and
+LibreOffice do not paginate identically.
+
+**The .docx stays the deliverable.** The PDF's contents page is *text*, not a
+PDF outline, so it is not clickable from a viewer's sidebar — a Word TOC field
+exports that way. Measured, not assumed.
+
 `qa docx` reads the file's structure. It cannot see a page, so it cannot see a
 plate that assembly pushed across a break, a heading stranded as the last line
 on a page, or a paragraph that is in the package and not on any page.
