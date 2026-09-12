@@ -1037,6 +1037,22 @@ def test_a_tool_installed_into_this_interpreter_is_found_on_any_platform(
     assert extract.find_tool(["absent"], "absent") is None
 
 
+def test_no_module_offers_a_predicate_that_is_true_when_it_is_false():
+    """`renderqa.word_available()` returned a *reason*, non-empty when Word was
+    absent, so `if word_available():` read as "Word is here" and meant the
+    opposite. Nothing called it; seven tests patch `wordrender.word_available`,
+    which is the real boolean. Two functions, one name, opposite senses.
+
+    `wordrender.word_available` stays: it returns a bool and `backend()` uses it.
+    """
+    assert not hasattr(renderqa, "word_available"), (
+        "renderqa.word_available is back. It returns a reason string, not a "
+        "boolean; call wordrender.unavailable_reason() or "
+        "wordrender.backend() instead.")
+    # The one that is correctly named really is a predicate.
+    assert isinstance(wordrender.word_available(), bool)
+
+
 def test_one_table_describes_each_optional_tool():
     """Two tables joined by a label string, with nothing checking they agree.
 
