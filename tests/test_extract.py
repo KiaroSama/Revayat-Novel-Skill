@@ -123,6 +123,40 @@ def test_launcher_and_language_reach_the_command(tmp_path):
     assert command[-2:] == [str(tmp_path / "i"), str(tmp_path / "o")]
 
 
+def test_the_ocr_subprocess_is_given_the_tools_doctor_found(monkeypatch, tmp_path):
+    """`doctor` says a tool is present; the stage has to be able to reach it.
+
+    OCRmyPDF resolves Tesseract and Ghostscript itself and its search is
+    narrower than `find_tool`'s — on Windows the system drive only, and off
+    Windows not at all (`ocrmypdf/subprocess/_run.py` shims PATH under
+    `os.name == "nt"` alone). Without this the promise in the README, that no
+    tool has to be on PATH, held for the health check and not for the stage.
+    """
+    import extract
+
+    installed = tmp_path / "somewhere" / "else"
+    installed.mkdir(parents=True)
+    monkeypatch.setattr(
+        extract, "find_tool",
+        lambda names, label="": str(installed / f"{names[0]}.exe"))
+
+    environment = extract.ocr_environment({"PATH": "/only/this"})
+    first = environment["PATH"].split(os.pathsep)[0]
+    assert first == str(installed), (
+        f"the resolved tool directory is not first on the child's PATH: "
+        f"{environment['PATH']!r}")
+    # Prepended, never replaced: a reader who put one build first meant it.
+    assert "/only/this" in environment["PATH"].split(os.pathsep)
+
+
+def test_a_tool_that_cannot_be_found_leaves_the_path_alone(monkeypatch):
+    """No tool, no change — never an empty entry that shadows a real one."""
+    import extract
+
+    monkeypatch.setattr(extract, "find_tool", lambda names, label="": None)
+    assert extract.ocr_environment({"PATH": "/only/this"})["PATH"] == "/only/this"
+
+
 def test_missing_ocrmypdf_explains_all_three_prerequisites(monkeypatch, tmp_path):
     monkeypatch.setattr("extract.find_ocrmypdf", lambda: None)
     with pytest.raises(ExtractError) as caught:
@@ -604,11 +638,15 @@ def test_the_crop_comes_from_the_scan_not_from_minerus_export(tmp_path):
 
     figure = next(b for b in book["blocks"] if b["type"] == "image"
                   and b.get("source") == "source-raster")
-    written = Image.open(tmp_path / "assets" / figure["asset"])
-    assert written.width > 200 and written.height > 100, (
-        f"the low-resolution export was copied instead: {written.size}"
-    )
-    assert (figure["pixel_width"], figure["pixel_height"]) == written.size
+    # A context manager, not a bare open: Pillow is lazy about a path, so the
+    # handle outlives the test and Windows then refuses to delete the tmp_path —
+    # as a PermissionError in a *later* run's setup, naming a directory from
+    # three runs ago.
+    with Image.open(tmp_path / "assets" / figure["asset"]) as written:
+        assert written.width > 200 and written.height > 100, (
+            f"the low-resolution export was copied instead: {written.size}"
+        )
+        assert (figure["pixel_width"], figure["pixel_height"]) == written.size
 
 
 def test_the_crop_is_exactly_the_box_with_no_resampling(tmp_path):

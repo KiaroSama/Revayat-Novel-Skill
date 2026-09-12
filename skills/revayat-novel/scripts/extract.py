@@ -300,6 +300,37 @@ def _usable_ocr_output(destination: Path) -> tuple[bool, str]:
     return True, f"{characters} characters across {pages} pages"
 
 
+def ocr_environment(env: dict[str, str] | None = None) -> dict[str, str]:
+    """``os.environ`` plus the directories the tools were actually found in.
+
+    `doctor` and this module agree about where Tesseract and Ghostscript are,
+    because both ask `find_tool`. OCRmyPDF does not ask: it resolves them
+    itself, from PATH plus — on Windows only — `%PROGRAMFILES%` and the
+    registry (`ocrmypdf/subprocess/_windows.py`). That search is narrower than
+    `find_tool`'s in two ways that matter here: it reaches the system drive
+    only, and off Windows it does not happen at all. So a tool this project
+    reports as present can be one OCRmyPDF then cannot find, which turns a
+    green `doctor` into a failed extraction.
+
+    Prepending, not replacing: a reader who put a particular build first on
+    PATH meant it.
+    """
+    environment = dict(os.environ if env is None else env)
+    directories: list[str] = []
+    for names, label in ((["tesseract"], "tesseract"),
+                         (["gs", "gswin64c", "gswin32c"], "ghostscript")):
+        found = find_tool(names, label)
+        if found:
+            directory = str(Path(found).resolve().parent)
+            if directory not in directories:
+                directories.append(directory)
+    if directories:
+        existing = environment.get("PATH", "")
+        environment["PATH"] = os.pathsep.join(
+            [*directories, *([existing] if existing else [])])
+    return environment
+
+
 def run_ocr(
     source: Path,
     destination: Path,
@@ -333,6 +364,7 @@ def run_ocr(
         completed = subprocess.run(
             command, capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=timeout, check=False,
+            env=ocr_environment(),
         )
     except subprocess.TimeoutExpired:
         raise ExtractError(
@@ -361,6 +393,11 @@ def run_ocr(
     return {
         "warning": warning,
         "launcher": " ".join(launcher),
+        # Which Tesseract and Ghostscript this run could reach. `doctor` says
+        # what is installed; this says what the subprocess was given.
+        "tool_path": [directory for directory in
+                      ocr_environment().get("PATH", "").split(os.pathsep)
+                      if directory][:2],
         "mode": "force-ocr" if kind == "scanned" else "skip-text",
         "exit": completed.returncode,
         "output": str(destination),
