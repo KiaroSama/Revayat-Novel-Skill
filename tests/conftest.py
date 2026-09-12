@@ -16,13 +16,14 @@ sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
-from tests_support import png_bytes  # noqa: E402  (path set above)
+from tests_support import building, png_bytes  # noqa: E402  (path set above)
 
 
 @pytest.fixture(scope="session")
 def sample_png(tmp_path_factory) -> Path:
     path = tmp_path_factory.mktemp("assets") / "fig.png"
-    path.write_bytes(png_bytes(120, 80))
+    with building("sample_png", path):
+        path.write_bytes(png_bytes(120, 80))
     return path
 
 
@@ -71,7 +72,8 @@ def sample_pdf(tmp_path_factory, sample_png) -> Path:
         page.insert_text((width / 2, height - 30), str(number), fontsize=8, fontname="helv")
 
     doc.set_metadata({"title": "Pride and Prejudice", "author": "Jane Austen"})
-    doc.save(str(path))
+    with building("sample_pdf", path):
+        doc.save(str(path))
     doc.close()
     return path
 
@@ -103,12 +105,15 @@ def scanned_pdf(tmp_path_factory) -> Path:
         _text_page(source, number)
 
     scan = pymupdf.open()
-    for index in range(len(source)):
-        pixmap = source[index].get_pixmap(dpi=200)
-        scan.new_page(width=396, height=612).insert_image(
-            pymupdf.Rect(0, 0, 396, 612), pixmap=pixmap
-        )
-    scan.save(str(path))
+    # Rasterising at 200 DPI is the memory-hungry step in this file, so it is
+    # inside the guard along with the write.
+    with building("scanned_pdf", path):
+        for index in range(len(source)):
+            pixmap = source[index].get_pixmap(dpi=200)
+            scan.new_page(width=396, height=612).insert_image(
+                pymupdf.Rect(0, 0, 396, 612), pixmap=pixmap
+            )
+        scan.save(str(path))
     scan.close()
     source.close()
     return path
@@ -125,11 +130,12 @@ def mixed_pdf(tmp_path_factory) -> Path:
 
     mixed = pymupdf.open()
     _text_page(mixed, 1)
-    pixmap = source[0].get_pixmap(dpi=200)
-    mixed.new_page(width=396, height=612).insert_image(
-        pymupdf.Rect(0, 0, 396, 612), pixmap=pixmap
-    )
-    mixed.save(str(path))
+    with building("mixed_pdf", path):
+        pixmap = source[0].get_pixmap(dpi=200)
+        mixed.new_page(width=396, height=612).insert_image(
+            pymupdf.Rect(0, 0, 396, 612), pixmap=pixmap
+        )
+        mixed.save(str(path))
     mixed.close()
     source.close()
     return path
@@ -173,7 +179,7 @@ def sample_epub(tmp_path_factory, sample_png) -> Path:
  <ul><li>First item</li><li>Second item</li></ul>
 </body></html>"""
 
-    with zipfile.ZipFile(path, "w") as archive:
+    with building("sample_epub", path), zipfile.ZipFile(path, "w") as archive:
         archive.writestr("mimetype", "application/epub+zip")
         archive.writestr(
             "META-INF/container.xml",
