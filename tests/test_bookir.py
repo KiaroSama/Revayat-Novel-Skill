@@ -93,3 +93,64 @@ def test_script_ratio_separates_persian_from_latin():
     persian, latin = ir.script_ratio("الیزابت بنت (Elizabeth Bennet)")
     assert persian > 0 and latin > 0
     assert abs(persian + latin - 1.0) < 1e-9
+
+
+# --------------------------------------------------------------------------- #
+# One token grammar
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("index", [1, 9999, 10000, 123456])
+def test_an_allocated_footnote_id_is_one_the_parser_reads_back(index):
+    """Allocation and recognition were two copies of the same rule, and they
+    disagreed at the four-digit boundary: ``make_footnote(10000)`` produces
+    ``fn10000``, which the canonical pattern could not match. The token then
+    survives into the book as literal text and prints as ``[[fn:fn10000]]``.
+    """
+    note = ir.make_footnote(index, anchor_block="b00001", text="A note.")
+    token = f"[[fn:{note['id']}]]"
+
+    assert ir.footnote_refs(token) == [note["id"]]
+    spans = ir.parse_markup(f"Body{token}")
+    assert [s["footnote"] for s in spans if s["footnote"]] == [note["id"]]
+    assert ir.render_spans(spans) == f"Body{token}"
+
+
+def test_a_four_digit_id_keeps_its_padding():
+    """The padding is not cosmetic: ids sort, and a book mixing fn7 with fn0007
+    would sort them apart."""
+    assert ir.make_footnote(7, anchor_block="b1", text="x")["id"] == "fn0007"
+
+
+def test_validate_book_reports_an_unresolved_translator_token():
+    """``tr-01`` is legitimate in transit and a defect in a finished book.
+
+    It was invisible: the reference scan used the canonical four-digit pattern,
+    so a token that is not canonical was not seen at all, and the one check whose
+    job is to notice found nothing to report.
+    """
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, text="Body")]
+    book["blocks"][0]["target"] = "متن[[fn:tr-unknown]]"
+
+    problems = " ".join(ir.validate_book(book))
+    assert "tr-unknown" in problems, problems
+
+
+def test_validate_book_reports_a_malformed_footnote_token():
+    """A token naming nothing is the same defect with a different spelling."""
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, text="Body [[fn:fn9]]")]
+
+    problems = " ".join(ir.validate_book(book))
+    assert "fn9" in problems, problems
+
+
+def test_validate_book_still_accepts_a_resolved_token_on_either_side():
+    """The positive control, on the target side too — that is where a
+    translator's token lands."""
+    book = ir.new_book()
+    book["blocks"] = [ir.make_block("paragraph", 1, text="Body [[fn:fn0001]]")]
+    book["blocks"][0]["target"] = "متن [[fn:fn0001]]"
+    book["footnotes"] = [ir.make_footnote(1, anchor_block="b00001", text="Note")]
+
+    assert ir.validate_book(book) == []
