@@ -528,6 +528,22 @@ is put together, and that check asks the one question no page can.
 | `emphasis-parity` (warning) | bold/italic count changed | check one; often fine |
 | `glossary-drift` (warning) | a locked name was rendered differently | re-run that chunk |
 | `ocr-low-confidence` (warning) | the engine was unsure of this block | open the page image and compare |
+| `footnote-undefined` | a marker points at a note the book does not define | re-run that chunk; the marker was invented or the note was dropped |
+| `footnote-body-empty` | the note exists with no text, so it prints as a bare number | translate that note, or delete it from `book.json` |
+| `footnote-orphaned` | a translator's note whose marker is not in the text any more | put `[[fn:tr-NN]]` back in the sentence, or remove the note |
+| `footnote-unreferenced` (warning) | a note nothing points at; it will not appear | check whether a marker was dropped |
+| `footnote-multiple-anchors` | several markers point at one note | give each mention its own note, or keep one marker |
+| `footnote-anchor-missing` / `footnote-anchor-mismatch` | the note's recorded anchor block is absent or disagrees with where the marker is | re-run merge for that page or chunk |
+| `footnote-untranslated` (warning) | the note body has no Persian | translate that note |
+| `first-mention-missing` | a locked name's introduction appears nowhere | re-run merge with `--glossary` |
+| `first-mention-misplaced` | the introduction is in a different block from the first mention | re-run merge with `--glossary`; it is idempotent |
+| `first-mention-forbidden` | policy says never introduce parenthetically, and one appears | remove it, or change the glossary policy |
+| `possible-padding` (warning) | the Persian is far longer than the source | read it; usually an explanation the translator added |
+| `emphasis-unrecoverable` (warning) | the source's bold and italic could not be read at all | emphasis parity cannot be checked for this book; check a page by eye |
+| `ocr-disputed-text` | the confidence pass read this block differently from the text layer | open the page image and compare |
+| `page-geometry-mixed` (warning) | the source is not one page size | expected for a book with plates or inserts; check the built sections |
+| `page-rotated` (warning) | pages are rotated in the source; the translation is built upright | confirm those pages read correctly |
+| `docx-unreadable` / `docx-invalid` | the built file could not be opened, or has no `word/document.xml` | re-build; if it recurs the build failed halfway |
 
 Add `--strict` to make the last three blocking as well, for publication work.
 
