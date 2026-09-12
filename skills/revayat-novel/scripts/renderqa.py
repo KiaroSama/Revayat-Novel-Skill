@@ -210,15 +210,30 @@ def check(
     record = state.page(page) or {}
     attempts = int(record.get("attempts", 0))
 
-    if record.get("state") == "failed" and attempts >= max_attempts:
+    # On the count alone, not on the state label. `merge_page` moves a page to
+    # `translated` and then `merged`, neither of which is `failed`, so testing
+    # the label meant re-running merge with the identical reply cleared the cap
+    # and bought another render — every time, for a page nothing had changed
+    # about. `runstate.set_page` resets the count when the translation actually
+    # moves, which is the thing that earns another attempt.
+    if attempts >= max_attempts:
         return _write(work_dir, page, {
             "ok": False,
             "verified": False,
             "refused": "retry-exhausted",
             "attempts": attempts,
+            # The last error, because the count alone does not say what to fix
+            # — and one of the things that lands here is environmental ("no
+            # renderer on this machine"), which is not about the page at all.
+            # Installing the renderer does not reset the count, since nothing
+            # about the page moved, so the operator needs to see which it was.
+            "last_error": str(record.get("last_error") or ""),
             "detail": f"page {page} has failed render QA {attempts} times "
-                      f"(limit {max_attempts}). Fix the build or raise "
-                      f"--max-attempts; nothing was re-rendered.",
+                      f"(limit {max_attempts}): "
+                      f"{record.get('last_error') or 'no reason recorded'}. "
+                      f"Fix that and raise --max-attempts, or correct the "
+                      f"translation — a changed translation starts the count "
+                      f"again. Nothing was re-rendered.",
         })
 
     book = ir.load_book(book_path)
@@ -233,6 +248,12 @@ def check(
             made = preview.build(book_path, page, docx,
                                  assets=book_path.parent / "assets")
             if not made["ok"]:
+                # Deliberately spends no attempt and writes no state. The reason
+                # a document cannot be laid out here is the machine — no Word,
+                # no LibreOffice — not this page, so counting it against the
+                # page's retry budget would exhaust a page for an environment
+                # problem and still be exhausted after the renderer was
+                # installed. See the two invariants in `test_renderqa.py`.
                 return _write(work_dir, page, {
                     "ok": False, "verified": False,
                     "unverified": made["detail"], "attempts": attempts,
@@ -383,7 +404,10 @@ def check(
     })
 
     hashes = {
-        "translation": ir.sha256_bytes("\n".join(expected["texts"]).encode("utf-8")),
+        # The same definition `pagerun.translation_hash` uses, and deliberately
+        # not a second spelling of it: the page record has one `translation` hash
+        # and two formulas under it disagreed silently.
+        "translation": pagerun.translation_hash(book_path, page),
         "qa": ir.sha256_file(report_path(work_dir, page)),
     }
     if sheets:

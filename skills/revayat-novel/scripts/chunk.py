@@ -155,9 +155,15 @@ def unit_fingerprint(book: dict[str, Any], ids: list[str]) -> str:
     Source text only. A translation, a translator's footnote or an accepted page
     must not change it, or every successful merge would report the worksheets it
     came from as stale.
+
+    Tagged with the formula that produced it, because the page route writes a
+    *different* digest under the same manifest key — its own covers the page
+    raster and the page geometry as well, which merge cannot recompute from
+    block ids. Untagged, merge recomputed this formula against that value and
+    declared every page-route worksheet stale.
     """
     units = translatable_units(book, ids)
-    return ir.sha256_bytes(
+    return "units:" + ir.sha256_bytes(
         "\n".join(f"{unit_id}\x00{text}" for unit_id, _, text in units)
         .encode("utf-8"))
 

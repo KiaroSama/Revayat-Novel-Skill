@@ -168,23 +168,39 @@ class RunState:
         retry cap is about: a page that has been rendered five times and passed
         every time has not exhausted anything. Only ``failed`` increments it,
         and any other state clears the error that went with it.
+
+        **A new translation resets the count; relabelling the state does not.**
+        The cap is about unchanged input: a translator who corrects the reply has
+        given the page something new to fail on and has earned another attempt,
+        while ``merge_page`` moving the page to ``merged`` with the identical
+        answers has changed nothing. Keying on the state alone is how an
+        unchanged page bought another render every time, forever — the state was
+        no longer ``failed``, so no cap applied.
         """
         if state not in PAGE_STATES:
             raise ValueError(f"unknown page state {state!r}; "
                              f"expected one of {PAGE_STATES}")
         entry = self.page(page_no) or {"state": "pending", "attempts": 0,
                                        "last_error": "", "hashes": {}}
+        incoming = {name: str(value) for name, value in (hashes or {}).items()}
+        for name in incoming:
+            if name not in PAGE_HASHES:
+                raise ValueError(f"unknown page hash {name!r}; "
+                                 f"expected one of {PAGE_HASHES}")
+
         entry["state"] = state
+        if ("translation" in incoming
+                and incoming["translation"]
+                != (entry.get("hashes") or {}).get("translation", "")):
+            entry["attempts"] = 0
+
         if state == "failed":
             entry["attempts"] = int(entry.get("attempts", 0)) + 1
             entry["last_error"] = str(error)[:400]
         else:
             entry["last_error"] = str(error)[:400] if error else ""
-        for name, value in (hashes or {}).items():
-            if name not in PAGE_HASHES:
-                raise ValueError(f"unknown page hash {name!r}; "
-                                 f"expected one of {PAGE_HASHES}")
-            entry.setdefault("hashes", {})[name] = str(value)
+        for name, value in incoming.items():
+            entry.setdefault("hashes", {})[name] = value
         entry["updated_utc"] = datetime.now(timezone.utc).strftime(
             "%Y-%m-%d %H:%M:%S")
         self.data["pages"][str(int(page_no))] = entry
