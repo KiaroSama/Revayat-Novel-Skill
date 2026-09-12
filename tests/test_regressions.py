@@ -290,6 +290,64 @@ def test_scan_records_where_each_name_first_appears():
     assert entry["first_block_id"] == "b00002"
 
 
+#: Real surname shapes, one per entry, each placed mid-sentence three times.
+#: Measured at b773143: eight of these ten were never proposed, or were proposed
+#: split in two — so a book full of them reached the translator with no locked
+#: spelling for any of its characters, and the drift check cannot report a name
+#: it was never given.
+SURNAME_SHAPES = [
+    "Elizabeth Bennet",   # the shape that always worked
+    "Ibn Sina",           # two plain words
+    "McDonald",           # internal capital
+    "MacLeod",
+    "DeVere",
+    "LaFontaine",
+    "O'Brien",            # apostrophe then a capital
+    "Anne-Marie",         # hyphen then a capital
+    "Van der Berg",       # particle, lower-case, capital
+    "Jean-Luc Picard",    # hyphen and a second word
+]
+
+
+def test_the_scanner_proposes_each_real_surname_shape_once():
+    """A name the scan never proposes has no locked spelling in any worksheet.
+
+    Chunks are translated in parallel by agents that cannot see one another, so
+    the glossary is the only thing that makes one spelling survive a whole book.
+    """
+    import glossary as gl
+
+    book = ir.new_book()
+    number = 0
+    for shape in SURNAME_SHAPES:
+        for verb in ("spoke to", "looked at", "walked past"):
+            number += 1
+            book["blocks"].append(ir.make_block(
+                "paragraph", number, page=1,
+                text=f"Then the innkeeper {verb} {shape} and said nothing more."))
+
+    proposed = {entry["source"] for entry in gl.scan(book, minimum=3)}
+    missing = [shape for shape in SURNAME_SHAPES if shape not in proposed]
+    assert not missing, (
+        f"these names were never proposed as entities: {missing}\n"
+        f"what the scan did propose: {sorted(proposed)}")
+
+
+def test_a_hyphenated_name_is_one_candidate_not_two():
+    """`Anne-Marie` split into `Anne-` and `Marie`, each with its own count."""
+    import glossary as gl
+
+    book = ir.new_book()
+    book["blocks"] = [
+        ir.make_block("paragraph", n, page=1,
+                      text="Quietly, Anne-Marie closed the door behind her.")
+        for n in range(1, 5)
+    ]
+    proposed = {entry["source"] for entry in gl.scan(book, minimum=3)}
+    assert "Anne-Marie" in proposed
+    assert "Anne-" not in proposed and "Marie" not in proposed
+
+
 def test_strict_qa_promotes_fidelity_warnings_to_errors():
     book = ir.new_book()
     book["blocks"] = [ir.make_block("paragraph", 1, text="He said *no* to her.")]
