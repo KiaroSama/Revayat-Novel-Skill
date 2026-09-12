@@ -140,6 +140,23 @@ def find_ocrmypdf() -> list[str] | None:
     return [sys.executable, "-m", "ocrmypdf"]
 
 
+#: The names a binary may go by, and why a reader wants it. Ghostscript is `gs`
+#: on Unix and `gswin64c` / `gswin32c` on Windows — checking only the Unix name
+#: reported it missing on every Windows machine that had it.
+#:
+#: Here rather than in the dispatcher, and keyed by the same labels as
+#: `BUNDLED_TOOLS` below, because the two are joined by that string: `find_tool`
+#: does `BUNDLED_TOOLS.get(label, ())`, so a label spelled differently in the
+#: two tables silently searches no install locations at all and falls back to
+#: PATH — which is the exact defect this mechanism exists to fix, with nothing
+#: anywhere to report it. One table cannot drift from itself.
+OPTIONAL_TOOLS = {
+    "ocrmypdf": (["ocrmypdf"], "adds a text layer to scanned or mixed PDFs"),
+    "tesseract": (["tesseract"], "the OCR engine OCRmyPDF drives"),
+    "ghostscript": (["gs", "gswin64c", "gswin32c"], "required by OCRmyPDF"),
+    "mineru": (["mineru", "magic-pdf"], "stronger extraction for difficult scans"),
+}
+
 #: Where an ordinary install leaves a tool *without* putting it on PATH.
 #:
 #: Same shape and the same measured reason as `wordrender.BUNDLED_LIBREOFFICE`:
@@ -182,6 +199,15 @@ BUNDLED_TOOLS = {
         "~/.local/bin/mineru",
     ),
 }
+
+#: Every label with install locations must be a tool `doctor` asks about, and
+#: every tool that can live off PATH must have locations. `ocrmypdf` is the one
+#: exception by design: `find_ocrmypdf` resolves it, from PATH or as a module in
+#: this interpreter, so it needs no path patterns. Checked at import because it
+#: is a structural invariant over two literals in this one file — a mismatch
+#: means the module is broken, not that some input was bad.
+assert set(BUNDLED_TOOLS) == set(OPTIONAL_TOOLS) - {"ocrmypdf"}, (
+    f"the two tool tables disagree: {set(BUNDLED_TOOLS) ^ set(OPTIONAL_TOOLS)}")
 
 
 def _drives() -> list[str]:
