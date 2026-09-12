@@ -58,17 +58,34 @@ _PROTECTED = re.compile(
 )
 
 # --- Suffixes that take a ZWNJ in correct Persian orthography ----------------
+#: Only affixes with no standalone reading of their own. A ZWNJ carries meaning,
+#: so inserting one is a rewrite of the word, and a rule that cannot tell an
+#: affix from a word corrupts valid Persian silently.
+#:
+#: «تر» is the absentee: bare, it is also the adjective *wet*, so «موی تر» (wet
+#: hair) and «بزرگ تر» (bigger) are the same shape and only the part of speech
+#: of the preceding word separates them — which this pass cannot know. It goes
+#: to :func:`lint_text` instead, reported for a human to decide. «تری» and
+#: «ترین» stay here: neither stands alone after a noun.
 _ZWNJ_SUFFIXES = (
     "ها", "های", "هایی", "هایم", "هایت", "هایش", "هایمان", "هایتان", "هایشان",
-    "تر", "تری", "ترین",
+    "تری", "ترین",
 )
 _ZWNJ_PREFIXES = ("می", "نمی")
 
 _SUFFIX_SPACE = re.compile(
     rf"([{PERSIAN_LETTER}]{{2,}}) +({'|'.join(_ZWNJ_SUFFIXES)})\b"
 )
+#: «می» is the verbal prefix *and* the noun *wine*, so the word after it decides:
+#: joined only when that word can be a finite verb. Every finite می-form ends in
+#: a personal ending (ـم، ـی، ـد، ـیم، ـید، ـند) or, in the third-person past,
+#: in the past stem's own ـد/ـت — so its last letter is always one of م/ی/د/ت.
+#: «ناب» in «می ناب» is not, and nor is any other adjective the noun takes.
+#: ponytail: a last-letter test, not a verb lexicon. It still joins «می» before
+#: a non-verb that happens to end in one of those letters; a stem list is the
+#: upgrade if that ever shows up in a real book.
 _PREFIX_SPACE = re.compile(
-    rf"\b({'|'.join(_ZWNJ_PREFIXES)}) +([{PERSIAN_LETTER}]{{2,}})"
+    rf"\b({'|'.join(_ZWNJ_PREFIXES)}) +([{PERSIAN_LETTER}]+[میدت])\b"
 )
 
 # --- Punctuation --------------------------------------------------------------
@@ -196,6 +213,9 @@ def fix_text(text: str, options: Options | None = None) -> str:
 _LATIN_SENTENCE = re.compile(r"[A-Za-z][A-Za-z ,'’-]{25,}")
 _DOUBLE_PUNCT = re.compile(r"([،؛؟!])\1+")
 _ARABIC_LEFTOVER = re.compile(r"[يكىـ٠-٩]")
+#: The join the fix pass deliberately refuses to make on its own; see
+#: :data:`_ZWNJ_SUFFIXES`.
+_BARE_COMPARATIVE = re.compile(rf"[{PERSIAN_LETTER}]{{2,}} +تر\b")
 
 
 def lint_text(text: str) -> list[dict[str, str]]:
@@ -220,6 +240,12 @@ def lint_text(text: str) -> list[dict[str, str]]:
 
     if _DOUBLE_PUNCT.search(plain):
         note("double-punctuation", "repeated punctuation mark")
+
+    bare = _BARE_COMPARATIVE.search(plain)
+    if bare:
+        note("zwnj-comparative",
+             f"«{bare.group(0)}»: a comparative needs the ZWNJ, «تر» meaning "
+             f"wet must not have it — only a reader can tell which this is")
 
     persian, latin = ir.script_ratio(plain)
     match = _LATIN_SENTENCE.search(plain)
