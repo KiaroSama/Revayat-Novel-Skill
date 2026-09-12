@@ -467,3 +467,33 @@ def test_no_workflow_re_adds_the_default_as_a_flag():
         f"these workflows pass --timeout although pytest.ini sets it: "
         f"{offenders}. Either the value is deliberate — add it to "
         f"TIMEOUT_OVERRIDE_ALLOWED with a reason — or drop the flag.")
+
+
+def test_every_ci_install_step_uses_the_recorded_dependency_set():
+    """An unconstrained install step resolves whatever PyPI serves that morning.
+
+    Eighteen jobs installed the floors in `requirements.txt` freshly on every
+    run, so a release by any of six upstreams could turn a green build red on a
+    commit that changed nothing. `constraints-ci.txt` records the set the suite
+    is green against; a step that skips it puts the old behaviour back, and
+    quietly, which is why this is a test and not a comment.
+    """
+    root = Path(__file__).resolve().parents[1]
+    assert (root / "constraints-ci.txt").exists(), "constraints-ci.txt is missing"
+
+    unconstrained = []
+    for workflow in sorted((root / ".github" / "workflows").glob("*.yml")):
+        for number, line in enumerate(
+                workflow.read_text(encoding="utf-8").splitlines(), start=1):
+            if "pip install" not in line:
+                continue
+            # `--upgrade pip` and the separately pinned `ruff==` are installs of
+            # one named thing, not of this project's dependency set.
+            if "--upgrade pip" in line or "ruff==" in line:
+                continue
+            if "-c constraints-ci.txt" not in line:
+                unconstrained.append(f"{workflow.name}:{number}: {line.strip()}")
+    assert not unconstrained, (
+        "these CI install steps do not use the recorded dependency set:\n  "
+        + "\n  ".join(unconstrained)
+        + "\nAdd `-c constraints-ci.txt`, or exclude the line here with a reason.")
