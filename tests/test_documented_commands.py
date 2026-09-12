@@ -469,6 +469,37 @@ def test_no_workflow_re_adds_the_default_as_a_flag():
         f"TIMEOUT_OVERRIDE_ALLOWED with a reason — or drop the flag.")
 
 
+#: Workflows whose dependency installs deliberately skip the recorded set.
+#: `dependency-audit.yml` exists to answer "what does a reader get today", so it
+#: resolves the floors freely on purpose — constraining it would audit the pins
+#: instead of the question. Exempting the file rather than the step gives up
+#: guarding its other install lines; that is the trade, and it is the same shape
+#: as TIMEOUT_OVERRIDE_ALLOWED above.
+CONSTRAINTS_EXEMPT_WORKFLOWS = {"dependency-audit.yml"}
+
+
+def _pip_install_commands(text: str):
+    """Yield `(line number, command)` for each real pip install in a workflow.
+
+    Two things a naive scan gets wrong, both of which it did: a comment that
+    merely mentions `pip install -r` is not an install step, and a command split
+    over a backslash continuation still carries a flag written on the next line.
+    """
+    lines = text.splitlines()
+    index = 0
+    while index < len(lines):
+        first = index + 1
+        command = lines[index].strip()
+        index += 1
+        if command.startswith("#"):
+            continue
+        while command.endswith("\\") and index < len(lines):
+            command = command[:-1].rstrip() + " " + lines[index].strip()
+            index += 1
+        if "pip install" in command:
+            yield first, command
+
+
 def test_every_ci_install_step_uses_the_recorded_dependency_set():
     """An unconstrained install step resolves whatever PyPI serves that morning.
 
@@ -483,17 +514,17 @@ def test_every_ci_install_step_uses_the_recorded_dependency_set():
 
     unconstrained = []
     for workflow in sorted((root / ".github" / "workflows").glob("*.yml")):
-        for number, line in enumerate(
-                workflow.read_text(encoding="utf-8").splitlines(), start=1):
-            if "pip install" not in line:
+        if workflow.name in CONSTRAINTS_EXEMPT_WORKFLOWS:
+            continue
+        for number, command in _pip_install_commands(
+                workflow.read_text(encoding="utf-8")):
+            # `--upgrade pip`, and a step installing one separately pinned tool
+            # (`ruff==`, `pip-audit==`), are not installs of this project's set.
+            if "--upgrade pip" in command or "-r " not in command:
                 continue
-            # `--upgrade pip` and the separately pinned `ruff==` are installs of
-            # one named thing, not of this project's dependency set.
-            if "--upgrade pip" in line or "ruff==" in line:
-                continue
-            if "-c constraints-ci.txt" not in line:
-                unconstrained.append(f"{workflow.name}:{number}: {line.strip()}")
+            if "-c constraints-ci.txt" not in command:
+                unconstrained.append(f"{workflow.name}:{number}: {command}")
     assert not unconstrained, (
         "these CI install steps do not use the recorded dependency set:\n  "
         + "\n  ".join(unconstrained)
-        + "\nAdd `-c constraints-ci.txt`, or exclude the line here with a reason.")
+        + "\nAdd `-c constraints-ci.txt`, or exempt it here with a reason.")
