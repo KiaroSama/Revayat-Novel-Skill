@@ -69,6 +69,11 @@ jobs:
       - name: Run the integration tier
         # -rs prints the skip reasons, so a test that quietly opted out of
         # running is visible in the log rather than lost in the dots.
+        #
+        # --timeout=900 deliberately overrides the 300s ceiling in pytest.ini:
+        # these tests drive real OCR (ocrmypdf, tesseract, ghostscript) over a
+        # whole document, which is legitimately slower than anything the
+        # committed default is sized for.
         run: python -m pytest tests/test_integration_ocr.py -v -rs --timeout=900
 
       - name: No test silently skipped itself
@@ -148,6 +153,8 @@ jobs:
           PY
 
       - name: The render tier, where a skip is the thing being looked for
+        # --timeout=900 deliberately overrides pytest.ini's 300s: a real
+        # renderer laying a document out is slower than the committed default.
         shell: bash
         env:
           PYTHONIOENCODING: utf-8

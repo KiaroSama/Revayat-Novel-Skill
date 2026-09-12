@@ -428,3 +428,42 @@ def test_the_persian_face_is_vazir_everywhere_it_is_promised():
     options = parser.parse_args(["--book", "x", "--out", "y"])
     assert options.font == "Vazir"
     assert _documented_defaults().get("--font") == "Vazir"
+
+
+#: The workflows allowed to override the committed per-test ceiling, and why.
+#: Both run a real external toolchain that is legitimately slower than the
+#: default; an override that is deliberate is not duplication.
+TIMEOUT_OVERRIDE_ALLOWED = {"integration.yml", "word-render.yml"}
+
+
+def test_the_suite_carries_its_own_per_test_ceiling():
+    """A bound that lives only in a CI flag does not bound a local run.
+
+    It used to live in four flags across three workflows with three values, so
+    `pytest tests` — the command AGENTS.md hands a contributor — had no ceiling
+    and a deadlocking test hung until somebody noticed.
+    """
+    import configparser
+
+    root = Path(__file__).resolve().parents[1]
+    config = configparser.ConfigParser()
+    read = config.read(root / "pytest.ini", encoding="utf-8")
+    assert read, "pytest.ini is missing; the suite has no committed time bound"
+    assert config.getint("pytest", "timeout") > 0
+    # `signal` needs SIGALRM, which Windows does not have.
+    assert config.get("pytest", "timeout_method") == "thread"
+
+
+def test_no_workflow_re_adds_the_default_as_a_flag():
+    """An override has to be deliberate, not a copy of the committed default."""
+    root = Path(__file__).resolve().parents[1]
+    offenders = []
+    for workflow in sorted((root / ".github" / "workflows").glob("*.yml")):
+        if workflow.name in TIMEOUT_OVERRIDE_ALLOWED:
+            continue
+        if "--timeout=" in workflow.read_text(encoding="utf-8"):
+            offenders.append(workflow.name)
+    assert not offenders, (
+        f"these workflows pass --timeout although pytest.ini sets it: "
+        f"{offenders}. Either the value is deliberate — add it to "
+        f"TIMEOUT_OVERRIDE_ALLOWED with a reason — or drop the flag.")
