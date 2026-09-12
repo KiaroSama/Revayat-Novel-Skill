@@ -127,12 +127,12 @@ def _edit(book_path: Path) -> None:
 
 def test_a_first_build_records_what_it_was_cut_from(tmp_path):
     book_path, chunks = _work(tmp_path)
-    chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    chunking.build(book_path, chunks, glossary_path=None, budget=1300)
 
     entry = runstate.RunState(tmp_path).recorded("chunk")
     assert entry is not None
     assert entry["inputs"]["book"] == chunking.source_digest(ir.load_book(book_path))
-    assert entry["inputs"]["budget"] == "400"
+    assert entry["inputs"]["budget"] == "1300"
     assert entry["outputs"]["manifest"]
 
 
@@ -145,7 +145,7 @@ def test_merging_the_translations_back_does_not_orphan_the_worksheets(tmp_path):
     import merge as merging
 
     book_path, chunks = _work(tmp_path)
-    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     _translate_everything(chunks, manifest)
     before = runstate.file_hash(book_path)
 
@@ -160,12 +160,12 @@ def test_merging_the_translations_back_does_not_orphan_the_worksheets(tmp_path):
 
 def test_rebuilding_over_translations_of_a_different_book_is_refused(tmp_path):
     book_path, chunks = _work(tmp_path)
-    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     _translate_everything(chunks, manifest)
     _edit(book_path)
 
     with pytest.raises(chunking.StaleWorksheets) as refusal:
-        chunking.build(book_path, chunks, glossary_path=None, budget=400)
+        chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     message = str(refusal.value)
     assert "book changed" in message
     assert "--force" in message
@@ -175,22 +175,22 @@ def test_rebuilding_over_translations_of_a_different_book_is_refused(tmp_path):
 
 def test_force_rebuilds_anyway(tmp_path):
     book_path, chunks = _work(tmp_path)
-    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     _translate_everything(chunks, manifest)
     _edit(book_path)
 
-    rebuilt = chunking.build(book_path, chunks, glossary_path=None, budget=400,
+    rebuilt = chunking.build(book_path, chunks, glossary_path=None, budget=1300,
                              force=True)
     assert rebuilt["chunks"]
     assert runstate.RunState(tmp_path).is_stale(
-        "chunk", chunking._chunk_inputs(book_path, None, 400)) == (False, "")
+        "chunk", chunking._chunk_inputs(book_path, None, 1300)) == (False, "")
 
 
 def test_worksheets_nobody_has_answered_are_rebuilt_without_complaint(tmp_path):
     book_path, chunks = _work(tmp_path)
-    chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     _edit(book_path)
-    assert chunking.build(book_path, chunks, glossary_path=None, budget=400)["chunks"]
+    assert chunking.build(book_path, chunks, glossary_path=None, budget=1300)["chunks"]
 
 
 def test_a_changed_glossary_orphans_the_translations_too(tmp_path):
@@ -200,7 +200,7 @@ def test_a_changed_glossary_orphans_the_translations_too(tmp_path):
     glossary_path = tmp_path / "glossary.json"
     gl.save(gl.new_glossary(), glossary_path)
     manifest = chunking.build(book_path, chunks, glossary_path=glossary_path,
-                              budget=400)
+                              budget=1300)
     _translate_everything(chunks, manifest)
 
     glossary = gl.load(glossary_path)
@@ -208,24 +208,24 @@ def test_a_changed_glossary_orphans_the_translations_too(tmp_path):
     gl.save(glossary, glossary_path)
 
     with pytest.raises(chunking.StaleWorksheets) as refusal:
-        chunking.build(book_path, chunks, glossary_path=glossary_path, budget=400)
+        chunking.build(book_path, chunks, glossary_path=glossary_path, budget=1300)
     assert "glossary changed" in str(refusal.value)
 
 
 def test_a_working_directory_with_no_run_state_behaves_exactly_as_before(tmp_path):
     """A first run must never be blocked by bookkeeping that does not exist."""
     book_path, chunks = _work(tmp_path)
-    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     _translate_everything(chunks, manifest)
     (tmp_path / runstate.STATE_NAME).unlink()
     _edit(book_path)
 
-    assert chunking.build(book_path, chunks, glossary_path=None, budget=400)["chunks"]
+    assert chunking.build(book_path, chunks, glossary_path=None, budget=1300)["chunks"]
 
 
 def test_status_reports_staleness_beside_what_is_left_to_do(tmp_path):
     book_path, chunks = _work(tmp_path)
-    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=1300)
 
     fresh = chunking.status(chunks)
     assert fresh["stale"] is False and fresh["stale_reason"] == ""
@@ -240,12 +240,12 @@ def test_status_reports_staleness_beside_what_is_left_to_do(tmp_path):
 def test_status_says_it_cannot_tell_rather_than_guessing(tmp_path):
     """``false`` there would be a claim, not a comparison."""
     book_path, chunks = _work(tmp_path)
-    chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    chunking.build(book_path, chunks, glossary_path=None, budget=1300)
 
     (tmp_path / runstate.STATE_NAME).unlink()
     assert chunking.status(chunks)["stale"] is None
 
-    chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     book_path.unlink()
     unknown = chunking.status(chunks)
     assert unknown["stale"] is None
@@ -257,7 +257,7 @@ def test_status_survives_being_run_from_somewhere_else(tmp_path, monkeypatch):
     hash as missing and report the book as changed on every resume."""
     book_path, chunks = _work(tmp_path)
     monkeypatch.chdir(tmp_path)
-    chunking.build(Path("book.json"), Path("chunks"), glossary_path=None, budget=400)
+    chunking.build(Path("book.json"), Path("chunks"), glossary_path=None, budget=1300)
 
     monkeypatch.chdir(tmp_path.parent)
     assert chunking.status(chunks)["stale"] is False
@@ -265,12 +265,12 @@ def test_status_survives_being_run_from_somewhere_else(tmp_path, monkeypatch):
 
 def test_the_cli_refuses_with_a_non_zero_exit_and_says_why(tmp_path, capsys):
     book_path, chunks = _work(tmp_path)
-    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     _translate_everything(chunks, manifest)
     _edit(book_path)
 
     arguments = ["build", "--book", str(book_path), "--out", str(chunks),
-                 "--budget", "400"]
+                 "--budget", "1300"]
     assert chunking.main(arguments) == 2
     refusal = json.loads(capsys.readouterr().out)
     assert refusal["ok"] is False
@@ -392,7 +392,7 @@ def test_a_record_from_an_older_digest_does_not_refuse_a_rebuild(tmp_path):
     moved underneath it rather than any text the author wrote.
     """
     book_path, chunks = _work(tmp_path)
-    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     _translate_everything(chunks, manifest)
 
     # Forge the record the previous definition would have written: the same
@@ -406,18 +406,18 @@ def test_a_record_from_an_older_digest_does_not_refuse_a_rebuild(tmp_path):
                   json.dumps(data, ensure_ascii=False, indent=1) + "\n")
 
     # Rebuilds instead of raising StaleWorksheets.
-    chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    chunking.build(book_path, chunks, glossary_path=None, budget=1300)
 
 
 def test_a_recorded_digest_that_really_moved_still_refuses(tmp_path):
     """The positive control: the refusal must still fire on a real change."""
     book_path, chunks = _work(tmp_path)
-    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=1300)
     _translate_everything(chunks, manifest)
     _edit(book_path)
 
     with pytest.raises(chunking.StaleWorksheets):
-        chunking.build(book_path, chunks, glossary_path=None, budget=400)
+        chunking.build(book_path, chunks, glossary_path=None, budget=1300)
 
 
 def test_editing_a_translatable_running_head_changes_the_source_digest():

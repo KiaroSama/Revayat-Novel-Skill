@@ -123,7 +123,7 @@ def test_worksheet_round_trip_including_image_captions(translated_book, tmp_path
     book_path = tmp_path / "book.json"
     ir.save_book(book, book_path)
     chunks = tmp_path / "chunks"
-    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=400)
+    manifest = chunking.build(book_path, chunks, glossary_path=None, budget=1300)
 
     unit_ids = [u for entry in manifest["chunks"] for u in entry["unit_ids"]]
     assert any(u.endswith("#alt") for u in unit_ids), "image captions must be offered"
