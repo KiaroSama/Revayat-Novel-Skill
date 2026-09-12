@@ -205,6 +205,57 @@ def test_a_paragraph_that_cannot_be_cut_small_enough_refuses_clearly(tmp_path):
     assert "b00001" in str(refusal.value)
 
 
+def test_a_split_block_run_announces_a_first_mention_once(tmp_path):
+    """The announcement belongs to one worksheet, not to a run of blocks.
+
+    Splitting a block run into several worksheets gave every one of them the same
+    ``block_ids``, so each was told it owned the name's first appearance. The
+    translator then sees "introduce this name here" twice and does, which is the
+    exact duplication the glossary pass exists to prevent — and it asked for it.
+
+    Caught by the end-to-end script, which pytest does not collect, after the
+    budget began splitting runs that used not to split.
+    """
+    import glossary as gl
+
+    # Enough prose that one run becomes several worksheets at this budget. The
+    # name sits mid-sentence on purpose: the scanner discards a capitalised run
+    # that only ever opens a sentence, which is how ordinary words masquerade as
+    # names — and a fixture that never clears that filter proves nothing.
+    book_path = _book(tmp_path, [
+        f"On that day Elizabeth Bennet walked on, paragraph {i} of prose here. " * 2
+        for i in range(1, 13)])
+
+    # Scanned, not hand-built: the scan is what records `first_block_id`, and
+    # that field is the whole basis of the ownership decision under test.
+    proposals = gl.scan(ir.load_book(book_path), minimum=2)
+    for entry in proposals:
+        if entry["source"] == "Elizabeth Bennet":
+            entry.update({"target": "الیزابت بنت", "later_form": "الیزابت بنت",
+                          "first_form": "الیزابت بنت (Elizabeth Bennet)",
+                          "locked": True})
+    owner = next(e for e in proposals if e["source"] == "Elizabeth Bennet")
+    assert owner["first_block_id"], "the scan must record where the name first appears"
+
+    glossary = gl.new_glossary()
+    glossary["entries"] = proposals
+    glossary_path = tmp_path / "glossary.json"
+    gl.save(glossary, glossary_path)
+
+    chunks = tmp_path / "chunks"
+    manifest = chunking.build(book_path, chunks, glossary_path=glossary_path,
+                              budget=1300)
+
+    assert len(manifest["chunks"]) >= 2, "the fixture must split, or it proves nothing"
+    announced = [entry["id"] for entry in manifest["chunks"]
+                 if "first mention" in
+                 (chunks / entry["file"]).read_text(encoding="utf-8")]
+
+    assert len(announced) == 1, (
+        f"the first mention was announced in {len(announced)} worksheets: "
+        f"{announced}")
+
+
 def test_an_ordinary_book_is_not_segmented(tmp_path):
     """The negative control: nothing is cut that fits, so ordinary books keep
     producing whole units and the worksheet ids stay plain."""
