@@ -817,15 +817,26 @@ def translation_hash(book_path: Path, page: int) -> str:
             parts.append(f"{note['id']}\x00{note.get('target') or ''}")
 
     parts.append("figures")
+    # The asset's identity is read from the **file**, not from a field on the
+    # block. My first version hashed `block["asset_sha256"]` — a name nothing in
+    # this project ever writes, so it contributed the empty string for every
+    # figure and replacing a picture under the same filename changed nothing.
+    # The test agreed with the bug because it set that same invented key by hand.
+    # Assets live beside `book.json`, which is the convention `qa check` uses.
+    assets = Path(book_path).parent / "assets"
     for block_id in sorted(ids):
         block = lookup.get(block_id) or {}
         if block.get("type") != "image":
             continue
-        # The asset's *identity*, so replacing the picture under the same
-        # filename invalidates the page that was reviewed with the old one.
-        parts.append(f"{block_id}\x00{block.get('asset') or ''}"
-                     f"\x00{block.get('asset_sha256') or ''}"
-                     f"\x00{block.get('target_alt') or ''}")
+        name = block.get("asset") or ""
+        picture = assets / name if name else None
+        if picture is not None and picture.is_file():
+            identity = ir.sha256_file(picture)
+        else:
+            identity = "absent"
+        parts.append(f"{block_id}\x00{name}\x00{identity}"
+                     f"\x00{block.get('target_alt') or ''}"
+                     f"\x00{block.get('width_pt')}x{block.get('height_pt')}")
 
     parts.append("running")
     for unit_id, _kind, piece, section in ir.iter_running_pieces(book):
