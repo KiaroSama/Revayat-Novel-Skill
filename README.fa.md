@@ -210,6 +210,7 @@ book.pdf / .epub / .docx
 - [`translation-policy.md`](skills/revayat-novel/references/translation-policy.md) — یک ترجمهٔ ادبی وفادار چه چیزهایی می‌خواهد
 - [`persian-typography.md`](skills/revayat-novel/references/persian-typography.md) — RTL، نیم‌فاصله، نشانه‌گذاری، متن دوخطی
 - [`extraction.md`](skills/revayat-novel/references/extraction.md) — مسیریابی OCR، کتاب‌های دشوار، ساختار IR
+- [`watermarks.md`](skills/revayat-novel/references/watermarks.md) — حذف واترمارک رنگی از اسکن، و کاری که از آن برنمی‌آید
 - [`glossary-and-voice.md`](skills/revayat-novel/references/glossary-and-voice.md) — سیاست نام‌گذاری، نام‌های مستعار، لحن شخصیت
 - [`docx-and-ooxml.md`](skills/revayat-novel/references/docx-and-ooxml.md) — همهٔ گزینه‌های ساخت و ساختار ورد حاصل از هرکدام
 - [`troubleshooting.md`](skills/revayat-novel/references/troubleshooting.md) — پرتکرارترین مشکل‌هایی که به آن‌ها برمی‌خورید
