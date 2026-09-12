@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import falint
 
+ZWNJ = falint.ZWNJ
+
 URL = "https://example.com/كتاب/١"
 
 
@@ -53,3 +55,46 @@ def test_an_email_address_survives():
 def test_prose_around_a_protected_url_is_still_normalised():
     """Protection must be a span, not an excuse to stop working."""
     assert fix(f"كتاب {URL} ١٢ تا") == f"کتاب {URL} ۱۲ تا"
+
+
+# --------------------------------------------------------------------------- #
+# ZWNJ: the joins that are orthography, and the ones that are guesses
+# --------------------------------------------------------------------------- #
+
+def test_the_verbal_prefix_still_joins():
+    assert fix("او می رود") == f"او می{ZWNJ}رود"
+    assert fix("او می شد") == f"او می{ZWNJ}شد"
+    assert fix("او نمی رفت") == f"او نمی{ZWNJ}رفت"
+
+
+def test_the_plural_suffix_still_joins_and_the_kaf_normalises():
+    assert fix("كتاب ها") == f"کتاب{ZWNJ}ها"
+
+
+def test_the_inflected_comparatives_still_join():
+    """«تری» and «ترین» have no standalone reading, so they are safe."""
+    assert fix("بزرگ ترین") == f"بزرگ{ZWNJ}ترین"
+    assert fix("بزرگ تری") == f"بزرگ{ZWNJ}تری"
+
+
+def test_the_noun_wine_is_not_glued_to_the_word_after_it():
+    """«می ناب» is wine, not a verb. Joining it invents a word."""
+    assert fix("می ناب نوشید.") == "می ناب نوشید."
+
+
+def test_a_standalone_wet_is_not_glued_as_a_comparative_suffix():
+    """«موی تر» is wet hair; «مویتر» is nothing at all."""
+    assert fix("موی تر داشت.") == "موی تر داشت."
+    assert fix("دست تر را خشك كرد.") == "دست تر را خشک کرد."
+
+
+def test_the_bare_comparative_is_reported_instead_of_guessed():
+    """Neither reading can be ruled out, so the decision goes to a human.
+
+    «بزرگ تر» wants the ZWNJ and «موی تر» must not have it — same shape, and
+    only the part of speech of the preceding word tells them apart. A lint
+    finding costs a review; a wrong rewrite costs the sentence.
+    """
+    codes = {f["code"] for f in falint.lint_text("بزرگ تر از آن بود.")}
+    assert "zwnj-comparative" in codes
+    assert falint.lint_text("بزرگ‌تر از آن بود.") == []
