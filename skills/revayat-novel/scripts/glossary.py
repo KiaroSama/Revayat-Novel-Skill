@@ -51,8 +51,35 @@ december monday tuesday wednesday thursday friday saturday sunday
 """.split())
 
 #: A capitalised word, or a run of them ("Elizabeth Bennet", "New York").
-_NAME_RUN = re.compile(r"\b([A-Z][a-z'’-]{1,}(?:\s+(?:of|de|van|von|the)\s+)?"
-                       r"(?:\s+[A-Z][a-z'’-]{1,})*)\b")
+#:
+#: A "word" here admits an internal capital, an apostrophe and a hyphen, because
+#: real surnames have all three and the previous class — one capital then
+#: `[a-z'’-]` — stopped at the second one. Measured: `McDonald` matched only
+#: `Mc` and was dropped by the length guard; `Anne-Marie` matched `Anne-` and
+#: then split into two competing candidates; `O'Brien`, `MacLeod`, `DeVere`,
+#: `LaFontaine` and `Van der Berg` were invisible. Eight of ten real surname
+#: shapes never reached the glossary, so no worksheet carried a locked spelling
+#: for them — and the drift check cannot report a name it was never given.
+#:
+#: Loosening it is safe because the pattern is not the filter: a candidate still
+#: has to clear `_STOPWORDS`, the length guard, `minimum` occurrences and — the
+#: one that does the real work — the mid-sentence rule, which discards anything
+#: that only ever opens a sentence.
+#:
+#: The hyphen branch requires a *following capital*, so `Anne-Marie` stays whole
+#: while a dash between words cannot be swallowed and no candidate can end in
+#: one. `{1,}` is gone, so a single capital matches; `len(name) < 3` in `scan`
+#: still drops `A`, `I` and bare initials.
+#: The particle group carries the word *after* the particle. It has to: the
+#: group ends by consuming the space, so a trailing `(?:\s+WORD)*` can never
+#: attach the next word and `Van der Berg` came back as `Van der` plus a
+#: separate `Berg`. The original pattern had the same flaw and it was invisible
+#: only because `der` was not in the alternation.
+_NAME_WORD = r"[A-Z][A-Za-z'’]*(?:-[A-Z][A-Za-z'’]*)*"
+_NAME_RUN = re.compile(
+    rf"\b({_NAME_WORD}"
+    rf"(?:\s+(?:of|de|van|von|der|den|la|le|du|the)\s+{_NAME_WORD})?"
+    rf"(?:\s+{_NAME_WORD})*)\b")
 _SENTENCE_START = re.compile(r"(?:^|[.!?…]\s+|[«\"'“]\s*)$")
 #: "I'm", "I've", "He'll" — a contraction, not a name. Matched on the whole
 #: candidate so "O'Brien" and "D'Arcy" are untouched.
