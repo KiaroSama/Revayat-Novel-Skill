@@ -127,16 +127,25 @@ def _unmask(text: str, keep: list[str]) -> str:
 
 
 def fix_prose(text: str, options: Options) -> str:
-    """Apply Persian typography to one prose span."""
+    """Apply Persian typography to one prose span.
+
+    Masking is the *first* thing that happens, before any rule at all. An
+    Arabic kaf or an Arabic-Indic digit inside a URL is one of its bytes, not
+    its typography: normalising it yields a different and usually dead address,
+    and a quote pair inside a query string is punctuation the far end parses.
+    Protecting a region only after the character, digit and quote passes have
+    run protects text those passes already rewrote — so the order here is the
+    guarantee, and a reader must never have to backtick a URL by hand to get it.
+    """
+    masked, keep = _mask(text)
+
     for source, target in _CHAR_MAP.items():
-        text = text.replace(source, target)
+        masked = masked.replace(source, target)
     for source, target in _ARABIC_INDIC.items():
-        text = text.replace(source, target)
+        masked = masked.replace(source, target)
 
     if options.quotes:
-        text = _QUOTE_PAIR.sub(lambda m: f"«{m.group(1)}»", text)
-
-    masked, keep = _mask(text)
+        masked = _QUOTE_PAIR.sub(lambda m: f"«{m.group(1)}»", masked)
 
     if options.ellipsis:
         masked = _ELLIPSIS.sub("…", masked)
