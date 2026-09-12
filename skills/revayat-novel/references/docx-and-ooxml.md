@@ -140,6 +140,22 @@ This reads the saved package, not the builder's own report:
 | `picture-size-implicit` | warning | a picture with no explicit extent |
 | `no-rtl` | warning | no `w:bidi` anywhere — the document is not RTL |
 
+`doc-qa check` asks a second set of questions, about the assembled book's
+sections. Sizes in the wrong order are each individually legal, so this is
+checked twice — once against the built `w:sectPr` sequence and once against the
+rendered page shapes:
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `section-count` | error | the book declares one number of sections and the document has another: a break was lost or duplicated |
+| `section-size` | error | a section's page size is not the one the book declares for it |
+| `section-property` | error | a section's orientation, margins or start type disagrees with the book |
+| `section-order` | error | the rendered pages do not walk forward through the declared sequence — the renderer disagreed with its own package |
+| `section-package-unread` | warning | the built document's sections could not be read back, so their order was not checked |
+
+All five mean the same thing for a reader: **re-build.** None of them is
+something to fix in `book.json`.
+
 ## Using a reference template
 
 `--template ref.docx` opens an existing Word file and appends into it, so the
