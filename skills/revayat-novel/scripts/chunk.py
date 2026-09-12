@@ -216,9 +216,19 @@ def render_worksheet(
         "",
     ]
 
+    # The blocks *this worksheet* carries, not every block in the run. A run
+    # that renders over the budget becomes several worksheets sharing one
+    # ``ids``, and handing each the whole run told every one of them that it
+    # owned the name's first appearance — so four worksheets all said
+    # "introduce this name here", which is the duplication the glossary pass
+    # exists to prevent, asked for in the prompt.
+    carried = [block_id for block_id in ids
+               if any(unit_id == block_id or unit_id.startswith(f"{block_id}#")
+                      for unit_id, _, _ in units)]
+
     table = gl.render_term_table(
         gl.entries_for_text(glossary, source_blob), glossary.get("policy", {}),
-        block_ids=ids,
+        block_ids=carried,
     )
     if table:
         lines += ["## Names — use these exact forms", "", table, ""]

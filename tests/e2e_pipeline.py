@@ -101,12 +101,17 @@ def translate(worksheet: str) -> str:
     """Stand in for the translating agent, honouring the worksheet contract."""
     out: list[str] = []
     current: str | None = None
+    # The kind the worksheet asked for, echoed back. Merge checks it, because a
+    # heading answered as a paragraph is how a chapter title becomes body text —
+    # so a stand-in that invents a kind is not honouring the contract.
+    current_kind = "para"
     body: list[str] = []
     counter = 0
+    noted = False
     seen_translate = False
 
     def flush() -> None:
-        nonlocal counter
+        nonlocal counter, noted
         if current is None:
             return
         source = "\n".join(body).strip()
@@ -124,10 +129,16 @@ def translate(worksheet: str) -> str:
             span["text"] = (f"{name}متن فارسی یکتای {current} "
                             f"برای آزمون خط لوله است. ") * 2
         rendered = ir.render_spans(spans).strip()
-        # Exercise the translator-footnote path once.
-        if counter == 1:
+        # Exercise the translator-footnote path once per worksheet, and only on
+        # prose. The protocol says to write the marker "in the sentence": put it
+        # in a footnote's own body or an image caption and there is no paragraph
+        # for the note to anchor to, so `qa` rightly reports it orphaned. The
+        # first unit of a worksheet is not always prose — a split run can open
+        # with a footnote or an `#alt` — so the kind decides, not the position.
+        if not noted and current_kind == "para":
             rendered += "[[fn:tr-01]]"
-        out.append(f"@@ {current} x")
+            noted = True
+        out.append(f"@@ {current} {current_kind}")
         out.append(rendered)
         out.append("")
 
@@ -141,6 +152,7 @@ def translate(worksheet: str) -> str:
         if match:
             flush()
             current = match.group("id")
+            current_kind = match.group("kind")
             body = []
             counter += 1
             continue
@@ -148,7 +160,12 @@ def translate(worksheet: str) -> str:
             body.append(line)
     flush()
 
-    if counter >= 1:
+    # Only when a marker was actually placed. Emitting the note unconditionally
+    # produced a note no sentence points at whenever the worksheet carried no
+    # prose to point from — a split run can leave a worksheet holding nothing but
+    # an image caption and a source footnote — and `qa` rightly calls that
+    # orphaned. A real translator does not file a note for nothing either.
+    if noted:
         out += ["@@ tr-01 footnote", "یادداشتی که مترجم افزوده است.", ""]
     return "\n".join(out)
 
@@ -156,6 +173,7 @@ def translate(worksheet: str) -> str:
 def main() -> int:
     ir.use_utf8_stdio()
     work = Path(tempfile.mkdtemp(prefix="revayat-novel-e2e-"))
+    passed = False
     try:
         print(f"working in {work}")
 
@@ -265,9 +283,19 @@ def main() -> int:
         print(f"  8 package     : verified, {output.stat().st_size // 1024} KB")
 
         print("\nend-to-end pipeline OK")
+        passed = True
         return 0
     finally:
-        shutil.rmtree(work, ignore_errors=True)
+        # A failed run keeps its working directory, and says where. Deleting it
+        # unconditionally destroyed the only evidence at exactly the moment it
+        # was needed: this script reports a failure with no traceback, so
+        # without the worksheets, the book and the report there is nothing left
+        # to diagnose from — which is how a three-platform CI failure became
+        # unreproducible locally.
+        if passed:
+            shutil.rmtree(work, ignore_errors=True)
+        else:
+            print(f"\nkept for diagnosis: {work}")
 
 
 if __name__ == "__main__":
