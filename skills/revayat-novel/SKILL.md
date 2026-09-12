@@ -250,33 +250,35 @@ produced, so a step taken early simply refuses:
 ```bash
 P=12   # whatever `pages next` just named
 
-# 3. fold the translation into the book
+# 1. fold the translation into the book
 $PY $SKILL_DIR/scripts/revayat-novel.py pages merge \
   --book $WORK/book.json --pages $WORK/pages --page $P --glossary $WORK/glossary.json
 
-# 4. compare that page with its source page. render-qa lays the page out
+# 2. compare that page with its source page. render-qa lays the page out
 #    itself, so there is no filename to get right and no way to hand it the
 #    previous page's preview by mistake.
 $PY $SKILL_DIR/scripts/revayat-novel.py render-qa \
   --book $WORK/book.json --work $WORK --page $P
 
-# 5. look at the two images (step 8 says what to look for)
+# 3. look at the two images (step 8 says what to look for)
 $PY $SKILL_DIR/scripts/revayat-novel.py pages review \
   --pages $WORK/pages --page $P \
   --answer figure-placement=yes --answer script-integrity=yes \
   --answer no-source-language=yes --answer hierarchy=yes \
   --answer reads-as-a-book=yes --note "what you saw"
 
-# 6. only now
+# 4. only now
 $PY $SKILL_DIR/scripts/revayat-novel.py pages accept \
   --book $WORK/book.json --pages $WORK/pages --page $P
 ```
 
 Then `pages next` again, until it says there is nothing left.
 
-**Step 4 is not optional and step 5 will do it for you if you skip it** — leave
-`--docx` off and `render-qa` builds the preview itself. The explicit command is
-there for when you want to open the page in Word and look at it yourself.
+**Rendering is not optional, and step 2 does it for you.** Leave `--docx` off
+and `render-qa` builds the page's preview itself. `pages preview` is there for
+when you want to open that page in Word and look at it yourself before
+answering — it writes `$WORK/previews/page-NNNN.docx` and nothing downstream
+needs it.
 
 **A PDF page cannot be accepted on the translation alone.** If the source page
 cannot be rendered — the one-page PDF deleted, replaced, never split — the

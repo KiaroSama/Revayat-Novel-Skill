@@ -31,5 +31,6 @@ It returns `unverified` rather than passing until somebody has looked at
 `${1:-work}/renders/final/pages/`. That is not a soft pass; say so.
 
 For each finding, say what it means for the reader and what you recommend —
-distinguish the ones that need a chunk re-translated from the ones that are
-cosmetic. Do not simply paste the JSON.
+distinguish the ones that need a page or chunk re-translated — whichever unit
+the book was cut into — from the ones that are cosmetic. Do not simply paste the
+JSON.
