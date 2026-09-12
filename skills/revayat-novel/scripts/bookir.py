@@ -529,14 +529,20 @@ def validate_book(book: dict[str, Any]) -> list[str]:
                             f"(section {section.get('index')})")
         running.add(unit_id)
 
+    # Every token, not only the canonical ones. A `tr-01` a translator wrote is
+    # legitimate in transit and a defect in a finished book, and a token naming
+    # nothing is the same defect spelled differently — but scanning with the
+    # canonical pattern could see neither, so the one check whose job is to
+    # notice found nothing to report and the marker printed.
     for block in iter_text_blocks(book):
         for side in ("text", "target"):
             value = block.get(side)
             if not value:
                 continue
-            for ref in footnote_refs(value):
+            for ref in ANY_FOOTNOTE_TOKEN.findall(value):
                 if ref not in footnote_ids:
-                    problems.append(f"block {block['id']} ({side}): unknown footnote ref {ref}")
+                    problems.append(
+                        f"block {block['id']} ({side}): unknown footnote ref {ref}")
     return problems
 
 
@@ -552,14 +558,24 @@ def validate_book(book: dict[str, Any]) -> list[str]:
 #
 # Anything else is literal. A lone ``*`` in prose is escaped as ``\*``.
 
-FOOTNOTE_TOKEN = re.compile(r"\[\[fn:(fn\d{4})\]\]")
+#: A canonical footnote id: ``fn`` and **at least** four digits.
+#:
+#: One definition, used by everything that allocates, recognises or parses one.
+#: It used to be written out three times — here, in :data:`_INLINE`, and as the
+#: ``:04d`` in :func:`make_footnote` — and the three disagreed at the boundary:
+#: note 10000 was allocated as ``fn10000`` and then matched by nothing, so the
+#: marker survived into the book as literal text and printed as
+#: ``[[fn:fn10000]]`` in the middle of a sentence.
+_FOOTNOTE_ID = r"fn\d{4,}"
+
+FOOTNOTE_TOKEN = re.compile(rf"\[\[fn:({_FOOTNOTE_ID})\]\]")
 #: Any footnote token, including the ``tr-NN`` form a translator writes before
 #: merge allocates it a book-wide id. Kept separate from the canonical pattern
 #: on purpose: a ``tr-NN`` left in a finished book is a defect, and
 #: :func:`validate_book` should still catch it.
 ANY_FOOTNOTE_TOKEN = re.compile(r"\[\[fn:([A-Za-z0-9_-]+)\]\]")
 _INLINE = re.compile(
-    r"(?P<token>\[\[fn:fn\d{4}\]\])"
+    rf"(?P<token>\[\[fn:{_FOOTNOTE_ID}\]\])"
     r"|(?P<code>(?<!\\)`(?P<code_body>[^`]*)`)"
     r"|(?P<bi>(?<!\\)\*\*\*(?P<bi_body>(?:[^*\\]|\\.)+?)\*\*\*)"
     r"|(?P<bold>(?<!\\)\*\*(?P<bold_body>(?:[^*\\]|\\.)+?)\*\*)"
