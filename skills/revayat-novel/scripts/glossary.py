@@ -149,6 +149,44 @@ def make_entry(index: int, source: str, *, category: str = "unknown",
     }
 
 
+#: An entry id as :func:`make_entry` writes it.
+_ENTRY_ID = re.compile(r"^g(\d+)$")
+
+
+def allocate_ids(entries: list[dict[str, Any]],
+                 proposals: list[dict[str, Any]]) -> None:
+    """Number ``proposals`` so no id in ``entries`` is taken twice.
+
+    How many entries there are is not the same question as which ids exist.
+    Deleting a false candidate is the documented way to reject one, so
+    ``g0001, g0003`` is the normal shape of a glossary somebody has worked on —
+    and a next id derived from the *length* of the list hands the next candidate
+    ``g0003``, which is already taken. An id is the only handle the worksheets,
+    the enforcement pass and the QA findings have on an entry, so two entries
+    sharing one means a locked decision can be looked up and the wrong entity
+    found.
+
+    A deleted candidate's number stays spent: reusing it would let a reference
+    written down before the deletion resolve silently to a different name.
+    """
+    used = {str(entry.get("id") or "") for entry in entries}
+    highest = max(
+        (int(match.group(1)) for entry_id in used
+         if (match := _ENTRY_ID.match(entry_id))),
+        default=0,
+    )
+    for offset, proposal in enumerate(proposals, start=1):
+        proposal["id"] = f"g{highest + offset:04d}"
+
+    ids = [str(entry.get("id") or "") for entry in (*entries, *proposals)]
+    duplicated = sorted({entry_id for entry_id in ids if ids.count(entry_id) > 1})
+    if duplicated:
+        raise ValueError(
+            f"glossary ids are not unique: {duplicated}. Entries sharing an id "
+            f"cannot be told apart by any later stage; give each one its own."
+        )
+
+
 def surface_forms(entry: dict[str, Any]) -> list[str]:
     return [form for form in [entry.get("source"), *entry.get("aliases", [])] if form]
 
@@ -570,9 +608,7 @@ def main(argv: list[str] | None = None) -> int:
             if entry["source"] not in known
         ]
         # Renumber so ids stay unique alongside anything already decided.
-        start = len(glossary["entries"])
-        for offset, entry in enumerate(proposals, start=1):
-            entry["id"] = f"g{start + offset:04d}"
+        allocate_ids(glossary["entries"], proposals)
         glossary["entries"].extend(proposals)
         count_frequencies(glossary, book)
         save(glossary, out)
