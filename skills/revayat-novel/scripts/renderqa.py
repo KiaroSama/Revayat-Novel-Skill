@@ -448,6 +448,19 @@ def _compose_comparison(work_dir: Path, page: int, renders: dict[str, Any]) -> N
         renders["compare_detail"] = composed.get("detail", "")
 
 
+def _render_key(docx: Path, backend: str) -> str:
+    """What a cached render was made from: this document, by this renderer."""
+    return f"{backend}\n{ir.sha256_file(docx)}"
+
+
+def _cached_key(stamp: Path) -> str:
+    """The key beside an existing PDF, or ``""`` when there is none to trust."""
+    try:
+        return stamp.read_text(encoding="utf-8").strip()
+    except (OSError, ValueError):
+        return ""
+
+
 def render_docx(docx: Path, out_dir: Path,
                 *, timeout: float = wordrender.DEFAULT_TIMEOUT) -> Path:
     """Lay the built document out, so there is something to look at.
@@ -460,12 +473,33 @@ def render_docx(docx: Path, out_dir: Path,
     `wordrender` puts Word in a child process precisely because COM cannot be
     cancelled. Which one ran is recorded in the report, because the two do not
     paginate identically and a reader comparing two reports deserves to know.
+
+    **An unchanged document is laid out once.** A render is a pure function of
+    the document and the renderer, so asking a second question about the same
+    bytes is the same answer — and the documented document-QA flow asks twice on
+    purpose (`check` → `review` → `check`, the second confirming the review still
+    describes what is there), which laid a finished novel out twice. The key is
+    the document's own hash plus the backend, beside the PDF: content, never a
+    filename existing, and never across a change of renderer. A missing PDF is
+    rebuilt even when the key matches — the record is not the artefact.
     """
+    docx, out_dir = Path(docx), Path(out_dir)
+    produced = out_dir / (docx.stem + ".pdf")
+    stamp = produced.with_name(produced.name + ".source")
+
+    # Only when there is a document to hash; a missing one must still reach
+    # `wordrender.render` and raise its own named error.
+    key = _render_key(docx, wordrender.backend()) if docx.is_file() else ""
+    if key and produced.is_file() and _cached_key(stamp) == key:
+        return produced
+
     try:
-        produced, _backend = wordrender.render(docx, out_dir, timeout=timeout)
+        made, _backend = wordrender.render(docx, out_dir, timeout=timeout)
     except wordrender.RenderError as error:
         raise RenderError(str(error)) from error
-    return produced
+    if key:
+        ir.write_text(stamp, key + "\n")
+    return made
 
 
 def _why_unverified(target_pdf: Path | None, conversion_failure: str = "") -> str:
