@@ -277,13 +277,16 @@ def test_a_plate_is_cropped_from_the_original_raster(image_only_pdf, tmp_path):
     assert cut["crop"]["method"] == "embedded-page-image", cut["crop"]
     assert cut["crop"]["resized"] is False
 
-    image = Image.open(tmp_path / "plate.png")
-    assert (image.width, image.height) == (cut["pixel_width"], cut["pixel_height"])
-    assert image.width > 900, f"the crop was resampled down: {image.size}"
-    # The plate is dark; a crop of the wrong region would be mostly white.
-    from PIL import ImageStat
-    average = ImageStat.Stat(image.convert("L")).mean[0]
-    assert average < 140, f"the crop does not look like the plate (mean {average:.0f})"
+    # A context manager: Pillow is lazy about a path, so a bare open leaves the
+    # handle alive and Windows then refuses to delete tmp_path — surfacing as a
+    # PermissionError in a later run's setup rather than here.
+    with Image.open(tmp_path / "plate.png") as image:
+        assert (image.width, image.height) == (cut["pixel_width"], cut["pixel_height"])
+        assert image.width > 900, f"the crop was resampled down: {image.size}"
+        # The plate is dark; a crop of the wrong region would be mostly white.
+        from PIL import ImageStat
+        average = ImageStat.Stat(image.convert("L")).mean[0]
+        assert average < 140, f"the crop does not look like the plate (mean {average:.0f})"
 
 
 # --------------------------------------------------------------------------- #

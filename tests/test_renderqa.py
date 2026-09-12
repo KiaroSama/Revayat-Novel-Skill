@@ -934,7 +934,7 @@ def _cli():
 
 
 def test_doctor_finds_a_tool_that_is_installed_but_not_on_path(tmp_path, monkeypatch):
-    """`shutil.which` alone is not "is it installed" on Windows.
+    r"""`shutil.which` alone is not "is it installed" on Windows.
 
     Measured: MinerU at `G:\Program Files\MinerU`, Tesseract under
     `C:\Program Files`, and OCRmyPDF inside the project venv were all reported
