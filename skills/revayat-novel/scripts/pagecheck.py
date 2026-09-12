@@ -121,6 +121,52 @@ def _basefont(name: str) -> str:
     return str(name).split("+", 1)[-1].strip()
 
 
+def _view_of_open(document: Any, index: int, pdf_path: Path) -> dict[str, Any]:
+    """`page_view`'s measuring half, on a document somebody else opened.
+
+    Split out so a caller with every page to measure opens the file once.
+    `page_view` keeps its contract exactly: it raises on an unopenable file and
+    on an out-of-range index.
+    """
+    if not 0 <= index < len(document):
+        raise IndexError(f"{pdf_path} has {len(document)} pages; "
+                         f"wanted index {index}")
+    page = document[index]
+    blocks = [
+        {"text": item[4], "bbox": [round(float(v), 2) for v in item[:4]]}
+        for item in page.get_text("blocks")
+        if len(item) > 6 and item[6] == 0 and str(item[4]).strip()
+    ]
+    images = []
+    for info in page.get_images(full=True):
+        for rect in page.get_image_rects(info[0]):
+            images.append({
+                "bbox": [round(float(v), 2) for v in rect],
+                "width_pt": round(float(rect.width), 2),
+                "height_pt": round(float(rect.height), 2),
+            })
+    # Which fonts the page was *actually* set in. Measured: a book built
+    # with `--font Vazirmatn` came back set in Calibri on a machine that
+    # has Vazirmatn installed - the installed build is a variable font and
+    # Word will not resolve one for `w:cs`, so it fell back to the theme's
+    # minorBidi without a word. Every other check here passed, because
+    # every other check measures a layout that is not the one the reader
+    # gets - and a fallback's metrics differ, so those findings describe a
+    # page nobody will see.
+    fonts = sorted({_basefont(span["font"])
+                    for block in page.get_text("dict")["blocks"]
+                    for line in block.get("lines", ())
+                    for span in line.get("spans", ())
+                    if span.get("text", "").strip()})
+    return {
+        "width_pt": round(float(page.rect.width), 2),
+        "height_pt": round(float(page.rect.height), 2),
+        "blocks": blocks,
+        "images": images,
+        "fonts": fonts,
+    }
+
+
 def page_view(pdf_path: Path, index: int) -> dict[str, Any]:
     """One PDF page reduced to the geometry the checks compare.
 
@@ -130,47 +176,30 @@ def page_view(pdf_path: Path, index: int) -> dict[str, Any]:
     pymupdf = _pymupdf()
     if pymupdf is None:
         raise RuntimeError("PyMuPDF is not installed")
-
-    doc = pymupdf.open(str(pdf_path))
+    document = pymupdf.open(str(pdf_path))
     try:
-        if not 0 <= index < len(doc):
-            raise IndexError(f"{pdf_path} has {len(doc)} pages; wanted index {index}")
-        page = doc[index]
-        blocks = [
-            {"text": item[4], "bbox": [round(float(v), 2) for v in item[:4]]}
-            for item in page.get_text("blocks")
-            if len(item) > 6 and item[6] == 0 and str(item[4]).strip()
-        ]
-        images = []
-        for info in page.get_images(full=True):
-            for rect in page.get_image_rects(info[0]):
-                images.append({
-                    "bbox": [round(float(v), 2) for v in rect],
-                    "width_pt": round(float(rect.width), 2),
-                    "height_pt": round(float(rect.height), 2),
-                })
-        # Which fonts the page was *actually* set in. Measured: a book built
-        # with `--font Vazirmatn` came back set in Calibri on a machine that
-        # has Vazirmatn installed - the installed build is a variable font and
-        # Word will not resolve one for `w:cs`, so it fell back to the theme's
-        # minorBidi without a word. Every other check here passed, because
-        # every other check measures a layout that is not the one the reader
-        # gets - and a fallback's metrics differ, so those findings describe a
-        # page nobody will see.
-        fonts = sorted({_basefont(span["font"])
-                        for block in page.get_text("dict")["blocks"]
-                        for line in block.get("lines", ())
-                        for span in line.get("spans", ())
-                        if span.get("text", "").strip()})
-        return {
-            "width_pt": round(float(page.rect.width), 2),
-            "height_pt": round(float(page.rect.height), 2),
-            "blocks": blocks,
-            "images": images,
-            "fonts": fonts,
-        }
+        return _view_of_open(document, index, Path(pdf_path))
     finally:
-        doc.close()
+        document.close()
+
+
+def _png_of_open(document: Any, index: int, out_path: Path,
+                 dpi: int) -> Path | None:
+    """`render_png`'s rasterising half. Returns ``None`` rather than raising."""
+    if not 0 <= index < len(document):
+        return None
+    page = document[index]
+    try:
+        # A page declares its own size and PyMuPDF renders whatever it is
+        # told; a legal 200-inch page at this dpi is gigabytes. Refused from
+        # the declared size, before any pixel exists — and reported the way
+        # every other "could not render" is here: no artefact, unverified.
+        ir.check_render_area(page.rect.width, page.rect.height, dpi)
+    except ir.RenderTooLarge:
+        return None
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    page.get_pixmap(dpi=dpi).save(str(out_path))
+    return out_path
 
 
 def render_png(pdf_path: Path, index: int, out_path: Path,
@@ -184,35 +213,65 @@ def render_png(pdf_path: Path, index: int, out_path: Path,
     pymupdf = _pymupdf()
     if pymupdf is None or not Path(pdf_path).exists():
         return None
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        doc = pymupdf.open(str(pdf_path))
+        document = pymupdf.open(str(pdf_path))
     except Exception:  # PyMuPDF raises its own hierarchy for a damaged file
         return None
     try:
-        if not 0 <= index < len(doc):
-            return None
-        page = doc[index]
-        try:
-            # A page declares its own size and PyMuPDF renders whatever it is
-            # told; a legal 200-inch page at this dpi is gigabytes. Refused from
-            # the declared size, before any pixel exists — and reported the way
-            # every other "could not render" is here: no artefact, unverified.
-            ir.check_render_area(page.rect.width, page.rect.height, dpi)
-        except ir.RenderTooLarge:
-            return None
-        page.get_pixmap(dpi=dpi).save(str(out_path))
+        return _png_of_open(document, index, out_path, dpi)
     finally:
-        doc.close()
-    return out_path
+        document.close()
+
+
+def views_and_pngs(pdf_path: Path, out_paths: list[Path], *,
+                   dpi: int = DEFAULT_DPI
+                   ) -> tuple[list[dict[str, Any]], list[Path | None]]:
+    """Every page measured and rasterised, opening the document once.
+
+    `page_view` and `render_png` each open the file, read one page and close it,
+    which is right for one page and wrong for a book: `docqa.check_document`
+    calls both per page, so a 300-page render opened the same file 600 times.
+    Measured on a generated 300-page book, 30 lines a page: `views_of` 7.81s
+    against 2.27s for one open — 3.4x, paid twice per `doc-qa check`, and
+    `doc-qa check` runs at least twice per book by the documented workflow.
+
+    The same shape, and the same fix, as `sourcepages.page_fingerprints`.
+
+    Each failure contract is preserved: a measurement raises, an unwritable PNG
+    is ``None`` in its slot. ``out_paths`` should have one entry per page; a
+    shorter list simply leaves the rest unrendered.
+    """
+    pymupdf = _pymupdf()
+    if pymupdf is None:
+        raise RuntimeError("PyMuPDF is not installed")
+    document = pymupdf.open(str(pdf_path))
+    try:
+        views = [_view_of_open(document, index, Path(pdf_path))
+                 for index in range(len(document))]
+        pngs = [_png_of_open(document, index, out_paths[index], dpi)
+                if index < len(out_paths) else None
+                for index in range(len(document))]
+        return views, pngs
+    finally:
+        document.close()
 
 
 # --------------------------------------------------------------------------- #
 # Expectations
 def views_of(pdf_path: Path) -> list[dict[str, Any]]:
     """Every page of a preview, read back. Empty when it cannot be opened."""
-    total = page_count(pdf_path)
-    return [page_view(pdf_path, index) for index in range(total)]
+    pymupdf = _pymupdf()
+    if pymupdf is None:
+        return []
+    try:
+        document = pymupdf.open(str(pdf_path))
+    except Exception:
+        return []
+    try:
+        return [_view_of_open(document, index, Path(pdf_path))
+                for index in range(len(document))]
+    finally:
+        document.close()
 
 
 def page_count(pdf_path: Path) -> int:

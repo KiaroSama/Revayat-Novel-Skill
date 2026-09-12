@@ -376,7 +376,6 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
     wanted_font = pagecheck.requested_fonts(docx).get("complex", "")
 
     setups = page_setups(book)
-    views: list[dict[str, Any]] = []
     pages: list[dict[str, Any]] = []
     findings: list[dict[str, Any]] = []
     sheets: list[str] = []
@@ -384,9 +383,10 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
     # page missing from the evidence is a state of its own, not a gap to skip.
     pngs = [page_png(work_dir, index + 1) for index in range(total)]
 
-    for index in range(total):
-        view = pagecheck.page_view(rendered, index)
-        views.append(view)
+    # One open for the whole book rather than two per page — see
+    # `pagecheck.views_and_pngs` for the measurement.
+    views, written = pagecheck.views_and_pngs(rendered, pngs, dpi=dpi)
+    for index, view in enumerate(views):
         summary = check_assembled_page(view, setup_for(view, setups),
                                        f"page{index + 1:04d}",
                                        requested_font=wanted_font).summary()
@@ -396,7 +396,7 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
             findings.append({"page": index + 1, **finding})
         # Persisted, not thrown away: the last gate is a person looking at these,
         # and a review of pages nobody kept cannot be re-read or re-checked.
-        if pagecheck.render_png(rendered, index, pngs[index], dpi) is not None:
+        if written[index] is not None:
             sheets.append(str(pngs[index].relative_to(work_dir).as_posix()))
 
     whole = qa.Report()
