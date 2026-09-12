@@ -21,6 +21,7 @@ from typing import Any
 import bookir as ir
 import glossary as gl
 import runstate
+import segments
 
 #: Target source characters per chunk. Small enough for one focused context,
 #: large enough that a scene is not shredded across three agents.
@@ -188,9 +189,17 @@ def render_worksheet(
     total: int,
     previous_tail: str,
     next_head: str,
+    units: list[tuple[str, str, str]] | None = None,
 ) -> str:
+    """``units`` overrides what the block run offers.
+
+    The builder needs that: a unit longer than the budget is cut into segments,
+    and a run of units that renders over the budget is split into several
+    worksheets, so what a worksheet carries is no longer simply "every unit of
+    these blocks". Left out, the behaviour is exactly what it always was.
+    """
     lookup = ir.blocks_by_id(book)
-    units = translatable_units(book, ids)
+    units = translatable_units(book, ids) if units is None else units
     source_blob = "\n".join(text for _, _, text in units)
 
     lines: list[str] = [
@@ -256,6 +265,17 @@ class StaleWorksheets(RuntimeError):
     """Rebuilding would discard translations that answer a different book."""
 
 
+class OverBudget(RuntimeError):
+    """A worksheet cannot be brought inside the budget without cutting prose.
+
+    The same refusal the page route makes, for the same reason: the budget
+    exists to keep a payload inside a model's context, so raising it to fit the
+    one paragraph that overflowed puts every other job at risk of exactly the
+    failure the budget was there to prevent. Shortening the prose is never an
+    option, so the honest answer is to stop and say what the real numbers are.
+    """
+
+
 #: Lives in `runstate` now: it is the staleness primitive, and four
 #: stages need it without taking a dependency on the chunker.
 source_digest = runstate.source_digest
@@ -316,7 +336,13 @@ def _refuse_if_translations_would_be_orphaned(
     if not stale:
         return
     progress = status(out_dir)
-    if not progress["translated"]:
+    # Anything a translator has written, not only the complete replies:
+    # ``translated`` counts fully answered worksheets, and a half-answered or
+    # unparseable one still holds work somebody did. Refusing is recoverable
+    # with ``--force``; discarding a translation is not, so this errs that way.
+    at_risk = (progress["translated"] or progress["partial"]
+               or progress["malformed"])
+    if not at_risk:
         return
     raise StaleWorksheets(
         f"{progress['translated']} of {progress['total']} worksheets in {out_dir} "
@@ -347,7 +373,6 @@ def build(
         _refuse_if_translations_would_be_orphaned(out_dir, state, inputs)
 
     chunks = split_blocks(book, budget)
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     manifest: dict[str, Any] = {
         "schema": "revayat-novel/chunks@1",
@@ -360,17 +385,52 @@ def build(
         "chunks": [],
     }
 
-    for index, ids in enumerate(chunks, start=1):
-        previous_tail, next_head = neighbour_context(book, chunks, index - 1)
+    # Two passes, because the budget is about the *rendered* worksheet and not
+    # the length of the prose in it. A unit longer than the whole allowance is
+    # cut into segments that rejoin exactly, and a run whose worksheet still
+    # renders over the budget is split into several — both measured by rendering,
+    # never estimated. `total` is only knowable once that settles, so the final
+    # render happens afterwards and is checked again.
+    jobs: list[tuple[list[str], list[tuple[str, str, str]], str, str]] = []
+    for position, ids in enumerate(chunks):
+        previous_tail, next_head = neighbour_context(book, chunks, position)
+
+        def render(subset: list[tuple[str, str, str]],
+                   ids: list[str] = ids,
+                   tail: str = previous_tail,
+                   head: str = next_head) -> str:
+            return render_worksheet(book, glossary, ids, index=1, total=1,
+                                    previous_tail=tail, next_head=head,
+                                    units=subset)
+
+        units = segments.fit_units(translatable_units(book, ids), render, budget)
+        for group, _ in segments.fit_jobs(render, units, budget):
+            jobs.append((ids, group, previous_tail, next_head))
+
+    # Rendered in full before anything is written, so the refusal below can
+    # honestly say nothing was written: a half-written set of worksheets with no
+    # manifest beside them is a working directory no later stage can read.
+    written: list[tuple[str, str]] = []
+    for index, (ids, units, previous_tail, next_head) in enumerate(jobs, start=1):
         worksheet = render_worksheet(
             book, glossary, ids,
-            index=index, total=len(chunks),
+            index=index, total=len(jobs),
             previous_tail=previous_tail, next_head=next_head,
+            units=units,
         )
+        if len(worksheet) > budget:
+            prose = sum(len(text) for _, _, text in units)
+            raise OverBudget(
+                f"a worksheet carrying {len(units)} unit(s) from "
+                f"{ids[0] if ids else '?'} renders {len(worksheet)} characters, "
+                f"over the {budget} budget — {prose} of them prose and the rest "
+                f"glossary, context and scaffolding. Splitting further would cut "
+                f"prose, so nothing was written. Raise --budget to at least "
+                f"{len(worksheet)} if the model can take it."
+            )
         name = f"chunk{index:04d}.md"
-        ir.write_text(out_dir / name, worksheet)
+        written.append((name, worksheet))
 
-        units = translatable_units(book, ids)
         manifest["chunks"].append({
             "id": f"chunk{index:04d}",
             "file": name,
@@ -388,6 +448,9 @@ def build(
             "source_sha256": unit_fingerprint(book, ids),
         })
 
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, worksheet in written:
+        ir.write_text(out_dir / name, worksheet)
     ir.write_text(out_dir / "manifest.json",
                   json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
     state.record("chunk", inputs, {
@@ -443,28 +506,66 @@ def _staleness(out_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     return {"stale": stale, "stale_reason": reason}
 
 
+def _state_of(out_dir: Path, entry: dict[str, Any]) -> str:
+    """How far this one worksheet has got.
+
+    ``missing`` no file · ``empty`` a blank one · ``malformed`` content that
+    answers none of the units asked for · ``partial`` some of them · ``answered``
+    all of them.
+
+    The reply is *parsed*, because existence is not an answer: any non-blank
+    bytes used to count as a finished worksheet, so a crash log, a refusal from
+    the model or a half-written file all read as done and the job was never
+    offered again.
+    """
+    output = out_dir / entry["output"]
+    if not output.exists():
+        return "missing"
+    text = output.read_text(encoding="utf-8")
+    if not text.strip():
+        return "empty"
+
+    # Local import: `merge` imports this module, so the dependency runs one way
+    # at import time. Worth it to keep one worksheet parser — two copies of the
+    # reply format is how the two sides come to disagree about what an answer is.
+    import merge
+
+    answered = {item["id"]: item["text"] for item in merge.read_worksheet(text)}
+    wanted = entry.get("unit_ids") or []
+    present = [u for u in wanted if (answered.get(u) or "").strip()]
+    if not present:
+        return "malformed"
+    return "answered" if len(present) == len(wanted) else "partial"
+
+
 def status(out_dir: Path) -> dict[str, Any]:
     """Which worksheets still need translating — the resume view.
+
+    ``next`` is the earliest *unfinished* job in manifest order, whatever made it
+    unfinished. It used to come from the missing-file list alone, so a worksheet
+    whose output existed and was blank was reported as outstanding and then never
+    handed to anybody: the run looked resumable and stopped making progress.
 
     ``stale`` answers the other half of resuming: not only what is left to do,
     but whether what is already done is still worth keeping.
     """
     manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
-    pending, done, empty = [], [], []
-    for entry in manifest["chunks"]:
-        output = out_dir / entry["output"]
-        if not output.exists():
-            pending.append(entry["id"])
-        elif not output.read_text(encoding="utf-8").strip():
-            empty.append(entry["id"])
-        else:
-            done.append(entry["id"])
+    order = [entry["id"] for entry in manifest["chunks"]]
+    states = {entry["id"]: _state_of(out_dir, entry)
+              for entry in manifest["chunks"]}
+
+    def listed(*names: str) -> list[str]:
+        return [chunk_id for chunk_id in order if states[chunk_id] in names]
+
+    unfinished = listed("missing", "empty", "malformed", "partial")
     return {
-        "total": len(manifest["chunks"]),
-        "translated": len(done),
-        "pending": pending,
-        "empty": empty,
-        "next": pending[0] if pending else None,
+        "total": len(order),
+        "translated": len(listed("answered")),
+        "pending": listed("missing"),
+        "empty": listed("empty"),
+        "malformed": listed("malformed"),
+        "partial": listed("partial"),
+        "next": unfinished[0] if unfinished else None,
         **_staleness(out_dir, manifest),
     }
 
@@ -501,6 +602,12 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"ok": False, "refused": "stale-worksheets",
                               "detail": str(refusal)}, ensure_ascii=False, indent=1))
             return 2
+        except OverBudget as refusal:
+            # A real answer about the budget, not a traceback: the operator has
+            # to choose, and the message carries the numbers the choice needs.
+            print(json.dumps({"ok": False, "refused": "over-budget",
+                              "detail": str(refusal)}, ensure_ascii=False, indent=1))
+            return 3
         print(json.dumps({
             "chunks": len(manifest["chunks"]),
             "units": sum(c["units"] for c in manifest["chunks"]),

@@ -167,6 +167,41 @@ def fit_units(
     return fitted
 
 
+def fit_jobs(
+    render: Callable[[list[tuple[str, str, str]]], str],
+    units: list[tuple[str, str, str]],
+    budget: int,
+) -> list[tuple[list[tuple[str, str, str]], str]]:
+    """``(units, worksheet)`` for each sub-job, in reading order.
+
+    Consecutive runs, never a reshuffle: the units are read in order and a
+    translator handed part two must be able to follow part one. A set that fits
+    comes back as the single job it was, so the ordinary book is unchanged down
+    to the byte.
+
+    Measured by rendering rather than by estimating a per-unit cost, because the
+    overhead is not constant — the glossary rows and the voice cards a job
+    carries are the ones its own units call for. One render per unit, each
+    bounded by the budget, so a long run costs its length and not its square.
+
+    Lives here rather than in either caller because both routes need it: the
+    page route groups the units of one source page, and the chunk route groups
+    the units of a block run. Two copies of a budgeting rule is how one route
+    comes to enforce a budget the other does not.
+    """
+    groups: list[list[tuple[str, str, str]]] = []
+    current: list[tuple[str, str, str]] = []
+    for unit in units:
+        if current and len(render(current + [unit])) > budget:
+            groups.append(current)
+            current = []
+        current.append(unit)
+    # Appended even when empty: a page with nothing to translate — a plate, a
+    # blank verso — still gets a worksheet, and merge still expects one.
+    groups.append(current)
+    return [(group, render(group)) for group in groups]
+
+
 def rejoin(units: dict[str, str]) -> dict[str, str]:
     """Fold every segment back into its unit, in index order.
 
