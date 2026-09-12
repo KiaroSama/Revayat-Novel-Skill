@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import bookir as ir
+import falint
 import runstate
 
 SCHEMA = "revayat-novel/glossary@1"
@@ -452,6 +453,55 @@ def standalone_spans(text: str, needle: str) -> list[tuple[int, int]]:
     return spans
 
 
+def _flatten_in_prose(target: str, first_form: str,
+                      later_form: str) -> tuple[str, int]:
+    """Long form down to short form, in prose spans only.
+
+    Returns the rewritten string and how many occurrences were replaced. A
+    verbatim span is literal content — an identifier, a command, a quoted
+    string — so rewriting inside one changes what the book says the literal is.
+    """
+    spans = ir.parse_markup(target)
+    replaced = 0
+    for span in spans:
+        if span["verbatim"] or span["footnote"]:
+            continue
+        replaced += span["text"].count(first_form)
+        span["text"] = span["text"].replace(first_form, later_form)
+    return (ir.render_spans(spans) if replaced else target), replaced
+
+
+def _introduce_in_prose(target: str, later_form: str,
+                        first_form: str) -> str | None:
+    """Expand the first standalone prose occurrence, or ``None`` if there is none.
+
+    Eligibility is decided by the project's own span parser, not by a second
+    one: emphasis may carry the introduction, verbatim spans and footnote tokens
+    may not, and the markup itself is never touched because it is never in the
+    text a rule sees. Literals inside a span — URLs, emails, identifiers — are
+    masked the way the typography pass masks them, because a name sitting after
+    a ``/`` satisfies every word-boundary test and a URL with a parenthetical
+    spliced into it is a dead link.
+
+    A name whose words fall in two different styled spans is left alone:
+    placing it would mean rewriting the emphasis.
+    """
+    spans = ir.parse_markup(target)
+    for span in spans:
+        if span["verbatim"] or span["footnote"]:
+            continue
+        masked, keep = falint.mask_literals(span["text"])
+        found = standalone_spans(masked, later_form)
+        if not found:
+            continue
+        start, end = found[0]
+        span["text"] = falint.unmask_literals(
+            masked[:start] + first_form + masked[end:], keep
+        )
+        return ir.render_spans(spans)
+    return None
+
+
 def enforce_first_mentions(glossary: dict[str, Any],
                            book: dict[str, Any]) -> dict[str, Any]:
     """Give each locked name its original spelling once, where it belongs.
@@ -494,13 +544,15 @@ def enforce_first_mentions(glossary: dict[str, Any],
             report["skipped"] += 1
             continue
 
-        # 1. Flatten. The long form is distinctive enough that a plain replace
-        #    is safe here — it carries the parenthetical with it.
+        # 1. Flatten. The long form carries its parenthetical with it, so the
+        #    replace needs no boundary test — but it still only runs on prose.
         for block in blocks:
             target = block.get("target") or ""
-            if first_form in target:
-                report["flattened"] += target.count(first_form)
-                block["target"] = target.replace(first_form, later_form)
+            if first_form not in target:
+                continue
+            block["target"], replaced = _flatten_in_prose(
+                target, first_form, later_form)
+            report["flattened"] += replaced
 
         if policy == "never":
             continue
@@ -510,16 +562,25 @@ def enforce_first_mentions(glossary: dict[str, Any],
         #    when the owning block was cut or never translated.
         owner_id = entry.get("first_block_id") or ""
         owner = by_id.get(owner_id)
-        if owner is None or not standalone_spans(owner.get("target") or "", later_form):
-            owner = next((b for b in blocks
-                          if standalone_spans(b.get("target") or "", later_form)), None)
-        if owner is None:
+        rewritten = _introduce_in_prose(
+            owner.get("target") or "", later_form, first_form) if owner else None
+        if rewritten is None:
+            owner = None
+            for block in blocks:
+                # The cheap test first: parsing every block's markup for every
+                # entry is the one place this pass could get expensive.
+                if later_form not in (block.get("target") or ""):
+                    continue
+                rewritten = _introduce_in_prose(
+                    block["target"], later_form, first_form)
+                if rewritten is not None:
+                    owner = block
+                    break
+        if owner is None or rewritten is None:
             report["unplaceable"].append(entry.get("id") or entry.get("source"))
             continue
 
-        target = owner["target"]
-        start, end = standalone_spans(target, later_form)[0]
-        owner["target"] = target[:start] + first_form + target[end:]
+        owner["target"] = rewritten
         report["introduced"][entry.get("id") or entry.get("source")] = owner["id"]
 
     return report

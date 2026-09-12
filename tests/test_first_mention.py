@@ -168,6 +168,73 @@ def test_aliases_keep_their_own_spelling():
 
 
 # --------------------------------------------------------------------------- #
+# What the rewrite may touch
+# --------------------------------------------------------------------------- #
+
+def _ali(first_block_id: str = "b00001") -> dict:
+    """A one-word name, the shape that collides with literal content."""
+    glossary = _glossary(first_block_id=first_block_id)
+    glossary["entries"][0].update({"source": "Ali", "target": "علی",
+                                   "later_form": "علی", "first_form": "علی (Ali)"})
+    return glossary
+
+
+def test_a_verbatim_span_is_not_given_a_parenthetical():
+    """Inside backticks the name is literal content — an identifier, a quoted
+    string, a command. Injecting «(Ali)» there changes what the book says the
+    literal is."""
+    book = _book(["`علی` رفت."])
+    report = gl.enforce_first_mentions(_ali(), book)
+    assert _targets(book) == ["`علی` رفت."]
+    assert report["unplaceable"] == ["g0001"]
+
+
+def test_inline_code_does_not_steal_the_introduction_from_prose():
+    """The prose occurrence is the one that should get it."""
+    book = _book(["`علی` و علی رفتند."])
+    gl.enforce_first_mentions(_ali(), book)
+    assert _targets(book) == ["`علی` و علی (Ali) رفتند."]
+
+
+def test_a_url_does_not_receive_the_parenthetical():
+    """A name after a «/» passes every word-boundary test there is, and a URL
+    with a parenthetical spliced into it is a dead link."""
+    book = _book(["https://example.com/علی را ببین، علی آمد."])
+    gl.enforce_first_mentions(_ali(), book)
+    assert _targets(book) == ["https://example.com/علی را ببین، علی (Ali) آمد."]
+
+
+def test_a_verbatim_long_form_is_not_flattened():
+    """Flattening is a rewrite too, and the same spans are off limits."""
+    book = _book([f"`{INTRODUCED}` و {INTRODUCED} آمد."])
+    gl.enforce_first_mentions(_glossary(first_block_id="b00001"), book)
+    assert _targets(book) == [f"`{INTRODUCED}` و {INTRODUCED} آمد."]
+
+
+def test_enforcement_over_markup_is_idempotent():
+    book = _book(["`علی` و علی رفت.", "و باز علی آمد."])
+    glossary = _ali()
+    gl.enforce_first_mentions(glossary, book)
+    once = _targets(book)
+    gl.enforce_first_mentions(glossary, book)
+    assert _targets(book) == once
+
+
+def test_a_bold_name_keeps_its_emphasis():
+    book = _book(["**علی** رفت."])
+    gl.enforce_first_mentions(_ali(), book)
+    assert _targets(book) == ["**علی (Ali)** رفت."]
+
+
+def test_a_name_split_across_two_styled_spans_is_left_alone():
+    """Placing it would mean rewriting the emphasis, which nothing here may do."""
+    book = _book(["**الیزابت** بنت را دید."])
+    report = gl.enforce_first_mentions(_glossary(first_block_id="b00001"), book)
+    assert _targets(book) == ["**الیزابت** بنت را دید."]
+    assert report["unplaceable"] == ["g0001"]
+
+
+# --------------------------------------------------------------------------- #
 # The gate
 # --------------------------------------------------------------------------- #
 

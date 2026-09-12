@@ -128,8 +128,14 @@ class Options:
 # Fixing
 # --------------------------------------------------------------------------- #
 
-def _mask(text: str) -> tuple[str, list[str]]:
-    """Replace protected regions with sentinels that no rule can match."""
+def mask_literals(text: str) -> tuple[str, list[str]]:
+    """Replace protected regions with sentinels that no rule can match.
+
+    Public because the typography pass is not the only rewrite that must stay
+    out of a URL: the glossary's first-mention pass inserts into prose too, and a
+    Persian name after a ``/`` passes every word-boundary test there is. One
+    definition of "this is a literal, not a word" for both.
+    """
     keep: list[str] = []
 
     def swap(match: re.Match[str]) -> str:
@@ -139,7 +145,8 @@ def _mask(text: str) -> tuple[str, list[str]]:
     return _PROTECTED.sub(swap, text), keep
 
 
-def _unmask(text: str, keep: list[str]) -> str:
+def unmask_literals(text: str, keep: list[str]) -> str:
+    """Put back exactly what :func:`mask_literals` took out."""
     return re.sub(r"\x00(\d+)\x00", lambda m: keep[int(m.group(1))], text)
 
 
@@ -154,7 +161,7 @@ def fix_prose(text: str, options: Options) -> str:
     run protects text those passes already rewrote — so the order here is the
     guarantee, and a reader must never have to backtick a URL by hand to get it.
     """
-    masked, keep = _mask(text)
+    masked, keep = mask_literals(text)
 
     for source, target in _CHAR_MAP.items():
         masked = masked.replace(source, target)
@@ -190,7 +197,7 @@ def fix_prose(text: str, options: Options) -> str:
         )
 
     masked = _MULTI_SPACE.sub(" ", masked)
-    return _unmask(masked, keep)
+    return unmask_literals(masked, keep)
 
 
 def fix_text(text: str, options: Options | None = None) -> str:
