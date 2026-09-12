@@ -1161,14 +1161,21 @@ def test_a_batch_renders_every_document_identically_to_one_at_a_time(tmp_path):
 
 
 def test_one_corrupt_document_does_not_take_the_batch_down(tmp_path):
-    """Measured: `com_error` in 0.04s, and the documents after it rendered.
+    """Measured on Word: `com_error` in 0.04s, and the documents after it rendered.
 
     A batch that loses its tail to one bad page is worse than no batch — the
     per-page design gets that isolation for free and batching must not give it up.
+
+    Asserted on **whichever backend this machine has**, not only Word. It was
+    Word-only at first and the `nothing skipped` CI job rejected that, correctly:
+    the property is not COM-specific, and LibreOffice batching is the backend this
+    project has never measured, so it is the one that most needs saying. Proving it
+    there also forced a real fix — that branch reported a failed document in
+    neither map, conflating "it failed" with "nobody reached it".
     """
     pytest.importorskip("pymupdf")
-    if wordrender.backend() != "word":
-        pytest.skip("the COM isolation this proves is the Word path's")
+    if not wordrender.backend():
+        pytest.skip(f"no renderer here: {wordrender.unavailable_reason()}")
 
     docs = _five_documents(tmp_path, count=3)
     docs[1].write_bytes(b"PK\x03\x04 this is not a document at all")
