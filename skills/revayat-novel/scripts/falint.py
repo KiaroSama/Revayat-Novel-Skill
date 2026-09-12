@@ -200,12 +200,57 @@ def fix_prose(text: str, options: Options) -> str:
     return unmask_literals(masked, keep)
 
 
+#: Quote characters a pair can be built from. ASCII ``"`` is both halves, so
+#: which one a given mark is depends only on its position in the sequence.
+_QUOTE_CHARS = '"“”'
+
+
+def _quote_positions(text: str) -> list[int]:
+    """Where a convertible quote sits. A quote inside a literal is not one.
+
+    ``?q="کتاب"`` in a query string is the address the far end parses, not
+    punctuation a Persian publisher has an opinion about.
+    """
+    literals = [match.span() for match in _PROTECTED.finditer(text)]
+    return [index for index, character in enumerate(text)
+            if character in _QUOTE_CHARS
+            and not any(start <= index < end for start, end in literals)]
+
+
+def _pair_quotes(spans: list[dict[str, Any]]) -> None:
+    """«…» for a quotation whose two halves lie in different spans.
+
+    :func:`fix_prose` sees one span at a time, and that is deliberate — it is
+    what keeps every regex away from the markup. But a quotation that wraps
+    emphasis, ``"او **خوب** است."``, has its opening and closing quote in two
+    different strings, so no per-span rule can pair them, and the commonest line
+    in a novel keeps its Latin quotes.
+
+    Pairing happens here instead, on the decomposed spans: no rule sees a marker,
+    verbatim spans and footnote tokens are skipped, and a quote inside a
+    protected literal is not a quote. Each replacement is one character for one,
+    so every index stays valid whatever order they are applied in. An odd quote
+    left over is unbalanced, which :func:`lint_text` reports and nothing here
+    guesses at.
+    """
+    found = [(span, index)
+             for span in spans if not (span["verbatim"] or span["footnote"])
+             for index in _quote_positions(span["text"])]
+    for (opening, open_at), (closing, close_at) in zip(found[::2], found[1::2]):
+        if opening is closing:
+            continue    # a pair inside one span: fix_prose's own rule has it
+        for span, index, mark in ((opening, open_at, "«"), (closing, close_at, "»")):
+            span["text"] = span["text"][:index] + mark + span["text"][index + 1:]
+
+
 def fix_text(text: str, options: Options | None = None) -> str:
     """Fix a full marked-up string, leaving markup and verbatim spans alone."""
     if not text:
         return text
     options = options or Options()
     spans = ir.parse_markup(text)
+    if options.quotes:
+        _pair_quotes(spans)
     for span in spans:
         if span["verbatim"] or span["footnote"]:
             continue

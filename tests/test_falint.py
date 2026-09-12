@@ -8,6 +8,7 @@ and is untraceable by the time anyone notices.
 
 from __future__ import annotations
 
+import bookir as ir
 import falint
 
 ZWNJ = falint.ZWNJ
@@ -86,6 +87,41 @@ def test_a_standalone_wet_is_not_glued_as_a_comparative_suffix():
     """«موی تر» is wet hair; «مویتر» is nothing at all."""
     assert fix("موی تر داشت.") == "موی تر داشت."
     assert fix("دست تر را خشك كرد.") == "دست تر را خشک کرد."
+
+
+# --------------------------------------------------------------------------- #
+# Quotation marks, which do not respect span boundaries
+# --------------------------------------------------------------------------- #
+
+def test_a_quotation_wrapping_emphasis_still_becomes_guillemets():
+    """The pair's halves land in two different spans, so no per-span rule sees
+    both. Leaving the Latin quotes is the one typographic error a reader meets on
+    every page of dialogue."""
+    assert fix('گفت: "او **خوب** است."') == "گفت: «او **خوب** است.»"
+
+
+def test_a_quotation_inside_one_span_still_becomes_guillemets():
+    assert fix('گفت: "او خوب است."') == "گفت: «او خوب است.»"
+
+
+def test_punctuation_after_the_closing_quote_survives():
+    assert fix('گفت: "او **خوب** است"، بعد رفت.') == "گفت: «او **خوب** است»، بعد رفت."
+
+
+def test_an_unmatched_quote_is_left_for_the_lint_pass():
+    """Half a pair is a defect to report, not a bracket to guess at."""
+    fixed = fix('او گفت: "**خوب** بود')
+    assert '"' in fixed
+    assert "latin-quotes" in {f["code"] for f in falint.lint_text(fixed)}
+
+
+def test_quotes_inside_a_verbatim_span_are_not_converted():
+    assert fix('`say "hi"` را اجرا کن.') == '`say "hi"` را اجرا کن.'
+
+
+def test_the_quote_pass_keeps_emphasis_parity():
+    source = 'گفت: "او **خوب** و *بد* است."'
+    assert ir.emphasis_signature(fix(source)) == ir.emphasis_signature(source)
 
 
 def test_the_bare_comparative_is_reported_instead_of_guessed():
