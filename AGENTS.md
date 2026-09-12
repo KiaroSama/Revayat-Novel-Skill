@@ -90,6 +90,11 @@ pip install -r skills/revayat-novel/requirements.txt
 python -m pytest tests -q
 ```
 
+`pytest.ini` carries the per-test ceiling (300s, thread method) so a bare
+`pytest` is bounded too — the flag used to live only in CI. The two workflows
+that override it, `integration.yml` and `word-render.yml`, do so because real
+OCR and a real Word render are genuinely slower, and each says so.
+
 Tests generate their own PDF, EPUB and DOCX fixtures. Do not commit book files:
 they bloat the repository and the content is usually someone else's.
 

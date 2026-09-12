@@ -48,7 +48,7 @@ jobs:
       - name: Run tests
         env:
           PYTHONIOENCODING: utf-8
-        run: python -m pytest tests -q --timeout=120 --durations=10
+        run: python -m pytest tests -q --durations=10
 
       - name: Smoke-test the CLI
         env:
@@ -193,7 +193,7 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: |
           set -o pipefail
-          python -m pytest tests -q --timeout=600 -rs | tee suite.log
+          python -m pytest tests -q -rs | tee suite.log
           if grep -qE '[0-9]+ skipped' suite.log; then
             echo "::error::a test skipped on the job whose whole purpose is that none do"
             grep -E '^SKIPPED' suite.log || true

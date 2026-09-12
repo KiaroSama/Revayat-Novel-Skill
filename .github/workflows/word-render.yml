@@ -65,6 +65,9 @@ jobs:
           PY
 
       - name: The render tier, on the backend the reader will use
+        # --timeout=1800 deliberately overrides pytest.ini's 300s: driving real
+        # Word through COM is the slowest backend this suite has, and a single
+        # test lays a document out more than once.
         shell: bash
         env:
           PYTHONIOENCODING: utf-8
