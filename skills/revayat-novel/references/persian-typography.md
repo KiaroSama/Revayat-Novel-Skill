@@ -60,8 +60,19 @@ unambiguous:
 
 - verb prefixes: `می` and `نمی`, and only when the following word can be a
   finite verb. `می` is also the noun *wine*, so `می ناب` (fine wine) and
-  `می رود` (goes) are the same shape; every finite `می`-form ends in a personal
-  ending, so the test is the last letter of the word after it.
+  `می رود` (goes) are the same shape — and the word after it decides.
+
+  **A join needs positive evidence, and the absence of evidence preserves the
+  text.** The word must read as a finite verb form: a stem from the closed list in
+  `famorph.py` plus a personal ending, present (`می‌رود`, `می‌نویسم`) or past
+  (`می‌رفت`, `می‌رفتند`). Anything else is left exactly as written and reported as
+  `zwnj-prefix-undecided` for a reader to settle.
+
+  This replaced a test on the **last letter** of the following word, on the
+  reasoning that every finite `می`-form ends in م/ی/د/ت. True, and not enough:
+  `سفید` and `تلخی` do too, so `می سفید نوشید` — *he drank white wine* — came out
+  as `می‌سفید نوشید`. A verb outside the list is a missing ZWNJ somebody has to
+  add; a wrongly joined one is a changed sentence nobody notices.
 - plural and possessive suffixes: `ها`, `های`, `هایی`, `هایم`, `هایت`, `هایش`,
   `هایمان`, `هایتان`, `هایشان`
 - comparatives: `تری` and `ترین` only
@@ -71,6 +82,13 @@ unambiguous:
 speech of the word before them, which this pass cannot know. `falint lint`
 reports it as `zwnj-comparative` and a reader decides; joining it blindly turned
 `دست تر را خشک کرد` into a comparative that says nothing.
+
+**`تری` and `ترین` are declined after a function word.** They are suffixes on an
+adjective, and a preposition has no comparative: `از تری موهایش` is *from the
+wetness of her hair*, not *from-er*. The excluded set is a closed class —
+prepositions, conjunctions, determiners, particles — which is what makes the check
+defensible, and everything outside it is allowed to be an adjective. A declined
+join is reported as `zwnj-comparative-undecided`.
 
 It never removes an existing ZWNJ, and it never guesses at `بی`, `ای`, `تان`,
 `شان` or `مان`, where a blind rule would corrupt real words. Anything beyond

@@ -184,12 +184,28 @@ own — put their Persian in `alias_targets`:
 
 ```json
 "aliases":       ["Ashcroft", "Margaret"],
-"alias_targets": ["اشکرافت", "مارگارت"]
+"alias_targets": {"Ashcroft": "اشکرافت", "Margaret": "مارگارت"}
 ```
 
-Where the source says only «Ashcroft», the Persian should say only «اشکرافت».
-Leaving this empty makes the drift check demand the full name every time, which
-is both worse Persian and a false alarm.
+**A mapping, not a list.** Two parallel arrays could not say *which* Persian
+belonged to which English — `aliases` is stored sorted, so position carried no
+meaning — and that is the whole point: where the source says only «Ashcroft», the
+Persian should say only «اشکرافت», and with `keep_aliases_distinct` on, answering
+with the full canonical name is reported as drift. The worksheet's term table
+prints the pairing (`Ashcroft → اشکرافت`) so a translator is told what to use
+rather than only that the alias must stay distinct.
+
+A bare list still loads for an older glossary, but it cannot express a pairing, so
+every approved form is merely *accepted* — which is exactly the looseness the
+mapping exists to remove. Leaving the field empty makes the drift check accept the
+full name everywhere, which is worse Persian nobody is warned about.
+
+**The original spelling is introduced where the canonical form first appears.**
+The glossary scan pins the block where the entity first appears in the *source*,
+which may be a block whose Persian is a nickname — and the parenthetical attaches
+to the canonical form, so it cannot go there. The rule is *the pinned block if it
+is eligible, otherwise the first eligible one*, used by the enforcement pass and
+the QA gate alike. A nickname is never expanded to make a block eligible.
 
 Leave `first_block_id` exactly as it is — the pipeline uses it to decide which
 single chunk introduces the name. Do not edit it, and do not decide first
@@ -306,14 +322,24 @@ nobody ever set beside the page it came from. `--source-pdf` will not override
 a page that has a manifest: the artefact `pages build` cut, and its recorded
 hash, are what the comparison uses.
 
-**Editing the Persian after a page passed QA un-accepts it.** `pages accept`
-hashes the page's translated text again, from the book as it is, and compares it
-with what render QA actually measured; if they differ it refuses with
-`translation-changed`. Every other gate it consults describes an earlier moment —
-the run record's label, the report on disk, a review bound to render files nobody
-re-made — so without this an improved sentence or a second typography pass could
-be accepted having never been laid out. Run `render-qa` and `pages review` again
-and the page accepts. A page whose QA predates this record is not refused.
+**Editing anything the page renders after it passed QA un-accepts it.** `pages
+accept` recomputes a digest of everything that decides what the sheet looks like —
+the body prose, the **footnote translations** it refers to, the section's **running
+heads**, each figure's **identity and caption**, and the **page geometry** — and
+compares it with what render QA measured. If they differ it refuses with
+`translation-changed`. Every other gate it consults describes an earlier moment, so
+without this an improved sentence, a corrected note or a replaced picture could be
+accepted having never been laid out. Run `render-qa` and `pages review` again and
+the page accepts.
+
+The digest also covers the **review's evidence as it is on disk**, recomputed from
+the report's ordered render files rather than from a hash somebody stored: deleting
+or replacing a target PNG used to leave the page acceptable, because both sides of
+that comparison were stored values and nothing looked at a file.
+
+A page recorded under an older digest formula refuses with `unverified-digest`
+rather than being treated as current or as changed — one `render-qa` run records a
+comparable one.
 
 **And `pages build` itself refuses if the source PDF has moved**
 (`source-pdf-unavailable`). Building anyway produced a run with every source
@@ -422,10 +448,18 @@ $PY $SKILL_DIR/scripts/revayat-novel.py pages status --pages  $WORK/pages
 
 `chunk status` reads each reply rather than trusting that the file exists, and
 sorts the worksheets into `pending` (no file), `empty`, `malformed` (content that
-answers none of the units asked for — a refusal from the model, a crash log), and
-`partial` (some units answered). `translated` counts only the worksheets that
-answered **every** unit, and `next` is the earliest one that is not finished,
-whichever of those it is. A run is done when `next` is `null`.
+answers none of the units asked for — a refusal from the model, a crash log),
+`partial` (some units answered), `invalid` (a reply **merge will refuse**: an id
+answered twice, answered under the wrong kind, reordered headers, or an answer for
+a unit the worksheet never asked about), and `nothing_to_translate` (a run with no
+translatable prose — all images). `translated` counts the worksheets that answered
+**every** unit, plus the ones with nothing to answer; `next` is the earliest one
+that is not finished, whichever of those it is. A run is done when `next` is `null`.
+
+Status and merge share one verdict function, because two answers to "is this
+finished" is how `next` came to report nothing outstanding while a repairable
+reply sat on disk: status built a map keyed by unit id, and a map has already lost
+the duplicate and the order by the time it exists.
 
 ## Step 6 — Merge
 
@@ -455,9 +489,10 @@ exactly one. `first_mentions.introduced` in the report says where each landed.
 | `missing_outputs` | those chunks were never translated | translate them |
 | `missing_units` | headers were dropped | re-run those chunks |
 | `unknown_units` | headers were invented | re-run those chunks |
-| `malformed` | a reply broke the protocol: an id answered twice, answered under the wrong kind, or the headers came back reordered | re-run that chunk; the message names the unit |
+| `malformed` | a reply broke the protocol: an id answered twice, answered under the wrong kind, the headers came back reordered — or its **footnote graph does not resolve**: a `[[fn:tr-NN]]` with no body, a body no sentence refers to, one marker used twice, or a note answered as a heading | re-run that chunk; the message names the unit or the note |
 | `coverage` | a block split across worksheets had only some of its parts answered | translate the other parts before merging; merging one would replace the block with part of itself |
 | `stale` | the source those units were cut from has changed since the worksheet was written | re-cut the worksheets (`chunk build --force`) and translate them against the current text |
+| `superseded` (on the manifest, not the report) | `chunk build` found an answer whose worksheet had been re-cut from changed input, and **moved** it to `chunks/superseded/` under a name carrying the revision it answered | translate the new worksheet; the old translation is kept there to copy from, never deleted |
 | `unverified_freshness` / `unverified_kinds` | that worksheet's manifest predates the recorded source hash or kinds, so merge could not check them | nothing to do; it is a statement about what was checked, not a problem |
 | `first_mentions.unplaceable` | a locked name appears nowhere in the Persian | check that name's translation |
 
@@ -586,7 +621,10 @@ is put together, and that check asks the one question no page can.
 | `first-mention-repeated` | a name is introduced in more than one place | keep the first, drop the rest |
 | `image-order` | pictures are in the wrong order in the package | re-build |
 | `bookmarks-missing` / `bookmark-duplicate` | the TOC would link nowhere, or to the wrong place | re-build |
-| `emphasis-parity` (warning) | bold/italic count changed | check one; often fine |
+| `emphasis-parity` (warning) | bold/italic/verbatim **count** changed | check one; often fine |
+| `verbatim-content-changed` | a literal run came back different — `` `ABC-123` `` as `` `XYZ-999` ``. The count signature cannot see inside a verbatim span, and a code identifier, filename or command is not translatable | restore the literal exactly; it must survive byte for byte |
+| `assets-missing` | the assets directory is not there, so no picture could be checked. An absent directory is a failed check, not a check that does not apply | point `--assets` at the real directory, or re-run `extract` |
+| `glossary-missing` | `--glossary` named a file that is not there. An absent glossary loads as an empty one, which reports no drift and no first-mention problem — the run would read clean because nothing was checked | fix the path |
 | `glossary-drift` (warning) | a locked name was rendered differently | re-run that chunk |
 | `ocr-low-confidence` (warning) | the engine was unsure of this block | open the page image and compare |
 | `footnote-undefined` | a marker points at a note the book does not define | re-run that chunk; the marker was invented or the note was dropped |

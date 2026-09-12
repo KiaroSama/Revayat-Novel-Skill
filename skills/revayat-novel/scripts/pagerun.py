@@ -769,6 +769,12 @@ def missing_source_render(out_dir: Path, page: int) -> dict[str, Any] | None:
                       f"compared the translation with it; re-run render-qa"}
 
 
+#: Formula version for :func:`translation_hash`. Bumped when the digest starts
+#: covering something new, so a page recorded under an older formula is
+#: reported as unverifiable rather than silently compared or silently trusted.
+PAGE_DIGEST_VERSION = "page2"
+
+
 def translation_hash(book_path: Path, page: int) -> str:
     """Identity of one page's Persian, as the book currently holds it.
 
@@ -786,23 +792,75 @@ def translation_hash(book_path: Path, page: int) -> str:
     """
     import pagecheck
 
-    expected = pagecheck.expectations(ir.load_book(book_path), page)
-    return ir.sha256_bytes("\n".join(expected["texts"]).encode("utf-8"))
+    book = ir.load_book(book_path)
+    expected = pagecheck.expectations(book, page)
+    job = next((j for j in owners(book) if j["page"] == page), None)
+    lookup = ir.blocks_by_id(book)
+    ids = set(job["block_ids"]) | set(job["image_ids"]) if job else set()
+
+    # Everything that decides what the sheet looks like, not only its paragraphs.
+    # `expectations()["texts"]` is the body prose alone, so a retranslated
+    # footnote, a corrected running head, a rewritten caption or a changed page
+    # width all left this digest identical — and a page accepted on that evidence
+    # had passed QA against a sheet that no longer exists.
+    parts: list[str] = ["body"] + list(expected["texts"])
+
+    parts.append("geometry")
+    setup = expected.get("setup") or {}
+    parts += [f"{key}={setup[key]!r}" for key in sorted(setup)]
+
+    parts.append("notes")
+    referenced = {ref for text in expected["texts"]
+                  for ref in ir.ANY_FOOTNOTE_TOKEN.findall(text)}
+    for note in book.get("footnotes", []):
+        if note.get("id") in referenced:
+            parts.append(f"{note['id']}\x00{note.get('target') or ''}")
+
+    parts.append("figures")
+    for block_id in sorted(ids):
+        block = lookup.get(block_id) or {}
+        if block.get("type") != "image":
+            continue
+        # The asset's *identity*, so replacing the picture under the same
+        # filename invalidates the page that was reviewed with the old one.
+        parts.append(f"{block_id}\x00{block.get('asset') or ''}"
+                     f"\x00{block.get('asset_sha256') or ''}"
+                     f"\x00{block.get('target_alt') or ''}")
+
+    parts.append("running")
+    for unit_id, _kind, piece, section in ir.iter_running_pieces(book):
+        if (section.get("start_block") or "") in ids or not ids:
+            parts.append(f"{unit_id}\x00{piece.get('target') or ''}")
+
+    return f"{PAGE_DIGEST_VERSION}:" + ir.sha256_bytes(
+        "\n".join(parts).encode("utf-8"))
 
 
 def _translation_moved(book_path: Path, page: int,
-                       record: dict[str, Any]) -> str:
-    """Why this page's Persian is no longer what render QA saw, or ``""``."""
+                       record: dict[str, Any]) -> tuple[str, str]:
+    """``(refusal code, detail)`` for this page's recorded digest, or ``("", "")``.
+
+    Three outcomes, not two. The digest is **versioned**, so a value written by an
+    older formula is not evidence either way: comparing it against the current one
+    reports every such page as changed, and ignoring it reports every such page as
+    current. Both are wrong, and the second is the defect this check exists to
+    close. So an incomparable digest refuses as `unverified-digest`, which one
+    `render-qa` run clears — migratable, not stranded.
+    """
     recorded = (record.get("hashes") or {}).get("translation", "")
-    if not recorded:
-        # A page whose QA predates this record. Refusing would strand it, and
-        # claiming it is current would be the defect restated.
-        return ""
+    if not recorded or recorded.partition(":")[0] != PAGE_DIGEST_VERSION:
+        return ("unverified-digest",
+                f"page {page}'s recorded translation digest is "
+                f"{recorded[:16] or 'absent'}, which this version cannot "
+                f"compare — it predates the digest covering notes, running "
+                f"heads, figures and geometry. Run render-qa on the page again "
+                f"to record a current one, then accept it.")
     current = translation_hash(book_path, page)
     if current == recorded:
-        return ""
-    return (f"the page's translated text now hashes {current[:12]} against the "
-            f"{recorded[:12]} that was checked")
+        return ("", "")
+    return ("translation-changed",
+            f"the page's rendered content now hashes {current[:16]} against the "
+            f"{recorded[:16]} that was checked")
 
 
 def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
@@ -857,7 +915,17 @@ def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
     if blocked:
         return blocked
 
-    seen = page_review.verdict(out_dir.parent, page)
+    # The review is checked against the evidence **as it is on disk now**, not
+    # against the hash the run record happens to still hold. Both sides of that
+    # comparison used to be stored values, so nothing in the chain ever looked at
+    # a file: delete the target PNG, or replace it with a different render under
+    # the same name, and the page was still accepted on a reviewer's "yes" about
+    # an image that no longer existed. `evidence_digest` reads the files and marks
+    # a missing one absent, which is what makes the recomputation meaningful.
+    import renderqa as page_qa  # local: `renderqa` imports this module
+
+    now = page_qa.evidence(out_dir.parent, report.get("renders") or {})
+    seen = page_review.verdict(out_dir.parent, page, render=now)
     if not seen["ok"]:
         return {"ok": False, "page": page, "refused": seen["refused"],
                 "detail": seen["detail"]}
@@ -868,13 +936,15 @@ def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
     # only asks whether there is *some*. So the page's translation is hashed again
     # here, from the book as it is now, and compared with what render QA actually
     # looked at. Edited since: the page is unverified again, not accepted.
-    moved = _translation_moved(book_path, page, record)
-    if moved:
-        return {"ok": False, "page": page, "refused": "translation-changed",
-                "detail": f"page {page} passed render QA, and its Persian has "
-                          f"changed since — {moved}. Nothing re-rendered, so "
+    refusal, detail = _translation_moved(book_path, page, record)
+    if refusal == "translation-changed":
+        return {"ok": False, "page": page, "refused": refusal,
+                "detail": f"page {page} passed render QA, and what it renders has "
+                          f"changed since — {detail}. Nothing re-rendered, so "
                           f"what passed is not what would print: run render-qa "
                           f"on it again and look at it again."}
+    if refusal:
+        return {"ok": False, "page": page, "refused": refusal, "detail": detail}
 
     state.set_page(page, "accepted")
     return {"ok": True, "page": page, "state": "accepted",
