@@ -1037,6 +1037,28 @@ def test_a_tool_installed_into_this_interpreter_is_found_on_any_platform(
     assert extract.find_tool(["absent"], "absent") is None
 
 
+def test_one_table_describes_each_optional_tool():
+    """Two tables joined by a label string, with nothing checking they agree.
+
+    `find_tool` does `BUNDLED_TOOLS.get(label, ())`, so a label spelled one way
+    in `doctor`'s table and another in the path table searched no install
+    locations and fell back to PATH — the exact defect the table exists to fix,
+    reported by nothing.
+    """
+    import extract
+
+    cli = _cli()
+    # `doctor` must ask about exactly the tools `extract` describes.
+    assert cli.optional_tools() is extract.OPTIONAL_TOOLS
+    # And every tool with a name list has path patterns, except the one that is
+    # resolved as a module in this interpreter.
+    assert set(extract.BUNDLED_TOOLS) == set(extract.OPTIONAL_TOOLS) - {"ocrmypdf"}
+    # Every pattern list is non-empty: an entry with no locations is a label
+    # that reads as covered and is not.
+    for label, patterns in extract.BUNDLED_TOOLS.items():
+        assert patterns, f"{label} has an empty pattern list"
+
+
 def test_a_posix_install_location_is_searched_too(tmp_path, monkeypatch):
     """`<drive>` patterns are Windows-only; the rest must work anywhere.
 
