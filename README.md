@@ -62,6 +62,10 @@ That also gives you `/translate-book`, `/revayat-novel-resume` and `/revayat-nov
 
 ### Check the install
 
+**Python 3.10 or newer**, on Linux, macOS or Windows. CI runs 3.10, 3.13 and
+3.14 on all three. Note that 3.10 reaches end of life in October 2026 — it still
+works here, and it stops receiving CPython security fixes.
+
 ```bash
 python skills/revayat-novel/scripts/revayat-novel.py doctor
 ```

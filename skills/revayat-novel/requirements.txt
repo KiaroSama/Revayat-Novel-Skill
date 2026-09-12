@@ -1,3 +1,15 @@
+# Python 3.10 or newer. CI runs 3.10, 3.13 and 3.14 on Linux, macOS and Windows
+# — the oldest and newest supported, plus the one someone installing Python
+# today gets. Verified rather than assumed: every script parses under
+# `ast.parse(..., feature_version=(3, 10))`.
+#
+# **3.10 reaches end of life in 2026-10** (python.org developer guide). After
+# that a reader on it gets no further CPython security fixes. The floor is kept
+# at 3.10 anyway, because several current distro images still ship it as the
+# system Python and this skill is meant to run on whatever the reader has.
+# Raising it to 3.11 is a two-line change: this comment and `ruff.toml`'s
+# `target-version`, plus the CI matrix.
+
 # Core — required for every run.
 pymupdf>=1.24            # PDF text, geometry and original image bytes
 python-docx>=1.1         # DOCX reading and writing
