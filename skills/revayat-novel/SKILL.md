@@ -687,6 +687,13 @@ consumes the review and comes back `ok: true, verified: true` — the first coul
 not, because the review did not exist when it ran. Three commands, in this
 order: check, look and review, check again.
 
+The second check does **not** lay the book out again. A render is decided by the
+document and the renderer, so an unchanged `.docx` reuses the PDF the first check
+made, keyed on the file's own hash beside it — which is why the second call
+returns in seconds on a book that took minutes the first time. Rebuild the
+document and the hash moves, so it renders again; that is also what makes the
+review go stale, as below.
+
 The same five questions as a page review, asked of the book. The verdict is
 bound to the pages it was made from, so rebuilding the document makes it stale
 and `doc-qa check` goes back to `unverified`. That is the intended behaviour: a
