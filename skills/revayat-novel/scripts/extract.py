@@ -361,15 +361,23 @@ def run_ocr(
                           language=language, deskew=deskew)
 
     try:
-        completed = subprocess.run(
-            command, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=timeout, check=False,
-            env=ocr_environment(),
-        )
+        # Not `subprocess.run(timeout=)`: it signals the direct child only, and
+        # ocrmypdf is a launcher that forks a Tesseract per page and a
+        # Ghostscript for the rewrite. Measured on the renderer first (plan 004):
+        # a timeout left the real worker running with nothing to reap it. A
+        # 400-page scan is exactly when the timeout fires and exactly when the
+        # machine can least afford a leaked core.
+        finished = ir.run_bounded(command, timeout, env=ocr_environment())
     except subprocess.TimeoutExpired:
         raise ExtractError(
             f"ocrmypdf exceeded {timeout}s. Split the PDF, or raise --ocr-timeout."
         ) from None
+    # Re-wrapped as text, so everything below reads the strings it always did.
+    completed = subprocess.CompletedProcess(
+        finished.args, finished.returncode,
+        (finished.stdout or b"").decode("utf-8", "replace"),
+        (finished.stderr or b"").decode("utf-8", "replace"),
+    )
 
     # Judge the artefact, not the exit code. OCRmyPDF reports non-zero for
     # conditions that still leave a perfectly usable file — exit 4 means qpdf

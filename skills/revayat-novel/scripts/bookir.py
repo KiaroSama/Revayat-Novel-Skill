@@ -41,6 +41,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -224,6 +225,72 @@ def check_render_area(width_pt: float, height_pt: float, dpi: float) -> tuple[in
             f"over the {RENDER_MAX_PIXELS / 1e6:.0f} Mpx ceiling; it was not "
             f"rendered. A page this size is not a book page.")
     return width, height
+
+
+# --------------------------------------------------------------------------- #
+# Bounding a subprocess that starts other processes
+# --------------------------------------------------------------------------- #
+
+def run_bounded(command: list[str], timeout: float, *,
+                env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """Run ``command`` and, on timeout, kill it *and everything it started*.
+
+    `subprocess.run(timeout=...)` kills only the direct child. Every launcher
+    this pipeline drives is a generation short of the process doing the work:
+    the render path's child is a Python worker whose grandchild is WINWORD.EXE
+    started through COM, `soffice` forks `soffice.bin` and returns, and ocrmypdf
+    forks a Tesseract per page plus a Ghostscript for the rewrite. So a bare
+    timeout left a hidden worker running with its teardown never reached — and a
+    book is hundreds of renders and hundreds of pages, so one leak per timeout
+    is how a machine quietly runs out of memory.
+
+    Lives here rather than in `wordrender` or `extract` because both need it and
+    neither should depend on the other: `wordrender` is a render backend and
+    `extract` is the OCR stage. This module already owns the rest of the
+    process-and-file plumbing.
+
+    Returns bytes, not text. The callers decode with
+    ``.decode("utf-8", "replace")``, which is what they already did.
+    """
+    popen_extra: dict[str, Any] = {}
+    if os.name == "posix":
+        # Its own process group, so one signal reaches the launcher and the
+        # process it forked.
+        popen_extra["start_new_session"] = True
+    else:
+        popen_extra["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+    process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, env=env, **popen_extra)
+    try:
+        out, err = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        kill_tree(process)
+        # Drain, so the pipes are closed and the handles released before the
+        # caller reports; the process is already dead so this cannot block.
+        try:
+            process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, out, err)
+
+
+def kill_tree(process: subprocess.Popen) -> None:
+    """Kill ``process`` and its descendants, on either platform."""
+    if os.name == "nt":
+        # Windows has no process groups that survive a launcher, so ask the OS
+        # to walk the tree. /T is the whole point; /F because a wedged renderer
+        # is not going to honour a polite request.
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                       capture_output=True, check=False)
+        process.kill()
+        return
+    import signal  # noqa: PLC0415
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        process.kill()
 
 
 def check_archive_limits(path: str | os.PathLike[str]) -> dict[str, int]:
