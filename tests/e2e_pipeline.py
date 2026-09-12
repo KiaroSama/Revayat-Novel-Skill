@@ -188,7 +188,7 @@ def main() -> int:
         # 3. chunk --------------------------------------------------------- #
         chunks = work / "chunks"
         manifest = chunking.build(book_path, chunks, glossary_path=glossary_path,
-                                  budget=400)
+                                  budget=1300)
         check(manifest["chunks"], "no chunks were produced")
         introduced = sum(
             "first mention" in (chunks / entry["file"]).read_text(encoding="utf-8")
