@@ -1,0 +1,86 @@
+name: Dependency audit
+
+# The question nothing else here asks: **is what a reader installs today
+# vulnerable?**
+#
+# `dependency-review.yml` runs on pull requests and reviews only the
+# dependencies a PR *changed*, so a week with no dependency commit is a week it
+# says nothing — correctly, because there was nothing to review. `codeql.yml`
+# analyses this project's own Python, not PyPI advisories. And Dependabot's pip
+# *version* updates are disabled on purpose (see dependabot.yml), leaving its
+# security updates as the only channel, against the manifest rather than a
+# resolution of it.
+#
+# But the answer changes when an advisory is **published**, not when somebody
+# pushes. Hence a schedule.
+#
+# There is no lockfile, so this audits the **floors** in requirements.txt — which
+# is the right question for a project people install fresh with
+# `pip install -r`. Two optional tools are deliberately not declared there and
+# are therefore NOT covered: ocrmypdf and pywin32. `doctor` names both; a reader
+# installs them separately and audits them separately.
+#
+# Off the push path on purpose, like integration.yml: a newly published advisory
+# is not a reason to fail an unrelated commit.
+on:
+  schedule:
+    # Weekly, early Monday UTC — an hour after the OCR tier, so two heavy
+    # scheduled jobs do not start together.
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: audit the installed set
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install pip-audit
+        # Pinned for the same reason the ruff step is: a tool whose output gates
+        # a build must not change under the build's feet. Raise it deliberately.
+        run: python -m pip install pip-audit==2.10.1
+
+      - name: Audit the floors a reader installs against
+        run: pip-audit -r skills/revayat-novel/requirements.txt
+
+      # The three resolution audits below each build their own virtualenv rather
+      # than installing into the one that holds pip-audit. Freezing the tool's
+      # environment would audit pip-audit's own ~28 dependencies alongside this
+      # project's, so an advisory against a CI tool would fail the build as
+      # though a reader were exposed to it.
+      - name: Audit what actually resolves today
+        # The floors say what is permitted; this says what `pip install -r`
+        # produces this morning, which is what a reader runs.
+        run: |
+          python -m venv /tmp/floors-env
+          /tmp/floors-env/bin/python -m pip install --quiet --upgrade pip
+          /tmp/floors-env/bin/python -m pip install --quiet \
+            -r skills/revayat-novel/requirements.txt
+          /tmp/floors-env/bin/python -m pip freeze > resolved-floors.txt
+          pip-audit -r resolved-floors.txt
+
+      - name: Audit the pinned set CI installs
+        # A different question from the one above, and it can have a different
+        # answer: constraints-ci.txt holds exact versions, so it can be
+        # vulnerable at a version the floors' latest resolution has moved past.
+        # The floors are what a *reader* gets; this is what the build gets.
+        run: |
+          python -m venv /tmp/pinned-env
+          /tmp/pinned-env/bin/python -m pip install --quiet --upgrade pip
+          /tmp/pinned-env/bin/python -m pip install --quiet \
+            -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
+          /tmp/pinned-env/bin/python -m pip freeze > resolved-pinned.txt
+          pip-audit -r resolved-pinned.txt

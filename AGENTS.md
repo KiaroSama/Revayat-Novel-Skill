@@ -118,6 +118,13 @@ questions: one is the range the skill supports, the other is the set the build
 was checked against. Moving a pin is a commit, and Dependabot opens a PR per
 update.
 
+`dependency-audit.yml` runs `pip-audit` weekly against the floors in
+`requirements.txt` and against what they resolve to that day — the question
+`dependency-review.yml` cannot answer, because it only sees dependencies a pull
+request changed. It is scheduled and dispatchable, not on the push path: a newly
+published advisory should not fail an unrelated commit. `ocrmypdf` and `pywin32`
+are not declared dependencies and are not covered.
+
 And the flag table in `references/docx-and-ooxml.md` must state the defaults the
 parser actually has: a test reads the table and compares every literal default
 against `build_docx.add_arguments`. Change a default in one place and the build
