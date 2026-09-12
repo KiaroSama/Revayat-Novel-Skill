@@ -1,0 +1,40 @@
+# What CI installs. NOT what a reader installs.
+#
+# `skills/revayat-novel/requirements.txt` states minimum versions on purpose:
+# this is a skill people copy into their own agent directory and run against
+# whatever interpreter and wheels they already have, so narrowing those floors
+# would narrow the set of machines it works on. `dependabot.yml` disables pip
+# version updates for that reason.
+#
+# The side effect was not decided: eighteen CI jobs resolved those floors
+# freshly on every run, so a release by any of six upstreams could turn a green
+# build red on a commit that changed nothing, and the failure arrived attached
+# to whoever pushed next. This project already learned that on `ruff`, whose
+# default rule set widened from 0 findings to 196 between two releases — which
+# is why the lint step pins it.
+#
+# pymupdf is the one that matters most: it is the PDF reader, the page geometry,
+# the image extraction and the render readback, and test_readers.py,
+# test_renderqa.py, test_docqa.py and test_pagerun.py all assert on numbers it
+# produces.
+#
+# Verified green on the full local suite with this exact set: Windows, Word
+# installed, CPython 3.14.7. The CI side of that claim needs a push — read the
+# matrix after one, rather than trusting this comment for it.
+#
+# `ocrmypdf` and `pywin32` are deliberately NOT pinned here. They are optional
+# tools, installed ad hoc by the two jobs that need them and absent from
+# `requirements.txt` by a recorded decision, and the jobs that use them
+# (`integration.yml`, `word-render.yml`) are scheduled rather than on the push
+# path — so a break there is an optional-tier break that does not redden a
+# push. Measured alongside the pins below: ocrmypdf 17.11.0, pywin32 312.
+#
+# To move a pin: change it here, push, and read the matrix. Dependabot opens a
+# PR per update against this file.
+pymupdf==1.28.2
+python-docx==1.2.0
+beautifulsoup4==4.15.0
+lxml==6.1.3
+pillow==12.3.0
+pytest==9.1.1
+pytest-timeout==2.4.0

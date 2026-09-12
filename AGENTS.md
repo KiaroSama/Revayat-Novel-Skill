@@ -110,6 +110,14 @@ in one block with `# noqa: F401` — the linter cannot tell a re-export from a
 dead import, and a name a test imports is public whatever it looks like inside
 the file.
 
+CI installs against `constraints-ci.txt` — exact versions, verified green as a
+set. `skills/revayat-novel/requirements.txt` keeps its **minimum** versions
+untouched, because a reader copies this skill into their own agent directory and
+runs it against whatever they already have. The two files answer different
+questions: one is the range the skill supports, the other is the set the build
+was checked against. Moving a pin is a commit, and Dependabot opens a PR per
+update.
+
 And the flag table in `references/docx-and-ooxml.md` must state the defaults the
 parser actually has: a test reads the table and compares every literal default
 against `build_docx.add_arguments`. Change a default in one place and the build

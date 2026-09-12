@@ -38,12 +38,14 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-          cache-dependency-path: skills/revayat-novel/requirements.txt
+          cache-dependency-path: |
+            skills/revayat-novel/requirements.txt
+            constraints-ci.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r skills/revayat-novel/requirements.txt
+          python -m pip install -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
 
       - name: Run tests
         env:
@@ -70,12 +72,14 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: skills/revayat-novel/requirements.txt
+          cache-dependency-path: |
+            skills/revayat-novel/requirements.txt
+            constraints-ci.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r skills/revayat-novel/requirements.txt
+          python -m pip install -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
 
       # Runs every stage against a generated book, so a break anywhere in the
       # chain fails here even when each module's unit tests still pass.
@@ -121,7 +125,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: skills/revayat-novel/requirements.txt
+          cache-dependency-path: |
+            skills/revayat-novel/requirements.txt
+            constraints-ci.txt
 
       - name: Install the tools the other jobs go without (linux)
         if: runner.os == 'Linux'
@@ -142,7 +148,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r skills/revayat-novel/requirements.txt ocrmypdf
+          python -m pip install -r skills/revayat-novel/requirements.txt ocrmypdf -c constraints-ci.txt
 
       - name: Every one of them is really on PATH
         shell: bash
@@ -268,7 +274,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: skills/revayat-novel/requirements.txt
+          cache-dependency-path: |
+            skills/revayat-novel/requirements.txt
+            constraints-ci.txt
 
       # Two checks below import the project, so they need its dependencies.
       # Without them pytest collects nothing and the coverage check reads that
@@ -276,7 +284,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r skills/revayat-novel/requirements.txt
+          python -m pip install -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
 
       - name: Nothing unused, nothing undefined
         run: |
