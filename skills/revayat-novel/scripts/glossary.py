@@ -145,21 +145,70 @@ def render_term_table(entries: list[dict[str, Any]], policy: dict[str, Any],
     return "\n".join(lines)
 
 
+def voice_entry(glossary: dict[str, Any],
+                voice: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
+    """``(the entry this voice card is about, a problem)``.
+
+    A card is keyed by a character name, and a chunk may well name that character
+    only by a nickname — so matching the card's own spelling against the text is
+    how the one chunk that most needs the card goes without it: the scene where
+    "Lizzy" is being sardonic got no card, because the card says "Elizabeth
+    Bennet".
+
+    Resolved through the glossary instead: an explicit ``entry`` id if the card
+    carries one, otherwise the entry whose English source matches. An ambiguous
+    name — two characters sharing a surname — is **not** guessed. It is returned
+    as a problem, because a card attached to the wrong character is worse than no
+    card, and the fix is an `entry` id the file can state.
+    """
+    wanted = str(voice.get("entry") or "")
+    if wanted:
+        for entry in glossary.get("entries", []):
+            if entry.get("id") == wanted:
+                return entry, ""
+        return None, (f"voice card for {voice.get('character', '?')!r} names entry "
+                      f"{wanted!r}, which this glossary does not have")
+
+    name = (voice.get("character") or "").strip()
+    if not name:
+        return None, "a voice card with no character name"
+    matches = [entry for entry in glossary.get("entries", [])
+               if (entry.get("source") or "").strip() == name]
+    if len(matches) == 1:
+        return matches[0], ""
+    if not matches:
+        # Not an error: a card may be about a character with no locked name.
+        return None, ""
+    return None, (f"voice card for {name!r} matches {len(matches)} glossary "
+                  f"entries; add an `entry` id to say which character it is about")
+
+
+def voice_problems(glossary: dict[str, Any]) -> list[str]:
+    """Voice cards that cannot be resolved to one character, with what to do."""
+    return [problem for problem in
+            (voice_entry(glossary, voice)[1]
+             for voice in glossary.get("voices", []))
+            if problem]
+
+
 def render_voice_cards(glossary: dict[str, Any], text: str) -> str:
+    prose = prose_of(text)
     cards = []
     for voice in glossary.get("voices", []):
         name = voice.get("character", "")
-        if name and re.search(rf"\b{re.escape(name)}\b", text):
+        entry, _ = voice_entry(glossary, voice)
+        # Every approved English form of the character, not only the card's own
+        # spelling. An unresolved card falls back to its own name, which is what
+        # it always did — a card is guidance, and losing it must not be fatal.
+        forms = surface_forms(entry) if entry else ([name] if name else [])
+        if any(form and re.search(rf"\b{re.escape(form)}\b", prose)
+               for form in forms):
             cards.append(
                 f"- **{name}** — register: {voice.get('register', '?')}; "
                 f"{voice.get('persian_policy') or voice.get('speech_style', '')}"
             )
     return "\n".join(cards)
 
-
-# --------------------------------------------------------------------------- #
-# Compliance check
-# --------------------------------------------------------------------------- #
 
 # --------------------------------------------------------------------------- #
 # First-mention enforcement
@@ -314,6 +363,78 @@ def _introduce_in_prose(target: str, later_form: str,
     return None
 
 
+def prose_of(text: str) -> str:
+    """``text`` with markup, verbatim spans and protected regions blanked out.
+
+    One resolver, used by placement, by the drift check and by the worksheet
+    instruction — because three opinions about "does this block mention the name"
+    is how the enforcement pass and the gate came to disagree for ever. With
+    `علی` inside backticks, or inside `https://example.com/علی`, or inside
+    `علیرضا`, `introduction_owner` said the pinned paragraph was eligible and
+    `_place_once` moved on to the next one; QA then demanded the pinned paragraph,
+    so three identical passes left the same error and no number of re-runs
+    converged.
+
+    Same length as the input, because callers map positions back onto the
+    original. A verbatim span keeps its width and loses its content: it is an
+    example of the notation, never a mention.
+    """
+    out: list[str] = []
+    for span in ir.parse_markup(text or ""):
+        if span.get("footnote"):
+            continue
+        body = span.get("text") or ""
+        out.append(" " * len(body) if span.get("verbatim")
+                   else falint.blank_protected(body))
+    return "".join(out)
+
+
+def owed_forms(entry: dict[str, Any], source: str, *,
+               distinct: bool = True) -> tuple[list[str], list[str]]:
+    """``(the English forms this text really uses, the Persian it therefore owes)``.
+
+    Longest-first and non-overlapping, which is the whole point. "Elizabeth
+    Bennet arrived." contains the full name *and* the alias "Elizabeth" inside it,
+    so the old union accepted the block on «الیزابت آمد» alone — the surname
+    dropped, the check satisfied by a form the source never used on its own.
+    Consuming the longest match first leaves nothing for the inner alias to claim.
+    """
+    prose = prose_of(source)
+    consumed: list[tuple[int, int]] = []
+    used: list[str] = []
+    mapping = alias_map(entry)
+
+    for form in sorted(surface_forms(entry), key=len, reverse=True):
+        if not form:
+            continue
+        for match in re.finditer(rf"\b{re.escape(form)}\b", prose):
+            start, end = match.span()
+            if any(start < taken_end and taken_start < end
+                   for taken_start, taken_end in consumed):
+                continue
+            consumed.append((start, end))
+            used.append(form)
+
+    accepted: list[str] = []
+    for form in used:
+        if form == entry.get("source"):
+            accepted.append(canonical(entry))
+            if not distinct:
+                accepted += alias_accepted(entry)
+        elif form in mapping:
+            accepted.append(mapping[form])
+            if not distinct:
+                accepted.append(canonical(entry))
+        else:
+            # An alias with no pairing — an older glossary's flat list. Which form
+            # it owes is unknown, so every approved form is accepted: guessing
+            # strictly would reject a faithful translation on evidence the file
+            # does not contain.
+            accepted.append(canonical(entry))
+            accepted += alias_accepted(entry)
+    return sorted(set(used), key=len, reverse=True), accepted
+
+
 def introduction_owner(entry: dict[str, Any],
                        blocks: list[dict[str, Any]]) -> str:
     """Which block should carry this name's original spelling. One answer, asked
@@ -336,8 +457,12 @@ def introduction_owner(entry: dict[str, Any],
     later_form = canonical(entry)
     if not later_form:
         return ""
+    # `standalone_spans` over `prose_of`, not `in`. A substring test called a
+    # paragraph eligible when its only «علی» was inside backticks, inside a URL or
+    # inside «علیرضا» — and `_place_once`, which is careful, went to the next
+    # paragraph. The gate then demanded the pinned one for ever.
     eligible = [block for block in blocks
-                if later_form in (block.get("target") or "")]
+                if standalone_spans(prose_of(block.get("target") or ""), later_form)]
     pinned = entry.get("first_block_id") or ""
     if any(block["id"] == pinned for block in eligible):
         return pinned
@@ -465,44 +590,19 @@ def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]
         target = (block.get("target") or "").strip()
         if not target:
             continue
-        source = ir.plain_text(block.get("text") or "")
-        target_plain = ir.plain_text(target)
+        source = block.get("text") or ""
+        target_plain = prose_of(target)
+        distinct_policy = bool((glossary.get("policy") or {})
+                               .get("keep_aliases_distinct", True))
         for entry in locked:
-            forms = [f for f in surface_forms(entry)
-                     if re.search(rf"\b{re.escape(f)}\b", source)]
+            # One resolver, longest-first and non-overlapping. The union of
+            # full-name and inner-alias matches let "Elizabeth Bennet arrived"
+            # pass on «الیزابت آمد» alone, because "Elizabeth" is also an alias
+            # *inside* the full name — the surname silently dropped, on the very
+            # check that exists to catch a dropped name.
+            forms, accepted = owed_forms(entry, source, distinct=distinct_policy)
             if not forms:
                 continue
-            # Which Persian this block owes depends on which English it used.
-            # The accepted set used to be "canonical plus every alias target"
-            # regardless, so a source block saying "Lizzy" passed on the full
-            # «الیزابت بنت» — the opposite of what `keep_aliases_distinct` asks
-            # for, and a nickname expanded to satisfy a gate is a changed voice.
-            mapping = alias_map(entry)
-            distinct = bool((glossary.get("policy") or {})
-                            .get("keep_aliases_distinct", True))
-            accepted: list[str] = []
-            for form in forms:
-                if form == entry.get("source"):
-                    # The source used the full name, so the canonical is owed.
-                    accepted.append(canonical(entry))
-                    if not distinct:
-                        accepted += alias_accepted(entry)
-                elif form in mapping:
-                    # A paired alias: this is the one case where the glossary
-                    # actually says which Persian this English owes.
-                    accepted.append(mapping[form])
-                    if not distinct:
-                        accepted.append(canonical(entry))
-                else:
-                    # An alias with no pairing — an older glossary's flat list, or
-                    # one nobody has finished. Which form it owes is **unknown**,
-                    # so every approved form is accepted. Guessing strictly here
-                    # would reject a faithful translation on evidence the file
-                    # does not contain, which is why the mapping exists at all.
-                    accepted.append(canonical(entry))
-                    accepted += alias_accepted(entry)
-            if not accepted:
-                accepted = [canonical(entry), *alias_accepted(entry)]
             # Boundary-aware, never substring. «علی» sits inside «علیرضا», a
             # different person, and inside «علی‌اکبر», a different name again —
             # U+200C glues word parts, so a form flanked by one is a fragment of
