@@ -65,13 +65,36 @@ _VERB_FORM = re.compile(
     + ")$"
 )
 
-#: Words that cannot take a comparative suffix: prepositions, conjunctions,
-#: determiners and particles — a closed class, which is what makes the check
-#: defensible. «از تری» is *from the wetness*, never *from-er*.
-_NO_COMPARATIVE = frozenset((
-    "از", "به", "با", "در", "بر", "تا", "که", "را", "این", "آن", "هر", "چه",
-    "یا", "و", "اگر", "چون", "زیرا", "ولی", "اما", "پس", "نیز", "هم", "بی",
-    "جز", "مگر", "البته", "چرا", "کی", "کجا", "وقتی", "همان", "چنین", "چنان",
+#: Adjectives a «تری» may attach to. **Positive evidence**, and that direction is
+#: the whole point: the previous rule was "not in a list of function words", so
+#: every other word in Persian was allowed to be an adjective — and «من تری لباس
+#: را حس کردم» (*I felt the wetness of the cloth*) came out as «من‌تری», because
+#: «تری» is also the noun *wetness*. The same happened after «او» and «هنوز». A
+#: blacklist cannot fix that: the words it would have to exclude are every noun
+#: and every pronoun in the language.
+#:
+#: So the list below is a lexicon, not a set of exceptions. A word that is not in
+#: it is *not known to be an adjective*, which is the answer that leaves the text
+#: alone and raises `zwnj-comparative-undecided` for a person instead. Adding an
+#: adjective here is an ordinary improvement; it never changes the rule.
+_COMPARABLE = frozenset((
+    # size, extent
+    "بزرگ", "کوچک", "ریز", "درشت", "بلند", "کوتاه", "پهن", "باریک", "کلان",
+    "عظیم", "وسیع", "تنگ", "گسترده", "عمیق", "کم", "زیاد", "بیش", "اندک",
+    # light, colour, temperature
+    "روشن", "تاریک", "سفید", "سیاه", "تیره", "پررنگ", "کم‌رنگ", "گرم", "سرد",
+    "داغ", "خنک", "سوزان", "یخ",
+    # quality, worth
+    "خوب", "بد", "زیبا", "زشت", "قوی", "ضعیف", "سخت", "نرم", "آسان", "دشوار",
+    "گران", "ارزان", "تازه", "کهنه", "نو", "قدیمی", "جدید", "مهم", "بهتر",
+    "ساده", "پیچیده", "دقیق", "درست", "نادرست", "روان", "سنگین", "سبک",
+    # people, feeling
+    "جوان", "پیر", "خوشحال", "غمگین", "شاد", "ناراحت", "آرام", "عصبانی",
+    "مهربان", "تند", "کند", "سریع", "آهسته", "خسته", "هوشیار", "دانا", "نادان",
+    "شجاع", "ترسان", "مشهور", "ناشناس", "نزدیک", "دور", "شبیه", "متفاوت",
+    # condition
+    "خالی", "پر", "پاک", "کثیف", "خشک", "تمیز", "شلوغ", "ساکت", "بلندتر",
+    "محکم", "شکننده", "زنده", "مرده", "سالم", "بیمار", "گرسنه", "سیر", "تشنه",
 ))
 
 
@@ -84,10 +107,18 @@ def is_verb_form(word: str) -> bool:
     return bool(_VERB_FORM.match(word))
 
 
-def takes_comparative(word: str) -> bool:
-    """Could ``word`` be the adjective a «تری»/«ترین» attaches to?
+def takes_comparative(word: str, *, suffix: str = "تری") -> bool:
+    """Is ``word`` known to be the adjective a «تری»/«ترین» attaches to?
 
-    Again only the confident negative is claimed: a closed class of function words
-    is excluded, everything else is allowed to be an adjective.
+    Positive evidence, like :func:`is_verb_form`. ``False`` means *not known to be
+    an adjective*, and the caller leaves the space alone and reports it rather than
+    joining on a guess.
+
+    ``ترین`` is the one case where the shape itself is the evidence: Persian has no
+    ordinary noun of that form, so a space before it is a superlative somebody
+    typed loosely. «تری» and «تر» are genuinely ambiguous — both are also words,
+    *wetness* and *wet* — which is why they need the lexicon.
     """
-    return word not in _NO_COMPARATIVE
+    if suffix == "ترین":
+        return True
+    return word in _COMPARABLE

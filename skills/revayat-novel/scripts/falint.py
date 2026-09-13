@@ -151,6 +151,25 @@ def unmask_literals(text: str, keep: list[str]) -> str:
     return re.sub(r"\x00(\d+)\x00", lambda m: keep[int(m.group(1))], text)
 
 
+def blank_protected(text: str, *, latin: bool = False) -> str:
+    """``text`` with protected regions replaced by spaces, same length.
+
+    Same length on purpose: callers map positions back onto the original, so a
+    mask that shortened the string would move every offset after it.
+
+    ``latin`` decides whether Latin words are blanked too. The glossary wants them
+    *kept* on the English side — an English name is a Latin word — and blanked
+    nowhere else matters, so the default is the conservative one.
+    """
+    def swap(match: re.Match[str]) -> str:
+        found = match.group(0)
+        if not latin and re.fullmatch(r"[A-Za-z][\w.'’-]*", found):
+            return found
+        return " " * len(found)
+
+    return _PROTECTED.sub(swap, text)
+
+
 def fix_prose(text: str, options: Options) -> str:
     """Apply Persian typography to one prose span.
 
@@ -259,11 +278,18 @@ def _join_prefix(match: re.Match[str]) -> str:
 
 
 def _join_suffix(match: re.Match[str]) -> str:
-    """Join a suffix to the word before it, except where «تری»/«ترین» is itself
-    the noun — «از تری موهایش» is *from the wetness of her hair*, and a
-    preposition has no comparative."""
+    """Join a suffix to the word before it, on positive evidence only.
+
+    «تری» is also the noun *wetness* and «تر» the adjective *wet*, so a space
+    before either is only a loose comparative when the word in front is known to
+    be an adjective. The previous rule was the opposite — anything outside a short
+    list of function words counted as an adjective — and it rewrote «من تری لباس
+    را حس کردم» into «من‌تری», which says nothing. «ترین» needs no lexicon: Persian
+    has no ordinary noun of that shape.
+    """
     stem, suffix = match.group(1), match.group(2)
-    if suffix in ("تری", "ترین") and not famorph.takes_comparative(stem):
+    if (suffix in ("تری", "ترین")
+            and not famorph.takes_comparative(stem, suffix=suffix)):
         return match.group(0)
     return f"{stem}{ZWNJ}{suffix}"
 
@@ -334,10 +360,10 @@ def lint_text(text: str) -> list[dict[str, str]]:
 
     for match in _SUFFIX_SPACE.finditer(plain):
         if match.group(2) in ("تری", "ترین") and not famorph.takes_comparative(
-                match.group(1)):
+                match.group(1), suffix=match.group(2)):
             note("zwnj-comparative-undecided",
-                 f"«{match.group(0)}»: left as written. «تری» is also the noun "
-                 f"*wetness*, and «{match.group(1)}» cannot take a comparative")
+                 f"«{match.group(0)}»: not joined. «تری» is also the noun "
+                 f"*wetness*; «{match.group(1)}» is not in famorph._COMPARABLE")
 
     bare = _BARE_COMPARATIVE.search(plain)
     if bare:
