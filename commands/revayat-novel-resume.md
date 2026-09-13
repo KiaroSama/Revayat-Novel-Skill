@@ -12,7 +12,10 @@ route, a `chunks/` directory means the budget route.
 
 **Page route (`<dir>/pages` exists — every PDF):**
 
-1. `revayat-novel.py pages status --pages <dir>/pages` — where every page stands.
+1. `revayat-novel.py pages status --pages <dir>/pages --book <dir>/book.json` —
+   where every page stands. `--book` is what makes `accepted` mean anything: it
+   re-checks each finished page against the book, so a page whose text moved
+   after it was accepted comes back as `stale` instead of being skipped.
 2. `revayat-novel.py pages next --pages <dir>/pages` — the first page still to
    do. It names the exact worksheet file, so there is nothing to guess.
 3. For that page, the loop from SKILL.md step 4: translate the worksheet,
