@@ -44,7 +44,13 @@ FENCE = re.compile(r"^\s*(?:```|~~~)\s*[A-Za-z0-9_+-]*\s*$")
 #: :func:`escape_payload`'s mark on a source line that would otherwise parse as
 #: a header, removed on the way back in. The indentation is captured so an
 #: indented line comes back indented.
-ESCAPED_HEADER = re.compile(r"^(\s*)\\(@@\s)")
+#:
+#: Exactly **one** backslash comes off, and any remaining ones are kept by the
+#: second group. A unit whose own text is the line ``\@@ b00007 para`` otherwise
+#: arrived one backslash short: nothing escaped it on the way out — its stripped
+#: form is not a header — and this stripped one on the way back. One layer out,
+#: one layer in, at any depth.
+ESCAPED_HEADER = re.compile(r"^(\s*)\\(\\*@@\s)")
 
 #: Scaffolding *this project* wrote into the worksheet. Only these are dropped
 #: when they come back echoed. An unmarked comment-shaped line is book content —
@@ -75,10 +81,16 @@ def escape_payload(text: str) -> str:
     If a translator drops the backslash the line returns as a *duplicate* header
     and the merge refuses it by name. That is the point of an escape over
     trusting the shape of the text: the failure is loud.
+
+    A line that is *already* in escaped form is escaped again, because the reader
+    takes one backslash off anything shaped that way and cannot know who put it
+    there. Without this the round trip was asymmetric for exactly that input —
+    found by the generated round-trip property in `tests/test_properties.py`,
+    never by an example.
     """
     out: list[str] = []
     for line in text.split("\n"):
-        if HEADER.match(line.strip()):
+        if HEADER.match(line.strip().lstrip("\\")):
             indent = line[:len(line) - len(line.lstrip())]
             out.append(f"{indent}\\{line[len(indent):]}")
         else:
