@@ -16,12 +16,22 @@ import argparse
 import json
 import re
 import sys
-import zipfile
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import bookir as ir
+# The findings vocabulary and the package checks live in their own modules now;
+# re-exported because `qa.Report` and `qa.check_docx` are how every caller and
+# every test reach them.
+from findings import ERROR, WARNING, Report  # noqa: F401
+from package import (  # noqa: F401
+    _BLIP,
+    _BOOKMARK,
+    _check_bookmarks,
+    _check_image_order,
+    _package_image_order,
+    check_docx,
+)
 import falint
 import glossary as gl
 
@@ -41,45 +51,6 @@ DUPLICATE_MIN_CHARS = 120
 #: `verbatim` spans are removed before the comparison, so 40 leaves a margin
 #: wide enough that no name or quoted token can reach it.
 COPIED_RUN_CHARS = 40
-
-ERROR = "error"
-WARNING = "warning"
-
-
-class Report:
-    def __init__(self) -> None:
-        self.findings: list[dict[str, Any]] = []
-        self.counts: dict[str, int] = {}
-
-    def add(self, severity: str, code: str, unit: str, detail: str) -> None:
-        self.findings.append(
-            {"severity": severity, "code": code, "unit": unit, "detail": detail[:200]}
-        )
-
-    def count(self, name: str, value: int) -> None:
-        """Record a total the findings cannot express.
-
-        ``findings`` is capped at ``limit``, so a list of untranslated blocks
-        says nothing about whether one paragraph was missed or a thousand.
-        """
-        self.counts[name] = value
-
-    def summary(self, limit: int = 60) -> dict[str, Any]:
-        errors = [f for f in self.findings if f["severity"] == ERROR]
-        warnings = [f for f in self.findings if f["severity"] == WARNING]
-        by_code: dict[str, int] = {}
-        for finding in self.findings:
-            by_code[finding["code"]] = by_code.get(finding["code"], 0) + 1
-        return {
-            "ok": not errors,
-            "errors": len(errors),
-            "warnings": len(warnings),
-            "counts": dict(sorted(self.counts.items())),
-            "by_code": dict(sorted(by_code.items(), key=lambda kv: -kv[1])),
-            "findings": (errors + warnings)[:limit],
-            "truncated": max(0, len(self.findings) - limit),
-        }
-
 
 # --------------------------------------------------------------------------- #
 # Book-level gates
@@ -102,12 +73,19 @@ def check_book(
     wanted, and this is the switch that removes it.
     """
     report = Report()
+    # The schema first, because every check below reads the structure this one
+    # validates. `validate_book` already refuses a duplicate block id and a
+    # reference to a footnote that does not exist — and a complete strict run
+    # passed a book it rejects, because nothing here had ever asked it. A gate
+    # that trusts its input more than the validator beside it is not a gate.
+    for problem in ir.validate_book(book):
+        report.add(ERROR, "ir-invalid", "book.json", problem)
     _check_coverage(book, report, require_complete)
     _check_structure_parity(book, report, strict)
     _check_lengths(book, report)
     _check_duplicate_targets(book, report)
     _check_copied_runs(book, report)
-    _check_footnotes(book, report)
+    _check_footnotes(book, report, complete=require_complete)
     if assets is not None:
         _check_assets(book, assets, report)
     _check_typography(book, report)
@@ -159,6 +137,39 @@ def _check_coverage(book: dict[str, Any], report: Report, require_complete: bool
         else:
             report.add(severity, "untranslated-block", block["id"],
                        ir.plain_text(block["text"])[:120])
+
+    # The inventory used to stop at block text and running heads, so two kinds of
+    # translatable content were complete by never being counted: an illustration's
+    # caption and a footnote's body. A strict run came back with **zero findings
+    # and zero warnings** on a book whose picture still had its English alt text.
+    #
+    # `_prose` is the exemption, and it is specific rather than global: a source
+    # whose every span is verbatim — a literal token, a code sample — is *meant*
+    # to survive byte for byte, and has nothing to translate.
+    for block in book.get("blocks", []):
+        if block.get("type") != "image" or not _prose(block.get("alt") or "").strip():
+            continue
+        totals["captions"] = totals.get("captions", 0) + 1
+        if (block.get("target_alt") or "").strip():
+            totals["captions_translated"] = totals.get("captions_translated", 0) + 1
+        else:
+            report.add(severity, "untranslated-alt", block["id"],
+                       ir.plain_text(block.get("alt") or "")[:120])
+
+    # A referenced note's body is counted here and reported by `_check_footnotes`,
+    # which already knows which notes are pointed at. One code for one condition.
+    referenced = {ref for block in ir.iter_text_blocks(book)
+                  for side in ("text", "target")
+                  for ref in ir.footnote_refs(block.get(side) or "")}
+    for note in book.get("footnotes", []):
+        if note.get("id") not in referenced:
+            continue
+        if not _prose(note.get("text") or "").strip():
+            continue
+        totals["notes"] = totals.get("notes", 0) + 1
+        if (note.get("target") or "").strip():
+            totals["notes_translated"] = totals.get("notes_translated", 0) + 1
+
     for name, value in totals.items():
         report.count(name, value)
 
@@ -445,7 +456,8 @@ def _check_lengths(book: dict[str, Any], report: Report) -> None:
                        f"target is {ratio:.0%} of source length")
 
 
-def _check_footnotes(book: dict[str, Any], report: Report) -> None:
+def _check_footnotes(book: dict[str, Any], report: Report, *,
+                     complete: bool = True) -> None:
     """Every note must have a body, and exactly one marker pointing at it.
 
     A note the *translator* added is held to a stricter standard than one that
@@ -508,8 +520,14 @@ def _check_footnotes(book: dict[str, Any], report: Report) -> None:
                            f"{', '.join(pointing)}")
 
         if pointing and not (note.get("target") or "").strip():
-            report.add(WARNING, "footnote-untranslated", note_id,
-                       ir.plain_text(note.get("text") or "")[:100])
+            # A *referenced* note with no Persian is missing content, not a
+            # stylistic doubt: the marker prints and the reader finds English at
+            # the foot of the page. It was a warning, so a complete strict run
+            # passed a book with an untranslated footnote in it.
+            if not _prose(note.get("text") or "").strip():
+                continue      # a verbatim-only note is meant to survive as it is
+            report.add(ERROR if complete else WARNING, "footnote-untranslated",
+                       note_id, ir.plain_text(note.get("text") or "")[:100])
 
 
 def _check_assets(book: dict[str, Any], assets: Path, report: Report) -> None:
@@ -624,174 +642,6 @@ def _check_typography(book: dict[str, Any], report: Report) -> None:
 # --------------------------------------------------------------------------- #
 # Package-level gates
 # --------------------------------------------------------------------------- #
-
-_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-_BOOKMARK = re.compile(r'<w:bookmarkStart[^>]*w:name="([^"]+)"')
-_ANCHOR = re.compile(r'<w:hyperlink[^>]*w:anchor="([^"]+)"')
-_FOOTNOTE_REF = re.compile(r'<w:footnoteReference[^>]*w:id="(-?\d+)"')
-_FOOTNOTE_BODY = re.compile(r'<w:footnote[^>]*w:id="(-?\d+)"')
-_EXTENT = re.compile(r"<wp:extent[^>]*cx=\"(\d+)\"[^>]*cy=\"(\d+)\"")
-#: One per picture, in the order Word lays them out.
-_BLIP = re.compile(r'<a:blip[^>]*r:embed="([^"]+)"')
-_RELATIONSHIP = re.compile(r"<Relationship\b[^>]*>")
-#: Attributes are pulled by name rather than by position: the order of ``Id``,
-#: ``Type`` and ``Target`` inside a relationship is not fixed by the format.
-_ATTRIBUTE = re.compile(r'(\w+)="([^"]*)"')
-
-
-def _package_image_order(archive: zipfile.ZipFile, document: str) -> list[str]:
-    """The SHA-256 of every picture, in the order the document shows them.
-
-    python-docx stores one media part per *distinct* image, so two identical
-    pictures share a part and ``word/media/`` cannot describe order at all. The
-    ``<a:blip r:embed>`` sequence in ``document.xml`` can, once each
-    relationship is followed back to the bytes it points at.
-    """
-    try:
-        rels = archive.read("word/_rels/document.xml.rels").decode("utf-8", "replace")
-    except KeyError:
-        return []
-
-    target_by_id: dict[str, str] = {}
-    for tag in _RELATIONSHIP.findall(rels):
-        attributes = dict(_ATTRIBUTE.findall(tag))
-        if "Id" in attributes and "Target" in attributes:
-            target_by_id[attributes["Id"]] = attributes["Target"]
-
-    digests: dict[str, str] = {}
-    order: list[str] = []
-    for relationship_id in _BLIP.findall(document):
-        target = target_by_id.get(relationship_id, "")
-        if not target:
-            continue
-        name = target[1:] if target.startswith("/") else f"word/{target}"
-        if name not in digests:
-            try:
-                digests[name] = ir.sha256_bytes(archive.read(name))
-            except KeyError:            # an external or missing part
-                digests[name] = ""
-        if digests[name]:
-            order.append(digests[name])
-    return order
-
-
-def _check_image_order(archive: zipfile.ZipFile, document: str,
-                       book: dict[str, Any], report: Report) -> None:
-    """The pictures must be where the book puts them, not merely present.
-
-    Counting was the only check, and a count cannot see an illustration that
-    moved: the picture is still in the file, the caption underneath it now
-    belongs to a different one.
-    """
-    expected = [block["sha256"] for block in book.get("blocks", [])
-                if block["type"] == "image" and block.get("sha256")]
-    if not expected:
-        return
-    actual = _package_image_order(archive, document)
-    report.count("pictures_placed", len(actual))
-    if not actual:
-        return
-
-    # A picture whose asset went missing is already reported by asset-missing.
-    # Compare only the ones present on both sides, so a single absent file does
-    # not read as a reordering of everything after it.
-    shared = set(expected) & set(actual)
-    in_book = [digest for digest in expected if digest in shared]
-    in_package = [digest for digest in actual if digest in shared]
-    if in_book != in_package:
-        first = next((position for position, pair in enumerate(zip(in_book, in_package))
-                      if pair[0] != pair[1]), min(len(in_book), len(in_package)))
-        report.add(ERROR, "image-order", f"picture {first + 1}",
-                   "the pictures are not in the book's order — a caption now "
-                   "sits under the wrong illustration; rebuild from book.json "
-                   "instead of editing the document")
-
-
-def _check_bookmarks(names: list[str], book: dict[str, Any] | None,
-                     report: Report) -> None:
-    """Bookmarks are what the table of contents and every internal link land on."""
-    report.count("bookmarks", len(names))
-    for name, times in sorted(Counter(names).items()):
-        if times > 1:
-            report.add(ERROR, "bookmark-duplicate", name,
-                       f"opened {times} times; Word sends every link to the "
-                       f"first, so the contents jump to the wrong chapter — "
-                       f"rebuild instead of editing the document")
-
-    if book is None:
-        return
-    headings = sum(1 for block in book.get("blocks", []) if block["type"] == "heading")
-    report.count("headings_in_book", headings)
-    if headings and not names:
-        report.add(ERROR, "bookmarks-missing", "word/document.xml",
-                   f"{headings} headings and no bookmarks; the table of contents "
-                   f"has nothing to link to — rebuild")
-
-
-def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
-    report = Report()
-    try:
-        archive = zipfile.ZipFile(path)
-    except (OSError, zipfile.BadZipFile) as error:
-        report.add(ERROR, "docx-unreadable", str(path), str(error))
-        return report
-
-    with archive:
-        names = set(archive.namelist())
-        if "word/document.xml" not in names:
-            report.add(ERROR, "docx-invalid", str(path), "no word/document.xml")
-            return report
-
-        document = archive.read("word/document.xml").decode("utf-8", "replace")
-        content_types = archive.read("[Content_Types].xml").decode("utf-8", "replace")
-
-        bookmark_names = _BOOKMARK.findall(document)
-        bookmarks = set(bookmark_names)
-        for anchor in sorted(set(_ANCHOR.findall(document))):
-            if anchor not in bookmarks:
-                report.add(ERROR, "dead-link", anchor,
-                           "internal link has no matching bookmark")
-        _check_bookmarks(bookmark_names, book, report)
-
-        refs = {int(x) for x in _FOOTNOTE_REF.findall(document)}
-        if refs:
-            if "word/footnotes.xml" not in names:
-                report.add(ERROR, "footnotes-part-missing", str(path),
-                           f"{len(refs)} references but no word/footnotes.xml")
-            else:
-                footnotes = archive.read("word/footnotes.xml").decode("utf-8", "replace")
-                bodies = {int(x) for x in _FOOTNOTE_BODY.findall(footnotes)}
-                for missing in sorted(refs - bodies):
-                    report.add(ERROR, "footnote-body-missing", str(missing),
-                               "reference with no footnote body")
-                if "footnotes+xml" not in content_types:
-                    report.add(ERROR, "footnotes-content-type", str(path),
-                               "footnotes part is not declared in [Content_Types].xml")
-
-        media = [n for n in names if n.startswith("word/media/")]
-        extents = _EXTENT.findall(document)
-        if len(extents) < len(media):
-            report.add(WARNING, "picture-size-implicit", str(path),
-                       f"{len(media)} media parts but only {len(extents)} sized extents")
-
-        if "w:bidi" not in document:
-            report.add(WARNING, "no-rtl", str(path),
-                       "no w:bidi found — the document is not right-to-left")
-
-        if book is not None:
-            expected = sum(1 for b in book["blocks"] if b["type"] == "image")
-            unique = len({b["sha256"] for b in book["blocks"]
-                          if b["type"] == "image" and b.get("sha256")})
-            if media and unique and len(media) < unique:
-                report.add(ERROR, "images-lost", str(path),
-                           f"{unique} unique images expected, {len(media)} in package")
-            elif not media and expected:
-                report.add(ERROR, "images-lost", str(path),
-                           f"{expected} images expected, none in package")
-            _check_image_order(archive, document, book, report)
-
-    return report
-
 
 # --------------------------------------------------------------------------- #
 # CLI
