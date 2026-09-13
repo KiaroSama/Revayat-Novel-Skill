@@ -32,6 +32,7 @@ import glossary as gl          # noqa: E402
 import meaning                 # noqa: E402
 import merge as merging        # noqa: E402
 import qa                      # noqa: E402
+import worksheet as worksheet_module  # noqa: E402
 from tests_support import png_bytes   # noqa: E402
 
 #: Deliberately mentions the same character several times, in and out of
@@ -168,6 +169,13 @@ def translate(worksheet: str) -> str:
     # orphaned. A real translator does not file a note for nothing either.
     if noted:
         out += ["@@ tr-01 footnote", "یادداشتی که مترجم افزوده است.", ""]
+
+    # The request line, copied back out of the worksheet exactly as the worksheet
+    # asks. Without it merge cannot tell this answer from an answer to the cut
+    # this worksheet replaced, and refuses it as unbound — which is the point.
+    token = worksheet_module.request_of(worksheet)
+    if token:
+        out.insert(0, worksheet_module.request_line(token))
     return "\n".join(out)
 
 

@@ -24,6 +24,7 @@ sys.path.insert(0, str(SCRIPTS))
 import bookir as ir  # noqa: E402
 import chunk as chunking  # noqa: E402
 import merge as merging  # noqa: E402
+from tests_support import reply_text  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -57,7 +58,13 @@ def _manifest(chunks: Path) -> dict:
 
 
 def _reply(chunks: Path, chunk_id: str, body: str) -> None:
-    ir.write_text(chunks / f"out_{chunk_id}.md", body)
+    """A reply, carrying the request line its worksheet asked for.
+
+    A translator copies that line across; so does every writer here, or merge
+    rightly refuses the reply as unbound to any version of the question.
+    """
+    ir.write_text(chunks / f"out_{chunk_id}.md",
+                  reply_text(chunks / f"{chunk_id}.md", body))
 
 
 def _answer_every_unit(chunks: Path, chunk_id: str, *,
@@ -592,3 +599,57 @@ def test_a_good_reply_merges_in_both_modes(tmp_path, strict):
     assert [block["target"] for block in book["blocks"]] == \
         ["ترجمهٔ درست.", "ترجمهٔ درست."]
     assert not ir.validate_book(book)
+
+
+# --------------------------------------------------------------------------- #
+# A named prerequisite is not an optional one
+# --------------------------------------------------------------------------- #
+
+def test_a_named_glossary_that_is_not_there_refuses_the_merge(tmp_path):
+    """Omitting `--glossary` and naming a file that is absent are different.
+
+    Merge skipped the first-mention pass silently for the second, so the command
+    that exists to settle every name in one place reported success having settled
+    none — and the book shipped with the original spelling repeated wherever a
+    chunk decided to introduce it.
+    """
+    book_path = _book(tmp_path, ["Elizabeth Bennet arrived.", "She left again."])
+    chunks = _build(book_path, tmp_path)
+    for entry in _manifest(chunks)["chunks"]:
+        _answer_every_unit(chunks, entry["id"])
+    before = book_path.read_bytes()
+
+    report = merging.merge(book_path, chunks, strict=True,
+                           glossary_path=tmp_path / "not-here.json")
+
+    assert report["ok"] is False
+    assert report["refused"] == "named-glossary-unusable"
+    assert "does not exist" in report["detail"]
+    assert book_path.read_bytes() == before
+
+
+def test_a_named_glossary_that_is_not_a_glossary_refuses_too(tmp_path):
+    """Unreadable and unparseable are the same failure as absent: it was named."""
+    book_path = _book(tmp_path, ["Elizabeth Bennet arrived."])
+    chunks = _build(book_path, tmp_path)
+    for entry in _manifest(chunks)["chunks"]:
+        _answer_every_unit(chunks, entry["id"])
+    broken = tmp_path / "glossary.json"
+    ir.write_text(broken, "{ this is not json")
+
+    report = merging.merge(book_path, chunks, strict=True, glossary_path=broken)
+
+    assert report["ok"] is False
+    assert report["refused"] == "named-glossary-unusable"
+
+
+def test_omitting_the_glossary_is_still_allowed(tmp_path):
+    """The negative control: a book with no locked names merges without one."""
+    book_path = _book(tmp_path, ["A plain paragraph.", "Another one."])
+    chunks = _build(book_path, tmp_path)
+    for entry in _manifest(chunks)["chunks"]:
+        _answer_every_unit(chunks, entry["id"])
+
+    report = merging.merge(book_path, chunks, strict=True, glossary_path=None)
+
+    assert report["ok"] is True, report

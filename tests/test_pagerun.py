@@ -22,11 +22,17 @@ import pytest
 import bookir as ir
 import pagecheck
 import pagerun
+from tests_support import reply_text
 import preview
 import renderqa
 import review
 import runstate
 from read_pdf import _merge_split_paragraphs
+
+#: This whole module is the `render` tier: it drives a real renderer and costs
+#: minutes. CI runs it on every push; a local run can deselect it with
+#: `-m "not render and not ocr"`. See pytest.ini.
+pytestmark = pytest.mark.render
 
 
 # --------------------------------------------------------------------------- #
@@ -328,8 +334,10 @@ def test_an_accepted_page_keeps_its_answer_when_the_run_is_rebuilt(tmp_path):
     pages = tmp_path / "pages"
     manifest = pagerun.build(book_path, pages)
 
-    answer = pages / _job(manifest, 1)["output"]
-    ir.write_text(answer, "@@ b00001 para\nمتن فارسی\n")
+    job = _job(manifest, 1)
+    answer = pages / job["output"]
+    ir.write_text(answer, reply_text(pages / job["file"],
+                                     "@@ b00001 para\nمتن فارسی\n"))
     _mark(tmp_path, 1, "accepted")
 
     pagerun.build(book_path, pages)
@@ -403,9 +411,10 @@ def test_the_worksheets_a_page_run_writes_can_be_merged(tmp_path):
     manifest = pagerun.build(book_path, tmp_path / "pages")
 
     for entry in manifest["chunks"]:
-        ir.write_text(tmp_path / "pages" / entry["output"],
-                      "\n".join(f"@@ {unit} para\nمتن آزمون\n"
-                                for unit in entry["unit_ids"]))
+        ir.write_text(tmp_path / "pages" / entry["output"], reply_text(
+            tmp_path / "pages" / entry["file"],
+            "\n".join(f"@@ {unit} para\nمتن آزمون\n"
+                      for unit in entry["unit_ids"])))
 
     report = merging.merge(book_path, tmp_path / "pages")
     assert report["ok"], report
@@ -667,7 +676,9 @@ def test_a_page_walks_from_pending_to_accepted_through_the_operations(tmp_path):
     # The translator answers the worksheet it was given.
     upcoming = pagerun.next_page(pages)
     assert upcoming["page"] == 1
-    ir.write_text(Path(upcoming["output"]), f"@@ b00001 para\n{TARGET}\n")
+    ir.write_text(Path(upcoming["output"]),
+                  reply_text(Path(upcoming["worksheet"]),
+                             f"@@ b00001 para\n{TARGET}\n"))
 
     merged = pagerun.merge_page(book_path, pages, 1)
     assert merged["ok"], merged
@@ -717,14 +728,18 @@ def test_a_split_page_merges_only_when_every_part_is_answered(tmp_path):
     entries = pagerun.jobs_for(manifest, 1)
     assert len(entries) == 2, "the fixture did not actually split"
 
-    ir.write_text(pages / entries[0]["output"], "@@ b00001 para\nمتن آزمون\n")
+    ir.write_text(pages / entries[0]["output"],
+                  reply_text(pages / entries[0]["file"],
+                             "@@ b00001 para\nمتن آزمون\n"))
     half = pagerun.merge_page(book_path, pages, 1)
     assert half["ok"] is False and half["refused"] == "not-translated"
     assert entries[1]["id"] in half["detail"]
     assert not ir.load_book(book_path)["blocks"][0].get("target"), \
         "half a page was written into the book"
 
-    ir.write_text(pages / entries[1]["output"], "@@ b00002 para\nمتن دیگر\n")
+    ir.write_text(pages / entries[1]["output"],
+                  reply_text(pages / entries[1]["file"],
+                             "@@ b00002 para\nمتن دیگر\n"))
     assert pagerun.merge_page(book_path, pages, 1)["ok"]
     assert runstate.RunState(tmp_path).page(1)["state"] == "merged"
 
@@ -734,7 +749,9 @@ def test_a_page_render_qa_never_saw_cannot_be_accepted(tmp_path):
     book_path = _one_page_book(tmp_path)
     pages = tmp_path / "pages"
     pagerun.build(book_path, pages)
-    ir.write_text(pages / "out_page0001.md", f"@@ b00001 para\n{TARGET}\n")
+    ir.write_text(pages / "out_page0001.md",
+                  reply_text(pages / "page0001.md",
+                             f"@@ b00001 para\n{TARGET}\n"))
     assert pagerun.merge_page(book_path, pages, 1)["ok"]
 
     refused = pagerun.accept(book_path, pages, 1)
@@ -748,7 +765,9 @@ def test_a_page_render_qa_failed_cannot_be_accepted(tmp_path):
     book_path = _one_page_book(tmp_path)
     pages = tmp_path / "pages"
     pagerun.build(book_path, pages)
-    ir.write_text(pages / "out_page0001.md", f"@@ b00001 para\n{TARGET}\n")
+    ir.write_text(pages / "out_page0001.md",
+                  reply_text(pages / "page0001.md",
+                             f"@@ b00001 para\n{TARGET}\n"))
     pagerun.merge_page(book_path, pages, 1)
 
     blank = _rendered(tmp_path / "target.pdf", "Something else entirely.")
@@ -778,7 +797,9 @@ def test_re_translating_an_accepted_page_takes_its_acceptance_away(tmp_path):
     book_path = _one_page_book(tmp_path)
     pages = tmp_path / "pages"
     pagerun.build(book_path, pages)
-    ir.write_text(pages / "out_page0001.md", f"@@ b00001 para\n{TARGET}\n")
+    ir.write_text(pages / "out_page0001.md",
+                  reply_text(pages / "page0001.md",
+                             f"@@ b00001 para\n{TARGET}\n"))
     pagerun.merge_page(book_path, pages, 1)
     renderqa.check(tmp_path, book_path, 1,
                    target_pdf=_rendered(tmp_path / "target.pdf", TARGET))
@@ -786,7 +807,9 @@ def test_re_translating_an_accepted_page_takes_its_acceptance_away(tmp_path):
     assert pagerun.accept(book_path, pages, 1)["ok"]
 
     corrected = "A second attempt at the very same line of prose entirely."
-    ir.write_text(pages / "out_page0001.md", f"@@ b00001 para\n{corrected}\n")
+    ir.write_text(pages / "out_page0001.md",
+                  reply_text(pages / "page0001.md",
+                             f"@@ b00001 para\n{corrected}\n"))
     assert pagerun.merge_page(book_path, pages, 1)["ok"]
     assert pagerun.status(pages)["next"] == 1
     assert pagerun.accept(book_path, pages, 1)["refused"] == "not-qa-passed"
@@ -803,7 +826,9 @@ def test_the_cli_merges_and_accepts_one_page(tmp_path, capsys):
     book_path = _one_page_book(tmp_path)
     pages = tmp_path / "pages"
     pagerun.build(book_path, pages)
-    ir.write_text(pages / "out_page0001.md", f"@@ b00001 para\n{TARGET}\n")
+    ir.write_text(pages / "out_page0001.md",
+                  reply_text(pages / "page0001.md",
+                             f"@@ b00001 para\n{TARGET}\n"))
 
     arguments = ["--book", str(book_path), "--pages", str(pages), "--page", "1"]
     assert pagerun.main(["merge", *arguments]) == 0
@@ -897,7 +922,8 @@ def test_a_single_oversized_paragraph_never_asks_for_a_bigger_budget(tmp_path):
             (pages / entry["file"]).read_text(encoding="utf-8"))
         reply = "".join("@@ {0} para\n{1}\n".format(unit_id, given[unit_id])
                         for unit_id in entry["unit_ids"])
-        ir.write_text(pages / entry["output"], reply)
+        ir.write_text(pages / entry["output"],
+                      reply_text(pages / entry["file"], reply))
 
     merged = pagerun.merge_page(book_path, pages, 1)
     assert merged["ok"], merged
@@ -939,9 +965,10 @@ def test_a_segmented_page_is_complete_once_every_part_is_answered(tmp_path):
     for entry in manifest["chunks"]:
         given = mg.parse_worksheet(
             (pages / entry["file"]).read_text(encoding="utf-8"))
-        ir.write_text(pages / entry["output"],
-                      "".join("@@ {0} para\n{1}\n".format(u, given[u])
-                              for u in entry["unit_ids"]))
+        ir.write_text(pages / entry["output"], reply_text(
+            pages / entry["file"],
+            "".join("@@ {0} para\n{1}\n".format(u, given[u])
+                    for u in entry["unit_ids"])))
     assert pagerun.merge_page(book_path, pages, 1)["ok"]
 
     assert pagerun.untranslated(ir.load_book(book_path), unit_ids) == [], (
@@ -977,8 +1004,11 @@ def test_the_documented_page_loop_runs_in_order_with_nothing_missing(tmp_path,
     assert Path(upcoming["worksheet"]).exists(), (
         "next named a worksheet nobody wrote")
 
-    # 2 — the translator answers it.
-    ir.write_text(Path(upcoming["output"]), f"@@ b00001 para\n{TARGET}\n")
+    # 2 — the translator answers it, echoing the request line the worksheet
+    #     states. That echo is what binds the answer to this cut of the page.
+    ir.write_text(Path(upcoming["output"]),
+                  reply_text(Path(upcoming["worksheet"]),
+                             f"@@ b00001 para\n{TARGET}\n"))
 
     # 3 — merge, before which accept must refuse.
     assert pagerun.main(["accept", *at, *page]) == 2
@@ -1623,3 +1653,53 @@ def test_a_run_with_no_manifest_still_honours_an_explicit_source(
     assert origin.path == pdf
     assert origin.index == 1, "a multi-page file still needs the page index"
     assert origin.required is False
+
+
+def test_every_page_job_states_the_request_its_answer_must_echo(tmp_path):
+    """The page route binds an answer to a request, exactly as the chunk route does.
+
+    `out_page0007.md` is as reusable a name as `out_chunk0002.md`: rebuild and an
+    answer to the previous cut of that page sits where the new one expects it. The
+    page digest answers "has the page moved"; only the echoed token answers "was
+    this written before the rebuild".
+    """
+    import worksheet as ws
+
+    book = _book([_prose(page, f"Page{page}") for page in range(1, 3)])
+    book_path = _save(book, tmp_path)
+    manifest = pagerun.build(book_path, tmp_path / "pages")
+
+    assert manifest["chunks"], manifest
+    for entry in manifest["chunks"]:
+        assert entry.get("request", "").startswith("req1:"), entry
+        sheet = (tmp_path / "pages" / entry["file"]).read_text(encoding="utf-8")
+        assert ws.request_of(sheet) == entry["request"], (
+            "the worksheet states a different token from the one recorded")
+
+
+def test_a_page_answer_written_before_a_rebuild_is_refused(tmp_path):
+    """The late-reply case, on the page route."""
+    import merge as merging
+    import worksheet as ws
+
+    book = _book([_prose(1, "Page1")])
+    book_path = _save(book, tmp_path)
+    pages = tmp_path / "pages"
+    first = pagerun.build(book_path, pages)
+    stale = first["chunks"][0]["request"]
+
+    # The page's source text changes, so the rebuild asks a different question.
+    book = ir.load_book(book_path)
+    book["blocks"][0]["text"] = "Page1 now says something else entirely."
+    ir.save_book(book, book_path)
+    second = pagerun.build(book_path, pages)
+    entry = second["chunks"][0]
+    assert entry["request"] != stale
+
+    ir.write_text(pages / entry["output"],
+                  f"{ws.request_line(stale)}\n@@ b00001 para\n{TARGET}\n")
+    report = merging.merge(book_path, pages, strict=True)
+
+    assert report["ok"] is False, report
+    named = " ".join(report["malformed"].get(entry["id"], []))
+    assert stale in named, named

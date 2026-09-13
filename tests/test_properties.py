@@ -46,6 +46,7 @@ import merge as merging  # noqa: E402
 import runstate  # noqa: E402
 import segments  # noqa: E402
 import worksheet as ws  # noqa: E402
+from tests_support import reply_text  # noqa: E402
 
 #: One seed, so a failure is reproducible by name rather than by luck.
 SEED = 20260913
@@ -98,11 +99,11 @@ def reply_for(units: list[tuple[str, str, str]]) -> str:
     return "\n".join(lines)
 
 
-#: Two pieces are documented to *not* survive, so they are excluded from the
-#: round-trip corpus and asserted separately below: our own scaffold comment is
-#: dropped on purpose, and a line that is already an escaped header is the one
-#: case the escape cannot distinguish from a header it escaped itself.
-NOT_ROUND_TRIPPED = ("<!-- revayat-novel: scaffolding -->", "\\@@ b00007 para")
+#: Nothing is excluded any more. Both pieces that used to be — a marked scaffold
+#: comment and an already-escaped header — are escaped on the way out and restored
+#: on the way back, so the round trip holds for every piece in the corpus. The
+#: asymmetries they stood for were defects; each has its own test below.
+NOT_ROUND_TRIPPED = ()
 
 
 @pytest.mark.parametrize("text", texts(40, exclude=NOT_ROUND_TRIPPED),
@@ -134,12 +135,23 @@ def test_many_units_keep_their_order_and_their_own_text():
     assert [entry["text"] for entry in entries] == [unit[2].strip() for unit in units]
 
 
-def test_the_scaffold_comment_is_dropped_and_the_rest_is_not():
-    """Documented asymmetry: our comment goes, the unit's own text stays."""
-    text = "خط اول.\n<!-- revayat-novel: scaffolding -->\nخط دوم."
+def test_a_scaffold_comment_is_dropped_only_when_we_wrote_it():
+    """Which side of the envelope a comment came from decides what happens to it.
+
+    Our own scaffolding, echoed back as we wrote it, is dropped — that is what
+    the marker is for. A line of the *novel* that happens to look like it is
+    escaped on the way out and restored on the way back, like an `@@` header,
+    because deleting it would lose an authorial line silently.
+    """
+    text = "خط اول.\n<!-- revayat-novel: the author's own line -->\nخط دوم."
     entries, problems = ws.read_reply(reply_for([("b00001", "para", text)]))
     assert problems == []
-    assert entries[0]["text"] == "خط اول.\nخط دوم."
+    assert entries[0]["text"] == text, "an authorial comment line was deleted"
+
+    # Unescaped — i.e. exactly as this project writes it — it is still dropped.
+    echoed = ("@@ b00001 para\nخط اول.\n"
+              + ws.comment("worksheet 0001/0002") + "\nخط دوم.\n")
+    assert ws.read_reply(echoed)[0][0]["text"] == "خط اول.\nخط دوم."
 
 
 def test_an_already_escaped_header_round_trips_too():
@@ -296,7 +308,8 @@ def test_a_refused_merge_leaves_the_book_byte_identical(tmp_path, breakage):
         body = "\n".join(lines)
         if breakage == "unclosed fence":
             body = "```\n" + body
-        ir.write_text(chunks / f"out_{entry['id']}.md", body)
+        ir.write_text(chunks / f"out_{entry['id']}.md",
+                      reply_text(chunks / entry["file"], body))
 
     report = merging.merge(book_path, chunks, strict=True)
     assert report["ok"] is False, (
@@ -314,7 +327,8 @@ def test_a_good_merge_is_idempotent(tmp_path):
         lines = []
         for unit_id in entry["unit_ids"]:
             lines += [f"@@ {unit_id} {kinds.get(unit_id, 'para')}", "ترجمه.", ""]
-        ir.write_text(chunks / f"out_{entry['id']}.md", "\n".join(lines))
+        ir.write_text(chunks / f"out_{entry['id']}.md",
+                      reply_text(chunks / entry["file"], "\n".join(lines)))
 
     first = merging.merge(book_path, chunks, strict=True)
     assert first["ok"] is True, first

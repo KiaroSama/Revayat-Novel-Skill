@@ -30,10 +30,11 @@ from typing import Any, Callable
 import bookir as ir
 import glossary as gl
 import segments
-from chunk import unit_fingerprint
+from chunk import source_fingerprint, unit_fingerprint
 from worksheet import (  # noqa: F401  (this module's published surface)
-    ESCAPED_HEADER, FENCE, HEADER, TRANSLATOR_NOTE, parse_worksheet,
-    read_reply, read_worksheet, validate_reply,
+    ESCAPED_HEADER, FENCE, HEADER, NOTE_KINDS, TRANSLATOR_NOTE,
+    parse_worksheet, read_reply, read_worksheet, request_of,
+    validate_note_graph, validate_reply, verdict,
 )
 
 # --------------------------------------------------------------------------- #
@@ -124,68 +125,11 @@ def _resolve_local_tokens(texts: dict[str, str],
     """
     if not mapping:
         return texts
-    return {
-        unit_id: ir.ANY_FOOTNOTE_TOKEN.sub(
-            lambda match: f"[[fn:{mapping.get(match.group(1), match.group(1))}]]",
-            text)
-        for unit_id, text in texts.items()
-    }
-
-
-#: What a translator may call their own note. ``footnote`` is what `SKILL.md` and
-#: the translation policy actually ask for; ``note`` is the obvious near-miss of
-#: that word and is accepted rather than refused, because the intent is
-#: unambiguous and the hazard this check exists for is elsewhere — a note answered
-#: as ``heading1``, ``para`` or ``alt`` would be filed as structure.
-NOTE_KINDS = frozenset(("footnote", "note"))
-
-
-def validate_note_graph(
-    texts: dict[str, str],
-    offered: dict[str, str],
-    kinds: dict[str, str],
-) -> list[str]:
-    """Does this reply's footnote graph resolve? Checked before anything is written.
-
-    Four shapes used to reach the book unchallenged, and each one prints: a marker
-    with no body left a literal ``[[fn:tr-01]]`` in the finished prose, a body with
-    no marker became a note nothing refers to, the same marker twice made ownership
-    unguessable, and ``@@ tr-01 heading1`` was adopted as a footnote on the strength
-    of its id alone.
-
-    They share an omission rather than a cause: notes were committed one reply at a
-    time and nobody asked whether the result made sense as a graph.
-    """
-    problems: list[str] = []
-    used: list[str] = []
-    for text in texts.values():
-        used += [ref for ref in ir.ANY_FOOTNOTE_TOKEN.findall(text or "")
-                 if TRANSLATOR_NOTE.match(ref)]
-
-    for local_id in dict.fromkeys(used):
-        if local_id not in offered:
-            problems.append(
-                f"{local_id}: the translation refers to this note and the reply "
-                f"carries no `@@ {local_id} footnote` body for it — merging would "
-                f"leave the marker itself in the book")
-        if used.count(local_id) > 1:
-            problems.append(
-                f"{local_id}: referred to {used.count(local_id)} times. One note "
-                f"cannot belong to two places, and picking one silently drops the "
-                f"other")
-
-    for local_id in offered:
-        if local_id not in used:
-            problems.append(
-                f"{local_id}: a note body no translation refers to. It would print "
-                f"at the foot of a page with no number pointing at it")
-        kind = kinds.get(local_id)
-        if kind is not None and kind not in NOTE_KINDS:
-            problems.append(
-                f"{local_id}: answered as {kind!r}, which is not a note kind "
-                f"({' or '.join(sorted(NOTE_KINDS))}). Adopting it would file a "
-                f"heading, a paragraph or an alt text as a footnote")
-    return problems
+    # Markup-aware: a worksheet's own example, a literal `[[fn:tr-example]]` in
+    # backticks, was rewritten into a real allocated id the moment some reply
+    # offered a body for that name.
+    return {unit_id: ir.rewrite_footnote_refs(text, mapping)
+            for unit_id, text in texts.items()}
 
 
 def _anchor_notes(book: dict[str, Any], notes: list[dict[str, Any]]) -> None:
@@ -280,6 +224,7 @@ def merge(
     only: list[str] | None = None,
     strict: bool = True,
     glossary_path: Path | None = None,
+    revalidate_unbound: bool = False,
 ) -> dict[str, Any]:
     """Fold the selected worksheets in, or change nothing and say why.
 
@@ -308,6 +253,34 @@ def merge(
         "unverified_kinds": [],
     }
 
+    # A dependency the caller *named* is not an optional one. Omitting
+    # `--glossary` says "this book has no locked names"; naming a file that is
+    # not there means the run is about to skip the pass that settles every first
+    # mention, and merge said nothing at all — so a book could ship with one name
+    # introduced in thirty places and the command that was supposed to settle it
+    # reporting success. Unreadable and unparseable are the same failure: the
+    # caller pointed at something and it is not usable.
+    if glossary_path is not None:
+        named = Path(glossary_path)
+        trouble = ""
+        if not named.exists():
+            trouble = f"{named} does not exist"
+        else:
+            try:
+                loaded = gl.load(named)
+                if not isinstance(loaded.get("entries"), list):
+                    trouble = f"{named} has no entries list; it is not a glossary"
+            except (OSError, json.JSONDecodeError) as failure:
+                trouble = f"{named} could not be read: {failure}"
+        if trouble:
+            report["ok"] = False
+            report["refused"] = "named-glossary-unusable"
+            report["detail"] = (
+                f"--glossary was given and {trouble}. Nothing was written: the "
+                f"first-mention pass cannot run, and merging without it leaves "
+                f"every chunk's own guess about where to introduce a name.")
+            return report
+
     # Every segment the manifest knows of, from *all* chunks and not only the
     # selected ones: a block split between two worksheets with one of them
     # selected has nothing missing from the selected set.
@@ -323,7 +296,18 @@ def merge(
     for entry in chunks:
         if only and entry["id"] not in only:
             continue
+        expected = list(entry.get("unit_ids") or [])
+        kinds = entry.get("unit_kinds") or {}
         output = chunks_dir / entry["output"]
+
+        # Zero-unit completion, defined once in `worksheet.verdict`: a job that
+        # asks for nothing — an image-only page, a blank verso — is finished the
+        # moment it is cut, and no reply file is expected. Demanding one here
+        # while `status` counted it translated left a run with nothing to offer
+        # and a merge that could never pass.
+        if not expected:
+            report["chunks_merged"] += 1
+            continue
         if not output.exists():
             report["missing_outputs"].append(entry["id"])
             continue
@@ -335,15 +319,41 @@ def merge(
         # reply and called it `invalid`. So `status` said the job was unfinished
         # and `merge` wrote it in anyway: the two sides of the grammar disagreeing
         # about one file, which is the thing worksheet.py exists to prevent.
-        entries, transport = read_reply(output.read_text(encoding="utf-8"))
-        expected = list(entry.get("unit_ids") or [])
-        expected_set = set(expected)
-        kinds = entry.get("unit_kinds") or {}
         if not kinds:
             report["unverified_kinds"].append(entry["id"])
 
-        problems, rejected = validate_reply(entries, expected, kinds)
-        problems = transport + problems
+        # One verdict, the same one `status` and `next` read. Transport, ordered
+        # ids and kinds, completeness and the note graph are all decided in
+        # `worksheet.verdict`; freshness is appended below because it is a
+        # question about the book, which that module cannot see.
+        say = verdict(output.read_text(encoding="utf-8"), expected, kinds)
+        entries = say["entries"]
+        expected_set = set(expected)
+        problems = list(say["problems"])
+
+        # Which request this answer answers. The filename cannot say: a rebuild
+        # writes `chunk0002.md` again and an answer to the previous cut sits at
+        # exactly the path the new one expects, with the same ids and the same
+        # count. So the worksheet carries a token and the reply echoes it.
+        wanted_request = str(entry.get("request") or "")
+        echoed = request_of(output.read_text(encoding="utf-8"))
+        if wanted_request and echoed and echoed != wanted_request:
+            problems.append(
+                f"this reply answers request {echoed}, and the worksheet now asks "
+                f"{wanted_request}. The job was rebuilt after the reply was "
+                f"written — the earlier answer is in superseded/ to copy from, but "
+                f"it answers text this worksheet no longer contains")
+        elif wanted_request and not echoed:
+            # Never silent trust. A reply with no token predates the binding, so
+            # the only honest options are "refuse" and "revalidate explicitly".
+            if revalidate_unbound:
+                report.setdefault("revalidated", []).append(entry["id"])
+            else:
+                problems.append(
+                    "this reply carries no request line, so nothing says which "
+                    "version of the worksheet it answers. Re-translate it, or "
+                    "pass --revalidate-unbound to accept it on the strength of "
+                    "the source digest alone")
 
         # The manifest says which formula produced its digest, because the two
         # routes record different ones under the same key.
@@ -351,6 +361,20 @@ def merge(
         form = recorded.partition(":")[0]
         if not recorded:
             report["unverified_freshness"].append(entry["id"])
+        elif form == "units2":
+            # Over the units **as cut**, recomputed from the spans the manifest
+            # records. The previous form hashed the parent blocks, so every
+            # segment of one paragraph shared a value and a recut was invisible.
+            spans = entry.get("unit_spans") or []
+            if not spans:
+                report["unverified_freshness"].append(entry["id"])
+            elif recorded != source_fingerprint(
+                    book, entry.get("block_ids") or [], spans):
+                report["stale"].append(entry["id"])
+                problems.append(
+                    "the source these units were cut from has changed since the "
+                    "worksheet was written, so this reply answers text the book no "
+                    "longer contains")
         elif form == "page":
             # The page run checks this itself, at build time, against a digest
             # that also covers the page raster and the page geometry — richer
@@ -366,46 +390,28 @@ def merge(
                 "worksheet was written, so this reply answers text the book no "
                 "longer contains")
 
-        answered = {item["id"]: item["text"] for item in entries
-                    if item["id"] in expected_set}
-        missing = [u for u in expected if not (answered.get(u) or "").strip()]
-        notes_offered = {item["id"] for item in entries
-                         if TRANSLATOR_NOTE.match(item["id"])}
-        extra = sorted({item["id"] for item in entries}
-                       - expected_set - notes_offered)
-        blank = [u for u, v in answered.items() if not v.strip()]
+        answered = say["answered"]
+        missing, extra = say["missing"], say["extra"]
 
         report["chunks_merged"] += 1
         if missing:
             report["missing_units"][entry["id"]] = missing
         if extra:
             report["unknown_units"][entry["id"]] = extra
-        if blank:
-            report["blank_units"][entry["id"]] = blank
-        if rejected:
-            problems.append(f"units not written: {sorted(rejected)}")
+        if say["blank"]:
+            report["blank_units"][entry["id"]] = say["blank"]
+        if say["rejected"]:
+            problems.append(f"units not written: {sorted(say['rejected'])}")
         if problems or missing or extra:
             report["malformed"][entry["id"]] = problems or ["incomplete reply"]
             # Contributes nothing, in either mode. Notably it consumes no
             # footnote number either, so a corrected reply gets the same one.
             continue
 
-        # The graph is checked against the candidate translation, before any note
-        # is allocated or any text is accepted. A reply whose notes do not resolve
-        # contributes nothing and consumes no footnote number, so a corrected
-        # reply still gets the same one.
-        offered = {item["id"]: item["text"].strip() for item in entries
-                   if item["id"] not in expected_set
-                   and TRANSLATOR_NOTE.match(item["id"])
-                   and item["text"].strip()}
-        note_kinds = {item["id"]: item["kind"] for item in entries
-                      if item["id"] not in expected_set
-                      and TRANSLATOR_NOTE.match(item["id"])}
-        graph = validate_note_graph(answered, offered, note_kinds)
-        if graph:
-            report["malformed"][entry["id"]] = graph
-            continue
-
+        # The note graph was checked inside the verdict, against the candidate
+        # translation and before any note is allocated — so a reply whose notes do
+        # not resolve has already been refused above, consuming no footnote
+        # number, and `status` refused it for the same reason.
         chunk_notes, mapping, gone = adopt_translator_notes(
             book, entries, reply=entry["id"], expected=expected_set,
             allocated=new_notes)
@@ -446,16 +452,28 @@ def merge(
             report["ok"] = False
         _anchor_notes(book, new_notes + touched)
 
+        # The candidate book, before anything is written. `validate_book` already
+        # refuses a reference to a footnote the book does not have and a duplicate
+        # block id — and merge wrote books it rejected, because nothing asked it.
+        # A reply that would produce an invalid book is a malformed reply, whatever
+        # its own structure looked like.
+        invalid = ir.validate_book(book)
+        if invalid:
+            report["invalid_ir"] = invalid[:20]
+            report["ok"] = False
+
         # Asking each chunk to introduce a name only where the worksheet says so
         # is a request, and parallel agents that cannot see each other all answer
         # the same way. This is the pass that settles it from the outside, once
         # every chunk is back, so the result does not depend on any of them
         # complying.
-        if glossary_path is not None and Path(glossary_path).exists():
+        if glossary_path is not None:
             report["first_mentions"] = gl.enforce_first_mentions(
                 gl.load(Path(glossary_path)), book)
 
-        if report["ok"] or not strict:
+        # Lenient means "land the replies that validate", never "write a book the
+        # validator rejects": an invalid IR blocks the write in both modes.
+        if report["ok"] or (not strict and not invalid):
             ir.save_book(book, book_path)
 
     report["stats"] = book.get("stats", {})
@@ -480,11 +498,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lenient", action="store_true",
                         help="apply every worksheet that validates and exit 0, "
                              "instead of all-or-nothing")
+    parser.add_argument("--revalidate-unbound", action="store_true",
+                        help="accept a reply that carries no request line, on the "
+                             "strength of the source digest alone. For replies "
+                             "written before worksheets carried one; a reply whose "
+                             "token disagrees is never accepted this way")
     args = parser.parse_args(argv)
 
     report = merge(Path(args.book), Path(args.chunks),
                    only=args.only, strict=not args.lenient,
-                   glossary_path=Path(args.glossary) if args.glossary else None)
+                   glossary_path=Path(args.glossary) if args.glossary else None,
+                   revalidate_unbound=args.revalidate_unbound)
     print(json.dumps(report, ensure_ascii=False, indent=1))
     return 0 if (report["ok"] or args.lenient) else 1
 

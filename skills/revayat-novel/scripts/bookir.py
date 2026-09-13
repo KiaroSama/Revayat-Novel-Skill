@@ -540,7 +540,11 @@ def validate_book(book: dict[str, Any]) -> list[str]:
             value = block.get(side)
             if not value:
                 continue
-            for ref in ANY_FOOTNOTE_TOKEN.findall(value):
+            # Parsed, not scanned, for the reason `footnote_refs` documents: a
+            # marker inside a code span is an example of the notation. `tr-NN`
+            # is still included, because one surviving into a finished book is
+            # exactly the defect this check exists for.
+            for ref in footnote_refs(value, include_local=True):
                 if ref not in footnote_ids:
                     problems.append(
                         f"block {block['id']} ({side}): unknown footnote ref {ref}")
@@ -749,8 +753,50 @@ def plain_text(text: str) -> str:
     return "".join(span["text"] for span in parse_markup(text))
 
 
-def footnote_refs(text: str) -> list[str]:
-    return FOOTNOTE_TOKEN.findall(text or "")
+def footnote_refs(text: str, *, include_local: bool = False) -> list[str]:
+    """Footnote ids this text actually refers to, in reading order.
+
+    Markup-aware, because a raw scan and the parser disagreed about one thing
+    that matters: a marker shown *inside a code span* is an example of the
+    notation, not a reference to a note. `[[fn:fn0001]]` in backticks was counted
+    as a reference, so the integrity gate demanded a note for it; and a literal
+    `[[fn:tr-example]]` in a worksheet's own instructions was read as a
+    translator note with no body, which refused a perfectly good reply.
+
+    ``include_local`` adds the ``tr-NN`` form a translator writes before merge
+    allocates a book-wide id. Those are not part of the canonical token grammar,
+    so they arrive as ordinary text and are picked out of the prose spans only —
+    never out of a verbatim one.
+    """
+    found: list[str] = []
+    for span in parse_markup(text or ""):
+        if span.get("footnote"):
+            found.append(span["footnote"])
+        elif include_local and not span.get("verbatim"):
+            found += ANY_FOOTNOTE_TOKEN.findall(span.get("text") or "")
+    return found
+
+
+def rewrite_footnote_refs(text: str, mapping: dict[str, str]) -> str:
+    """Repoint footnote tokens through ``mapping``, outside protected spans.
+
+    The substitution used to run over the raw string, so a worksheet's own
+    example — a literal `[[fn:tr-example]]` inside backticks — was rewritten into
+    a real allocated id the moment any reply offered a body for that name. A
+    documented example became a live reference to a footnote.
+    """
+    if not mapping:
+        return text
+    spans = parse_markup(text or "")
+    for span in spans:
+        name = span.get("footnote")
+        if name:
+            span["footnote"] = mapping.get(name, name)
+        elif not span.get("verbatim") and span.get("text"):
+            span["text"] = ANY_FOOTNOTE_TOKEN.sub(
+                lambda found: f"[[fn:{mapping.get(found.group(1), found.group(1))}]]",
+                span["text"])
+    return render_spans(spans)
 
 
 def emphasis_signature(text: str) -> tuple[int, int, int]:

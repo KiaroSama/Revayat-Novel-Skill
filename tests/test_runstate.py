@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 import bookir as ir
+from tests_support import reply_text
 import chunk as chunking
 import runstate
 
@@ -114,9 +115,10 @@ def _translate_everything(chunks: Path, manifest: dict) -> None:
     """
     for entry in manifest["chunks"]:
         kinds = entry["unit_kinds"]
-        ir.write_text(chunks / entry["output"],
-                      "\n".join(f"@@ {u} {kinds[u]}\nمتن\n"
-                                for u in entry["unit_ids"]))
+        ir.write_text(chunks / entry["output"], reply_text(
+            chunks / entry["file"],
+            "\n".join(f"@@ {u} {kinds[u]}\nمتن\n"
+                      for u in entry["unit_ids"])))
 
 
 def _edit(book_path: Path) -> None:

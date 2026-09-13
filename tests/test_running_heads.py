@@ -27,6 +27,7 @@ from docx.oxml.ns import nsmap, qn
 import bookir as ir
 import chunk as chunking
 import merge as merging
+from tests_support import reply_text
 import qa
 from build_docx import Builder, add_arguments
 from read_docx import read_docx
@@ -243,12 +244,11 @@ def test_the_head_goes_out_as_a_worksheet_unit_and_merge_writes_it_back(
     assert re.search(r"^@@ \S+ footer$", worksheet, re.M)
 
     for entry in manifest["chunks"]:
-        (chunks / entry["output"]).write_text(
+        ir.write_text(chunks / entry["output"], reply_text(
+            chunks / entry["file"],
             "\n".join(f"@@ {unit_id} {entry['unit_kinds'][unit_id]}\n"
                       f"ترجمهٔ {unit_id}\n"
-                      for unit_id in entry["unit_ids"]),
-            encoding="utf-8", newline="",
-        )
+                      for unit_id in entry["unit_ids"])))
     report = merging.merge(book_path, chunks)
     assert report["ok"], report
 

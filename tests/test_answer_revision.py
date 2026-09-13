@@ -30,6 +30,7 @@ sys.path.insert(0, str(SCRIPTS))
 import bookir as ir  # noqa: E402
 import chunk as chunking  # noqa: E402
 import merge as merging  # noqa: E402
+from tests_support import reply_text  # noqa: E402
 
 
 def _book(tmp_path: Path, texts: list[str], name: str = "book.json") -> Path:
@@ -42,9 +43,9 @@ def _book(tmp_path: Path, texts: list[str], name: str = "book.json") -> Path:
 
 
 def _answer(chunks: Path, entry: dict, text: str = "ترجمه.") -> None:
-    ir.write_text(chunks / entry["output"], "\n".join(
+    ir.write_text(chunks / entry["output"], reply_text(chunks / entry["file"], "\n".join(
         f"@@ {unit_id} {entry['unit_kinds'][unit_id]}\n{text}\n"
-        for unit_id in entry["unit_ids"]))
+        for unit_id in entry["unit_ids"])))
 
 
 def _retype(book_path: Path, index: int, text: str) -> None:

@@ -15,6 +15,7 @@ import pytest
 import bookir as ir
 import chunk as chunking
 import merge as merging
+from tests_support import reply_text
 import qa
 
 
@@ -46,12 +47,11 @@ def test_translator_footnote_becomes_a_real_book_footnote(tmp_path):
     manifest = chunking.build(book_path, chunks, glossary_path=None, budget=100_000)
     entry = manifest["chunks"][0]
 
-    (chunks / entry["output"]).write_text(
+    ir.write_text(chunks / entry["output"], reply_text(
+        chunks / entry["file"],
         "@@ b00001 para\nاو در شکرگزاری بوقلمون خورد.[[fn:tr-01]]\n\n"
         "@@ b00002 para\nبعد رفت.\n\n"
-        "@@ tr-01 footnote\nشکرگزاری جشنی سالانه در آمریکای شمالی است.\n",
-        encoding="utf-8", newline="",
-    )
+        "@@ tr-01 footnote\nشکرگزاری جشنی سالانه در آمریکای شمالی است.\n"))
 
     report = merging.merge(book_path, chunks)
     assert report["ok"], report

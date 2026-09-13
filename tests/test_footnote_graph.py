@@ -29,6 +29,7 @@ sys.path.insert(0, str(SCRIPTS))
 import bookir as ir  # noqa: E402
 import chunk as chunking  # noqa: E402
 import merge as merging  # noqa: E402
+from tests_support import reply_text  # noqa: E402
 
 
 def _book(tmp_path: Path) -> Path:
@@ -53,7 +54,8 @@ def _reply(chunks: Path, entry: dict, first: str, second: str,
     body = f"@@ b00001 para\n{first}\n\n@@ b00002 para\n{second}\n"
     if note is not None:
         body += f"\n@@ tr-01 footnote\n{note}\n"
-    ir.write_text(chunks / entry["output"], body)
+    ir.write_text(chunks / entry["output"],
+                  reply_text(chunks / entry["file"], body))
 
 
 def _notes(book_path: Path) -> list[dict]:
@@ -134,9 +136,10 @@ def test_both_spellings_of_a_note_kind_are_accepted(tmp_path, kind):
     whose intent is unambiguous for no safety gain — the hazard this check exists
     for is a note answered as *structure*, which the next test covers."""
     book_path, chunks, entry = _built(tmp_path)
-    ir.write_text(chunks / entry["output"],
-                  f"@@ b00001 para\nاول [[fn:tr-01]]\n\n@@ b00002 para\nدوم\n"
-                  f"\n@@ tr-01 {kind}\nیادداشت.\n")
+    ir.write_text(chunks / entry["output"], reply_text(
+        chunks / entry["file"],
+        f"@@ b00001 para\nاول [[fn:tr-01]]\n\n@@ b00002 para\nدوم\n"
+        f"\n@@ tr-01 {kind}\nیادداشت.\n"))
 
     assert merging.merge(book_path, chunks, strict=True)["ok"], kind
 
@@ -191,3 +194,109 @@ def test_a_refused_reply_leaves_the_earlier_note_intact(tmp_path):
     assert not merging.merge(book_path, chunks, strict=True)["ok"]
 
     assert _notes(book_path) == before, "a refused reply changed the book's notes"
+
+
+# --------------------------------------------------------------------------- #
+# A marker shown as an example is not a reference
+# --------------------------------------------------------------------------- #
+
+def test_a_marker_inside_a_code_span_is_an_example_not_a_reference(tmp_path):
+    """The graph is read from the parsed markup, not from a scan of the string.
+
+    A raw regex counted `[[fn:fn0001]]` shown in backticks as a reference, so the
+    integrity gate demanded a note for a line that was documenting the notation.
+    The translation policy itself shows the marker that way, which is how this
+    reached real prose.
+    """
+    book_path, chunks, entry = _built(tmp_path)
+    _reply(chunks, entry,
+           "اول، و نشانه چنین نوشته می‌شود: `[[fn:tr-01]]`",
+           "دوم", note=None)
+
+    report = merging.merge(book_path, chunks, strict=True)
+
+    assert report["ok"], report
+    assert _notes(book_path) == [], "an example created a footnote"
+    merged = ir.load_book(book_path)["blocks"][0]["target"]
+    assert "`[[fn:tr-01]]`" in merged, "the example itself was rewritten"
+
+
+def test_a_literal_example_is_not_rewritten_when_another_unit_offers_that_name(
+        tmp_path):
+    """The second half: the substitution also has to respect a protected span.
+
+    One unit documents `[[fn:tr-01]]` inside backticks while another really uses
+    it. The rewrite ran over the raw string, so the documented example became a
+    live reference to the allocated note.
+    """
+    book_path, chunks, entry = _built(tmp_path)
+    _reply(chunks, entry,
+           "اول، برای نمونه `[[fn:tr-01]]` نوشته می‌شود",
+           "دوم با یادداشت واقعی[[fn:tr-01]]")
+
+    report = merging.merge(book_path, chunks, strict=True)
+    assert report["ok"], report
+
+    blocks = {block["id"]: block for block in ir.load_book(book_path)["blocks"]}
+    assert "`[[fn:tr-01]]`" in blocks["b00001"]["target"], (
+        "the example was repointed at a real footnote id")
+    allocated = _notes(book_path)
+    assert len(allocated) == 1
+    assert f"[[fn:{allocated[0]['id']}]]" in blocks["b00002"]["target"], (
+        "the real reference was not repointed")
+
+
+def test_a_translator_id_surviving_into_the_book_is_still_caught():
+    """The negative control for making `validate_book` markup-aware.
+
+    Parsing must not make the check blind to the thing it exists for: a `tr-NN`
+    left in a finished book refers to nothing and prints the marker.
+    """
+    book = ir.new_book(source_path="sample.epub", source_format="epub")
+    book["blocks"].append(ir.make_block("paragraph", 1, text="A paragraph."))
+    book["blocks"][0]["target"] = "بندی با نشانهٔ جامانده[[fn:tr-01]]"
+
+    problems = ir.validate_book(book)
+
+    assert any("tr-01" in problem for problem in problems), problems
+
+
+# --------------------------------------------------------------------------- #
+# The candidate book is validated before it is written
+# --------------------------------------------------------------------------- #
+
+def test_a_reference_to_a_footnote_the_book_does_not_have_is_refused(tmp_path):
+    """Merge used to write a book its own validator rejects.
+
+    `validate_book` has always reported `unknown footnote ref fn4321`; nothing
+    asked it before saving, so the gate that exists to catch this ran only when
+    someone later thought to run QA — by which time `book.json` already held it.
+    """
+    book_path, chunks, entry = _built(tmp_path)
+    before = book_path.read_bytes()
+    _reply(chunks, entry, "اول، با ارجاعی که وجود ندارد[[fn:fn4321]]", "دوم",
+           note=None)
+
+    report = merging.merge(book_path, chunks, strict=True)
+
+    assert report["ok"] is False
+    assert any("fn4321" in problem for problem in report.get("invalid_ir") or [])
+    assert book_path.read_bytes() == before, "a rejected book was still written"
+
+
+def test_a_note_body_referring_to_another_note_is_refused(tmp_path):
+    """A footnote inside a footnote has nowhere to anchor, so the marker prints.
+
+    The graph scanned the units; the note bodies sit beside them, so a `tr-02`
+    inside `tr-01`'s body was never looked at and merged unchallenged.
+    """
+    book_path, chunks, entry = _built(tmp_path)
+    _reply(chunks, entry, "اول[[fn:tr-01]]", "دوم",
+           note="یادداشتی که خودش ارجاع دارد[[fn:tr-02]]")
+
+    report = merging.merge(book_path, chunks, strict=True)
+
+    assert report["ok"] is False
+    named = " ".join(report["malformed"].get(entry["id"], []))
+    assert "tr-02" in named and "note inside a note" in named, named
+    assert _notes(book_path) == [], "a refused reply still allocated a note"

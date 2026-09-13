@@ -188,3 +188,80 @@ def test_classify_writes_nothing():
     assert first == second == "answered"
     # The reply itself is untouched by being judged.
     assert w.parse_worksheet(text) == {"b00001": "متن"}
+
+
+# --------------------------------------------------------------------------- #
+# A wrapper is identified by the fence that opened it
+# --------------------------------------------------------------------------- #
+
+def test_a_backtick_wrapper_keeps_a_tilde_line_in_its_own_prose():
+    """The worst transport defect found so far: silent truncation.
+
+    `payload` asked "is this line a fence", which is true of both families, so a
+    ```-wrapped reply whose prose contained a ``~~~`` line was cut there and
+    everything after it discarded — with no problem reported, so merge wrote the
+    truncated answer and called it a success.
+    """
+    reply = "```\n@@ b00001 para\nسطر یک.\n~~~\nسطر دو که باید بماند.\n```\n"
+    entries, problems = w.read_reply(reply)
+
+    assert problems == []
+    assert entries[0]["text"] == "سطر یک.\n~~~\nسطر دو که باید بماند.", (
+        "a line of the answer was cut off at a fence of the other family")
+
+
+def test_a_tilde_wrapper_keeps_a_backtick_line():
+    """The mirror, so the rule is symmetric rather than a patch for one family."""
+    reply = "~~~\n@@ b00001 para\nیک.\n```\nدو.\n~~~\n"
+    entries, problems = w.read_reply(reply)
+    assert problems == []
+    assert entries[0]["text"] == "یک.\n```\nدو."
+
+
+@pytest.mark.parametrize("closing, kept", [
+    ("````", "متن."),            # longer than the opener: closes (CommonMark)
+    ("```", "متن."),             # the same length: closes
+])
+def test_a_closing_fence_may_be_longer_than_its_opener(closing, kept):
+    entries, problems = w.read_reply(f"```\n@@ b00001 para\nمتن.\n{closing}\n")
+    assert problems == []
+    assert entries[0]["text"] == kept
+
+
+def test_a_fence_carrying_an_info_string_is_body_not_a_closer():
+    """``` python opens a block; it cannot close the wrapper around the reply."""
+    entries, problems = w.read_reply(
+        "```\n@@ b00001 para\nیک.\n```python\nدو.\n```\n")
+    assert problems == []
+    assert entries[0]["text"] == "یک.\n```python\nدو."
+
+
+def test_an_unclosed_wrapper_is_still_reported():
+    """The negative control: the truncation signal must not be lost to the fix."""
+    entries, problems = w.read_reply("```\n@@ b00001 para\nمتن.\n")
+    assert problems and "never closes it" in problems[0]
+    assert entries[0]["text"] == "متن."
+
+
+# --------------------------------------------------------------------------- #
+# Which side of the envelope a comment came from
+# --------------------------------------------------------------------------- #
+
+def test_an_authorial_comment_line_survives_the_round_trip():
+    """A line of the novel that looks like our scaffolding is not our scaffolding.
+
+    It was deleted on the way back in, because the reader recognised the marker
+    and assumed it had written it. Escaped on the way out, like an `@@` header,
+    it comes back byte-identical.
+    """
+    body = "خط یک.\n<!-- revayat-novel: the author's own line -->\nخط دو."
+    reply = "@@ b00001 para\n" + w.escape_payload(body) + "\n"
+
+    assert w.read_reply(reply)[0][0]["text"] == body
+
+
+def test_our_own_scaffolding_echoed_back_is_still_dropped():
+    """And the negative control: the marker still earns a comment its removal."""
+    reply = ("@@ b00001 para\nخط یک.\n"
+             + w.comment("worksheet 0001/0002") + "\nخط دو.\n")
+    assert w.read_reply(reply)[0][0]["text"] == "خط یک.\nخط دو."
