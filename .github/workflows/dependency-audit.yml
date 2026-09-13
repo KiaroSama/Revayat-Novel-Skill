@@ -16,9 +16,20 @@ name: Dependency audit
 #
 # There is no lockfile, so this audits the **floors** in requirements.txt — which
 # is the right question for a project people install fresh with
-# `pip install -r`. Two optional tools are deliberately not declared there and
-# are therefore NOT covered: ocrmypdf and pywin32. `doctor` names both; a reader
-# installs them separately and audits them separately.
+# `pip install -r`.
+#
+# The two optional wheels are audited too, below and in `windows-optional`. They used
+# to be excluded here, with this comment saying so: "ocrmypdf and pywin32 are not
+# declared dependencies and are therefore NOT covered". Undeclared is not the
+# same as optional, and the exclusion fell on the worst two candidates — the tool
+# that forks Tesseract and Ghostscript over a PDF from an untrusted source, and
+# the one that drives a COM automation server. They are declared in
+# `skills/revayat-novel/requirements-optional.txt` now, so both pip and this scan
+# can see them.
+#
+# Tesseract and Ghostscript themselves remain outside any pip audit: they are
+# binaries, not wheels. `doctor` locates them and a reader updates them through
+# their own package manager.
 #
 # Off the push path on purpose, like integration.yml: a newly published advisory
 # is not a reason to fail an unrelated commit.
@@ -56,7 +67,7 @@ jobs:
       - name: Audit the floors a reader installs against
         run: pip-audit -r skills/revayat-novel/requirements.txt
 
-      # The three resolution audits below each build their own virtualenv rather
+      # Each resolution audit below builds its own virtualenv rather
       # than installing into the one that holds pip-audit. Freezing the tool's
       # environment would audit pip-audit's own ~28 dependencies alongside this
       # project's, so an advisory against a CI tool would fail the build as
@@ -72,6 +83,20 @@ jobs:
           /tmp/floors-env/bin/python -m pip freeze > resolved-floors.txt
           pip-audit -r resolved-floors.txt
 
+      - name: Audit the optional wheels a reader adds separately
+        # `requirements-optional.txt` declares no floors, on purpose: nothing has
+        # ever run an old ocrmypdf here, so a floor would be an untested claim.
+        # With no floor there is only one question to ask — what resolves — and
+        # this is it. The Windows half of the set is in the job below, because
+        # `pywin32` carries a `sys_platform` marker that is false on this runner.
+        run: |
+          python -m venv /tmp/optional-env
+          /tmp/optional-env/bin/python -m pip install --quiet --upgrade pip
+          /tmp/optional-env/bin/python -m pip install --quiet \
+            -r skills/revayat-novel/requirements-optional.txt
+          /tmp/optional-env/bin/python -m pip freeze > resolved-optional.txt
+          pip-audit -r resolved-optional.txt
+
       - name: Audit the pinned set CI installs
         # A different question from the one above, and it can have a different
         # answer: constraints-ci.txt holds exact versions, so it can be
@@ -84,3 +109,36 @@ jobs:
             -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
           /tmp/pinned-env/bin/python -m pip freeze > resolved-pinned.txt
           pip-audit -r resolved-pinned.txt
+
+  windows-optional:
+    name: the optional wheel only Windows selects
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install pip-audit
+        run: python -m pip install pip-audit==2.10.1
+
+      # A job of its own for one wheel, because a marker cannot be audited on a
+      # platform where it evaluates false. `pywin32` is how the render-QA path
+      # drives Word through COM, so it is exactly the kind of dependency an
+      # advisory matters for, and the Linux job above can never see it.
+      - name: Audit what Windows resolves
+        shell: bash
+        run: |
+          python -m venv optional-env
+          optional-env/Scripts/python -m pip install --quiet --upgrade pip
+          optional-env/Scripts/python -m pip install --quiet \
+            -r skills/revayat-novel/requirements-optional.txt
+          optional-env/Scripts/python -m pip freeze > resolved-optional.txt
+          # Proof the marker actually selected it. Without this the job would
+          # pass identically if pywin32 were silently dropped from the manifest,
+          # which is the one thing it exists to notice.
+          grep -iq '^pywin32==' resolved-optional.txt \
+            || { echo "::error::pywin32 did not resolve on Windows"; exit 1; }
+          pip-audit -r resolved-optional.txt

@@ -1,0 +1,100 @@
+name: Supported range
+
+# The question no other workflow asks: **does the oldest set the manifest claims
+# to support actually install and pass?**
+#
+# `skills/revayat-novel/requirements.txt` declares floors — `pymupdf>=1.24.3` — and
+# that form is deliberate: a reader copies this skill into their own agent
+# directory and runs it against the wheels they already have, so raising the
+# floors would narrow the set of machines it works on. `dependabot.yml` disables
+# pip version updates for exactly that reason.
+#
+# But every job in ci.yml installs `-c constraints-ci.txt`, exact and newer. So
+# the declared floor was a claim with no lane behind it, and the first run of this
+# workflow proved it wrong twice: `pymupdf>=1.24` named three releases that
+# cannot import this project at all (the module name `pymupdf` arrived in
+# 1.24.3), and the compare sheet drew an em dash through Pillow 10.0's latin-1
+# bitmap font. Neither was reachable from any job that installs the pins.
+#
+# Off the push path, like integration.yml and dependency-audit.yml. A floor that
+# turns out to be wrong is a real finding, but it is a finding about a version
+# nobody pushed, so it must not fail somebody else's commit. Dispatchable,
+# because the answer only changes when requirements.txt does.
+on:
+  schedule:
+    # Weekly, well clear of the OCR tier (04:41) and the advisory audit (05:41).
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supported-range-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  floors:
+    name: the oldest declared set, on the oldest declared interpreter
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # 3.10 and only 3.10, by necessity rather than economy. The lowest
+      # *installable* version of a floor depends on the interpreter: on CPython
+      # 3.13 `pymupdf==1.24.3` cannot be installed at all — the lowest wheel is
+      # 1.24.11 — and pillow 10.0.0 and lxml 5.0.0 shipped before cp313 existed
+      # too. The declared range is therefore only answerable where it is oldest.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+
+      # The pins live here, not in a tracked constraints file, and that is not
+      # laziness. Dependabot's pip fetcher collects every `.txt`/`.in` whose
+      # lines parse as requirements — from the configured directory *and* each
+      # immediate subdirectory of it — so a tracked `constraints-floors.txt`
+      # would join the `ci-constraints` group and Dependabot would dutifully
+      # propose raising the floors to latest, which is the one change this lane
+      # exists to prevent. Written at run time, it is invisible to the updater
+      # and still exact.
+      #
+      # A pin is not the floor string with `.0` appended. There is no release
+      # called `pytest-timeout` 2.3.0, and `pymupdf` 1.24 is a series rather
+      # than a release — so these are the
+      # lowest release in each floor's own series, and
+      # tests/test_dependency_lanes.py reads them back out of this file and
+      # asserts exactly that, which is what stops the two drifting apart.
+      - name: Pin every floor to the lowest release that exists
+        run: |
+          cat > /tmp/constraints-floors.txt <<'EOF'
+          pymupdf==1.24.3
+          python-docx==1.1.0
+          beautifulsoup4==4.12.0
+          lxml==5.0.0
+          pillow==10.0.0
+          pytest==8.0.0
+          pytest-timeout==2.3.1
+          EOF
+          cat /tmp/constraints-floors.txt
+
+      - name: Install the floors
+        run: |
+          python -m pip install --upgrade pip
+          # Binary only. A floor that resolves to a source build is not a floor a
+          # reader can install — it needs a compiler, and the failure would look
+          # like a test problem three steps later instead of a wheel problem here.
+          python -m pip install --only-binary=:all: \
+            -r skills/revayat-novel/requirements.txt -c /tmp/constraints-floors.txt
+          python -m pip freeze
+
+      - name: The suite, against the oldest set
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python -m pytest tests -q --durations=10
+
+      - name: The CLI, against the oldest set
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python skills/revayat-novel/scripts/revayat-novel.py doctor

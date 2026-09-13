@@ -475,7 +475,10 @@ def test_no_workflow_re_adds_the_default_as_a_flag():
 #: instead of the question. Exempting the file rather than the step gives up
 #: guarding its other install lines; that is the trade, and it is the same shape
 #: as TIMEOUT_OVERRIDE_ALLOWED above.
-CONSTRAINTS_EXEMPT_WORKFLOWS = {"dependency-audit.yml"}
+#: `supported-range.yml` is the lane whose entire purpose is to install a
+#: *different* set — the declared floors — so constraining it to the pins
+#: would make it re-test exactly what ci.yml already tests.
+CONSTRAINTS_EXEMPT_WORKFLOWS = {"dependency-audit.yml", "supported-range.yml"}
 
 
 def _pip_install_commands(text: str):
