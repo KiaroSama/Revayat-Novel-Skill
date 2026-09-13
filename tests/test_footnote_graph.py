@@ -18,6 +18,7 @@ without anyone asking whether the resulting graph made sense.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -27,8 +28,10 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "skills" / "revayat-novel" / "sc
 sys.path.insert(0, str(SCRIPTS))
 
 import bookir as ir  # noqa: E402
+import bookwrite  # noqa: E402
 import chunk as chunking  # noqa: E402
 import merge as merging  # noqa: E402
+import notegraph  # noqa: E402
 from tests_support import reply_text  # noqa: E402
 
 
@@ -300,3 +303,153 @@ def test_a_note_body_referring_to_another_note_is_refused(tmp_path):
     named = " ".join(report["malformed"].get(entry["id"], []))
     assert "tr-02" in named and "note inside a note" in named, named
     assert _notes(book_path) == [], "a refused reply still allocated a note"
+
+
+# --------------------------------------------------------------------------- #
+# The whole graph, not only the reply's own corner of it
+# --------------------------------------------------------------------------- #
+# `validate_note_graph` checks a reply before any id is allocated, and cannot see
+# the book. Three kinds of edge were therefore checked by nothing at the moment of
+# writing: a canonical reference inside a note body, a note referring to the id it
+# is about to be given, and a marker on a surface Word cannot place a note on.
+
+def _heads(book_path: Path) -> None:
+    """Give the book a running head, so a marker can be put in one."""
+    book = ir.load_book(book_path)
+    book["sections"] = [{
+        "index": 0, "start_block": None, "footers": {},
+        "headers": {"default": {"paragraphs": [
+            {"align": None, "pieces": [{"id": "rh0001", "text": "Chapter One",
+                                        "target": None}]}]}},
+    }]
+    ir.save_book(book, book_path)
+
+
+def test_a_note_asked_for_from_a_running_head_is_refused_by_name(tmp_path):
+    """Measured: it merged, with an empty anchor.
+
+    Word has no footnotes in a header, `_anchor_notes` walks text blocks only, and
+    `build_docx` would try to place one there — so the note printed nowhere and
+    the marker printed as itself. The refusal names the surface it is refusing
+    rather than fabricating an anchor or dropping the note.
+    """
+    book_path = _book(tmp_path)
+    _heads(book_path)
+    chunks = tmp_path / "chunks"
+    entry = chunking.build(book_path, chunks, glossary_path=None)["chunks"][0]
+    before = book_path.read_bytes()
+    ir.write_text(chunks / entry["output"], reply_text(
+        chunks / entry["file"],
+        "@@ b00001 para\nاول\n\n@@ b00002 para\nدوم\n\n"
+        "@@ rh0001 header\nفصل یکم[[fn:tr-01]]\n\n"
+        "@@ tr-01 footnote\nیادداشت مترجم.\n"))
+
+    report = merging.merge(book_path, chunks, strict=True)
+
+    assert report["ok"] is False
+    assert report["refused"] == "invalid-book", report
+    assert "running" in report["detail"] and "rh0001" in report["detail"]
+    assert book_path.read_bytes() == before
+    assert _notes(book_path) == []
+
+
+def test_a_canonical_reference_inside_a_note_body_is_refused(tmp_path):
+    """The hole the local-only check left: `[[fn:fn4321]]` in a note's own text."""
+    book_path, chunks, entry = _built(tmp_path)
+    before = book_path.read_bytes()
+    _reply(chunks, entry, "اول[[fn:tr-01]]", "دوم",
+           note="یادداشتی که به [[fn:fn4321]] اشاره می‌کند.")
+
+    report = merging.merge(book_path, chunks, strict=True)
+
+    assert report["ok"] is False
+    assert "fn4321" in json.dumps(report, ensure_ascii=False)
+    assert book_path.read_bytes() == before
+    assert _notes(book_path) == []
+
+
+def test_a_note_referring_to_the_id_it_is_about_to_be_given_is_refused(tmp_path):
+    """A self-cycle, spelled canonically so the local check cannot see it."""
+    book_path, chunks, entry = _built(tmp_path)
+    before = book_path.read_bytes()
+    _reply(chunks, entry, "اول[[fn:tr-01]]", "دوم", note="خودارجاع [[fn:fn0001]]")
+
+    report = merging.merge(book_path, chunks, strict=True)
+
+    assert report["ok"] is False
+    assert "fn0001" in report.get("detail", ""), report
+    assert book_path.read_bytes() == before
+    assert _notes(book_path) == []
+
+
+def test_a_marker_in_an_illustration_caption_is_refused(tmp_path):
+    """`build_docx` writes alt text through `write_markup`; nothing anchors it."""
+    book = ir.load_book(_book(tmp_path))
+    book["blocks"].append(ir.make_block("image", 3, asset="fig.png",
+                                        alt="A red rectangle", width_pt=120.0,
+                                        height_pt=80.0))
+    book_path = tmp_path / "book.json"
+    ir.save_book(book, book_path)
+    chunks = tmp_path / "chunks"
+    entry = chunking.build(book_path, chunks, glossary_path=None)["chunks"][0]
+    ir.write_text(chunks / entry["output"], reply_text(
+        chunks / entry["file"],
+        "@@ b00001 para\nاول\n\n@@ b00002 para\nدوم\n\n"
+        "@@ b00003#alt alt\nمستطیلی سرخ[[fn:tr-01]]\n\n"
+        "@@ tr-01 footnote\nیادداشت مترجم.\n"))
+
+    report = merging.merge(book_path, chunks, strict=True)
+
+    assert report["ok"] is False
+    assert "b00003#alt" in report.get("detail", ""), report
+    assert _notes(book_path) == []
+
+
+def test_a_note_whose_anchor_is_not_the_paragraph_pointing_at_it_is_refused(
+        tmp_path):
+    """Checked at the write, so a hand-edited anchor cannot pass either."""
+    book_path, chunks, entry = _built(tmp_path)
+    _reply(chunks, entry, "اول[[fn:tr-01]]", "دوم")
+    assert merging.merge(book_path, chunks, strict=True)["ok"] is True
+    assert _notes(book_path)[0]["anchor_block"] == "b00001"
+
+    moved = ir.load_book(book_path)
+    moved["footnotes"][0]["anchor_block"] = "b00002"
+    assert any("anchor" in problem and "fn0001" in problem
+               for problem in notegraph.problems(moved))
+
+    with pytest.raises(bookwrite.Refused) as stopped:
+        with bookwrite.transaction(book_path, actor="probe") as tx:
+            tx.book["footnotes"][0]["anchor_block"] = "b00002"
+    assert stopped.value.reason == "invalid-book"
+
+
+def test_a_marker_pointing_at_a_note_with_no_body_at_all_is_refused(tmp_path):
+    book_path, chunks, entry = _built(tmp_path)
+    _reply(chunks, entry, "اول[[fn:tr-01]]", "دوم")
+    assert merging.merge(book_path, chunks, strict=True)["ok"] is True
+
+    hollow = ir.load_book(book_path)
+    hollow["footnotes"][0]["text"] = ""
+    hollow["footnotes"][0]["target"] = ""
+
+    assert any("no body" in problem for problem in notegraph.problems(hollow))
+
+
+def test_a_source_note_the_translation_has_not_reached_yet_is_not_a_problem(
+        tmp_path):
+    """The ordinary half-translated state, which must not read as a defect."""
+    book = ir.load_book(_book(tmp_path))
+    book["blocks"][0]["text"] += "[[fn:fn0001]]"
+    book["footnotes"] = [ir.make_footnote(1, anchor_block="b00001",
+                                          text="A note that came with the book.")]
+
+    assert notegraph.problems(book) == []
+
+
+def test_a_backticked_marker_is_still_an_example_not_an_edge(tmp_path):
+    """Span-aware, not a scan: the notation has to be quotable in the book."""
+    book = ir.load_book(_book(tmp_path))
+    book["blocks"][0]["target"] = "نمونهٔ نشانه‌گذاری: `[[fn:fn4321]]` است."
+
+    assert notegraph.problems(book) == []

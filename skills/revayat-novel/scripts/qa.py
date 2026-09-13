@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,8 +33,10 @@ from package import (  # noqa: F401
 )
 import falint
 import glossary as gl
+import notegraph
 import published
 import signoff
+from qanaming import _check_first_mentions  # noqa: F401  (qa's own gate list)
 
 #: Persian usually runs a little longer than English. Outside this band a block
 #: is suspicious: far too short usually means a dropped clause.
@@ -82,6 +83,10 @@ def check_book(
     # that trusts its input more than the validator beside it is not a gate.
     for problem in ir.validate_book(book):
         report.add(ERROR, "ir-invalid", "book.json", problem)
+    # The same list the write transaction refuses on, so a defect cannot be an
+    # error in one place and invisible in the other.
+    for problem in notegraph.problems(book):
+        report.add(ERROR, "note-graph", problem.partition(":")[0], problem)
     _check_coverage(book, report, require_complete)
     _check_structure_parity(book, report, strict)
     _check_lengths(book, report)
@@ -243,150 +248,6 @@ def _check_duplicate_targets(book: dict[str, Any], report: Report) -> None:
             report.add(ERROR, "duplicate-translation", block["id"],
                        f"word for word the translation of {previous[0]}, whose "
                        f"source is different; re-run this chunk")
-
-
-#: The original spelling a first-mention form carries, e.g. "(Elizabeth Bennet)".
-_PARENTHETICAL = re.compile(r"\([^()]{2,}\)")
-
-
-def _check_per_chapter(book: dict[str, Any], entry: dict[str, Any],
-                       introduction: str, name: str,
-                       targets: list[tuple[str, str]], report: Report) -> None:
-    """Under ``first_per_chapter``, every chapter that names her introduces her.
-
-    Chapter ownership comes from :func:`glossary.chapters_by_block`, the same
-    answer the enforcement pass uses. So does what counts as naming her: a
-    mention inside a verbatim span or a URL is not somewhere an introduction can
-    be placed, so it is not somewhere one is demanded.
-    """
-    chapters = gl.chapters_by_block(book)
-    later_form = gl.canonical(entry)
-    owner = entry.get("first_block_id") or ""
-    owner_chapter = chapters.get(owner)
-
-    placements: dict[str, list[tuple[str, int]]] = {}
-    names_her: dict[str, bool] = {}
-    for block_id, target in targets:
-        chapter = chapters.get(block_id, "front")
-        names_her.setdefault(chapter, False)
-        count = target.count(introduction)
-        if count:
-            placements.setdefault(chapter, []).append((block_id, count))
-        if not names_her[chapter] and gl.mentioned_in_prose(target, later_form):
-            names_her[chapter] = True
-
-    for chapter, mentioned in names_her.items():
-        here = placements.get(chapter, [])
-        total = sum(count for _, count in here)
-        if total == 0:
-            if mentioned:
-                report.add(ERROR, "first-mention-missing", name,
-                           f"{introduction} never appears in chapter {chapter}, "
-                           f"which names her; policy is 'first_per_chapter', so "
-                           f"re-run merge with --glossary")
-            continue
-        if total > 1:
-            where = ", ".join(f"{block_id}x{count}" if count > 1 else block_id
-                              for block_id, count in here[:4])
-            report.add(ERROR, "first-mention-repeated", name,
-                       f"{introduction} appears {total} times in chapter "
-                       f"{chapter} ({where}); it belongs once per chapter")
-            continue
-        if chapter == owner_chapter and here[0][0] != owner:
-            report.add(ERROR, "first-mention-misplaced", name,
-                       f"{introduction} is in {here[0][0]} but the first mention "
-                       f"of this name is in {owner}")
-
-
-def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
-                          report: Report) -> None:
-    """The original spelling belongs in exactly one place.
-
-    Chunks are translated in parallel by agents that cannot see each other, so
-    left to their own judgement every one of them answers "yes, this is the
-    first mention" and «الیزابت بنت (Elizabeth Bennet)» is repeated through the
-    whole book. The worksheet already names the chunk that owns the
-    introduction; this is the gate that proves it was obeyed.
-
-    "Exactly one place" is what the policy says it is: once in the book, or once
-    in every chapter that names her. The gate has to read the policy the same way
-    the enforcement pass does, because a gate that disagrees with the pass that
-    produced the book is not a gate.
-    """
-    try:
-        policy = gl.parenthetical_policy(glossary.get("policy") or {})
-    except ValueError as error:
-        # Reported, not raised: this is a gate, and a glossary nobody can
-        # interpret is exactly the kind of thing it exists to say out loud.
-        report.add(ERROR, "glossary-policy", "glossary", str(error))
-        return
-
-    # Counted over the **prose**, with verbatim runs removed, because that is the
-    # text the enforcement pass is allowed to touch: it masks literals through
-    # `falint.mask_literals` before inserting anything. Counting the raw target
-    # instead made the two disagree — a technical passage quoting «علی (Ali)»
-    # inside backticks read as a placement, so the gate demanded the removal of
-    # something the pass had correctly left alone, and no amount of re-running
-    # could satisfy both.
-    targets = [(block["id"], _prose(block.get("target") or ""))
-               for block in ir.iter_text_blocks(book)]
-
-    for entry in glossary.get("entries", []):
-        match = _PARENTHETICAL.search(entry.get("first_form") or "")
-        if not match:
-            continue
-        # Deliberately not gated on `locked`. Locking governs whether the
-        # enforcement pass may rewrite the text — a destructive act that should
-        # only touch a name the translator has confirmed. Reporting costs
-        # nothing, and a name introduced three times is a defect whether or not
-        # anyone has ticked the box yet.
-        introduction = match.group(0)
-        name = entry.get("id") or introduction
-        # The same resolver the enforcement pass uses. Asking for
-        # `first_block_id` instead is what made the gate demand an
-        # introduction in a block whose Persian is a nickname, while the
-        # pass correctly put it in the first block that names her — two
-        # answers to one question, and no re-run could satisfy both.
-        owner = gl.introduction_owner(entry, list(ir.iter_text_blocks(book)))
-
-        # Counted, not merely located. A block-level list cannot tell one
-        # introduction from three inside the same paragraph, which is exactly
-        # what a chunk repeating itself produces.
-        placements = [(block_id, target.count(introduction))
-                      for block_id, target in targets if introduction in target]
-        total = sum(count for _, count in placements)
-
-        if policy == "never":
-            if total:
-                report.add(ERROR, "first-mention-forbidden", name,
-                           f"policy is 'never' but {introduction} appears "
-                           f"{total} time(s)")
-            continue
-
-        if policy == "first_per_chapter":
-            _check_per_chapter(book, entry, introduction, name, targets, report)
-            continue
-
-        if total == 0:
-            report.add(ERROR, "first-mention-missing", name,
-                       f"{introduction} never appears; re-run merge with "
-                       f"--glossary, which places it once in "
-                       f"{owner or 'the block that first mentions the name'}")
-            continue
-
-        if total > 1:
-            where = ", ".join(f"{block_id}x{count}" if count > 1 else block_id
-                              for block_id, count in placements[:4])
-            report.add(ERROR, "first-mention-repeated", name,
-                       f"{introduction} appears {total} times ({where}); it "
-                       f"belongs once, in {owner or placements[0][0]}")
-            continue
-
-        placed_in = placements[0][0]
-        if owner and placed_in != owner:
-            report.add(ERROR, "first-mention-misplaced", name,
-                       f"{introduction} is in {placed_in} but the first mention "
-                       f"of this name is in {owner}")
 
 
 def _check_structure_parity(book: dict[str, Any], report: Report,

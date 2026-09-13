@@ -614,6 +614,14 @@ order parses effortlessly and passes. That is why `fluency` is only a style note
 in 6b, and why this step takes the source away.
 
 The sheets here carry Persian and nothing else — no English, not one source word.
+
+A replacement is the lines after `++ <unit-id> <rubric>`, kept exactly as
+written. Two line shapes are this sheet's own: `~ ` quotes a neighbouring unit
+shown for context, and `<!-- revayat-novel: … -->` is scaffolding. If the Persian
+you are proposing genuinely begins with one of them, put a backslash in front of
+that line — the sheet does the same for the Persian it shows you — and it comes
+back unescaped. Every other line, comment-shaped ones included, is yours and is
+preserved.
 Read them as a Persian reader with no idea what the original said.
 
 ```bash
@@ -667,6 +675,10 @@ well; a pass that proposes nothing is a real and useful result.
 | `no-new-evidence` | the same unit and rubric was proposed again and the Persian had not moved | the sentence is not the problem; look at the glossary entry, the voice card or the extraction |
 | `oscillating` | a pass proposed a wording an earlier pass had already replaced | two passes undoing each other; `escalate` carries every replacement proposed |
 | `rounds-exhausted` | three proposals about one unit and rubric | a fourth is taste, not fluency — applying an edit does not return the budget it spent |
+| `invalid-book` | the replacement would leave the book invalid — most often a `[[fn:…]]` marker naming a note the book does not have | nothing was written; fix the replacement |
+| `lost-update` | the book changed between this command reading it and writing it | nothing was written and nobody's work was discarded; run it again |
+| `locked` | another writer holds `book.json` | wait for it; the lock clears itself if that process died |
+| `write-failed` | the commit itself failed (disk, permissions) | the journal beside the book records what was in progress and the next write finishes or undoes it |
 
 ## Step 7 — Confirm the typography is already settled
 
@@ -785,56 +797,19 @@ is put together, and that check asks the one question no page can.
 
 **Do not build while `"ok"` is false.** Fix by error code:
 
+Every code, what it means and what to do about it is one table:
+[`references/findings.md`](references/findings.md). The four rows that come
+up most often:
+
 | Code | Meaning | Action |
 | --- | --- | --- |
 | `untranslated-block` | a block has no Persian | translate that chunk |
-| `untranslated-running-head` | a running head or foot has no Persian | translate that unit; it prints on every page |
-| `footnote-marker-lost` | a `[[fn:…]]` was dropped | re-run that chunk |
-| `footnote-marker-invented` | a marker points at nothing | re-run that chunk |
-| `possible-omission` | target far shorter than source | read it; usually a dropped clause |
-| `untranslated` | English left in the Persian | re-run that chunk |
-| `asset-missing` / `asset-modified` | a picture is gone or altered | re-extract |
-| `copied-source-run` | a clause of the source is alive inside the Persian | re-run that chunk |
-| `duplicate-translation` | two different sources got the same Persian | a worksheet reply was pasted twice; re-run both |
-| `first-mention-repeated` | a name is introduced in more than one place | keep the first, drop the rest |
-| `image-order` | pictures are in the wrong order in the package | re-build |
-| `image-missing-placement` | the book places an illustration and the document does not show it. The media part can still be in the package, which is why counting the files cannot see this | re-build from `book.json` |
-| `image-unexpected` | a placed illustration's bytes are not any picture the book expects — substituted or edited after the build | re-build; never edit the document |
-| `untranslated-alt` | an illustration's caption still holds the source language. A caption whose every span is `` `verbatim` `` is exempt: it is meant to survive as it is | translate that `#alt` unit |
-| `ir-invalid` | `book.json` does not pass its own validator — a duplicate block id, a reference to a footnote that does not exist. Every other check reads the structure this one validates | the message names it; fix the IR before reading anything else |
-| `docx-invalid` | a required part of the package is absent (`word/document.xml`, `[Content_Types].xml`, the document relationships) | re-build; Word will not open this file |
-| `footnote-untranslated` | a **referenced** note has no Persian, so the marker prints and the reader finds the source language at the foot of the page. A warning when completeness is not required | translate that note's unit |
-| `bookmarks-missing` / `bookmark-duplicate` | the TOC would link nowhere, or to the wrong place | re-build |
-| `emphasis-parity` (warning) | bold/italic/verbatim **count** changed | check one; often fine |
-| `verbatim-content-changed` | a literal run came back different — `` `ABC-123` `` as `` `XYZ-999` ``. The count signature cannot see inside a verbatim span, and a code identifier, filename or command is not translatable | restore the literal exactly; it must survive byte for byte |
-| `assets-missing` | the assets directory is not there, so no picture could be checked. An absent directory is a failed check, not a check that does not apply | point `--assets` at the real directory, or re-run `extract` |
-| `glossary-missing` | `--glossary` named a file that is not there. An absent glossary loads as an empty one, which reports no drift and no first-mention problem — the run would read clean because nothing was checked | fix the path |
-| `glossary-drift` (warning) | a locked name was rendered differently | re-run that chunk |
-| `ocr-low-confidence` (warning) | the engine was unsure of this block | open the page image and compare |
-| `footnote-undefined` | a marker points at a note the book does not define | re-run that chunk; the marker was invented or the note was dropped |
-| `footnote-body-empty` | the note exists with no text, so it prints as a bare number | translate that note, or delete it from `book.json` |
-| `footnote-orphaned` | a translator's note whose marker is not in the text any more | put `[[fn:tr-NN]]` back in the sentence, or remove the note |
-| `footnote-unreferenced` (warning) | a note nothing points at; it will not appear | check whether a marker was dropped |
-| `footnote-multiple-anchors` | several markers point at one note | give each mention its own note, or keep one marker |
-| `footnote-anchor-missing` / `footnote-anchor-mismatch` | the note's recorded anchor block is absent or disagrees with where the marker is | re-run merge for that page or chunk |
-| `footnote-untranslated` (warning) | the note body has no Persian | translate that note |
-| `first-mention-missing` | a locked name's introduction appears nowhere | re-run merge with `--glossary` |
-| `first-mention-misplaced` | the introduction is in a different block from the first mention | re-run merge with `--glossary`; it is idempotent |
-| `first-mention-forbidden` | policy says never introduce parenthetically, and one appears | remove it, or change the glossary policy |
-| `glossary-policy` | the glossary's `original_parenthetical` is not one of `first_mention`, `first_per_chapter` or `never` | fix the value; a policy nothing can interpret is not enforced either |
-| `possible-padding` (warning) | the Persian is far longer than the source | read it; usually an explanation the translator added |
-| `emphasis-unrecoverable` (warning) | the source's bold and italic could not be read at all | emphasis parity cannot be checked for this book; check a page by eye |
-| `ocr-disputed-text` | the confidence pass read this block differently from the text layer | open the page image and compare |
-| `page-geometry-mixed` (warning) | the source is not one page size | expected for a book with plates or inserts; check the built sections |
-| `page-rotated` (warning) | pages are rotated in the source; the translation is built upright | confirm those pages read correctly |
-| `docx-unreadable` / `docx-invalid` | the built file could not be opened, or has no `word/document.xml` | re-build; if it recurs the build failed halfway |
-| `semantic-rejected` | the meaning or fluency review does not hold for the book as it stands — absent, stale, or its repair loop still open | the detail names the stage and the refusal; redo that review |
-| `semantic-unverified` (warning; error under `--strict`) | `--review` or `--fluency` was not given, so nothing says this translation was read | pass the directories; a gate nobody ran is not a gate that passed |
-| `publication-pending` | published prose has no Persian — often the title page or a translator's note | translate it; it prints either way |
+| `semantic-rejected` | the meaning or fluency review does not hold for the book as it stands | the detail names the stage; redo that review |
+| `note-graph` | a footnote edge does not resolve | the detail names the unit; the same list refuses the write |
+| `ir-invalid` | `book.json` does not pass its own validator | fix the IR before reading anything else |
 
-Add `--strict` to make the last three blocking as well, for publication work.
-It also makes `semantic-unverified` blocking, so a book whose meaning or fluency
-review was never asked for cannot be built from a green gate.
+`--strict` is for publication work: it promotes six warnings to errors, named in
+`references/findings.md`. Use it for a book about to be printed.
 
 Then build:
 

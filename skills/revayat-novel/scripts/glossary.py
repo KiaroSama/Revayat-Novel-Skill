@@ -314,55 +314,6 @@ def mentioned_in_prose(target: str, form: str) -> bool:
     return False
 
 
-def _flatten_in_prose(target: str, first_form: str,
-                      later_form: str) -> tuple[str, int]:
-    """Long form down to short form, in prose spans only.
-
-    Returns the rewritten string and how many occurrences were replaced. A
-    verbatim span is literal content — an identifier, a command, a quoted
-    string — so rewriting inside one changes what the book says the literal is.
-    """
-    spans = ir.parse_markup(target)
-    replaced = 0
-    for span in spans:
-        if span["verbatim"] or span["footnote"]:
-            continue
-        replaced += span["text"].count(first_form)
-        span["text"] = span["text"].replace(first_form, later_form)
-    return (ir.render_spans(spans) if replaced else target), replaced
-
-
-def _introduce_in_prose(target: str, later_form: str,
-                        first_form: str) -> str | None:
-    """Expand the first standalone prose occurrence, or ``None`` if there is none.
-
-    Eligibility is decided by the project's own span parser, not by a second
-    one: emphasis may carry the introduction, verbatim spans and footnote tokens
-    may not, and the markup itself is never touched because it is never in the
-    text a rule sees. Literals inside a span — URLs, emails, identifiers — are
-    masked the way the typography pass masks them, because a name sitting after
-    a ``/`` satisfies every word-boundary test and a URL with a parenthetical
-    spliced into it is a dead link.
-
-    A name whose words fall in two different styled spans is left alone:
-    placing it would mean rewriting the emphasis.
-    """
-    spans = ir.parse_markup(target)
-    for span in spans:
-        if span["verbatim"] or span["footnote"]:
-            continue
-        masked, keep = falint.mask_literals(span["text"])
-        found = standalone_spans(masked, later_form)
-        if not found:
-            continue
-        start, end = found[0]
-        span["text"] = falint.unmask_literals(
-            masked[:start] + first_form + masked[end:], keep
-        )
-        return ir.render_spans(spans)
-    return None
-
-
 def prose_of(text: str) -> str:
     """``text`` with markup, verbatim spans and protected regions blanked out.
 
@@ -389,9 +340,17 @@ def prose_of(text: str) -> str:
     return "".join(out)
 
 
-def owed_forms(entry: dict[str, Any], source: str, *,
-               distinct: bool = True) -> tuple[list[str], list[str]]:
-    """``(the English forms this text really uses, the Persian it therefore owes)``.
+def obligations_for(entry: dict[str, Any], source: str, *,
+                    distinct: bool = True) -> tuple[list[str], list[dict[str, Any]]]:
+    """``(the English forms this text really uses, one obligation each)``.
+
+    An obligation is ``{source_form, accepted}``: the English the source actually
+    used on its own, and the Persian renderings that discharge *that* form. They
+    are separate on purpose. Flattened into one list — which is what this returned
+    before — a block whose source says "Elizabeth Bennet" *and* "Lizzy" was
+    discharged by «لیزی» alone, because the check asked whether **any** accepted
+    form was present. The full name had silently vanished from a paragraph that
+    names her twice, on the gate that exists to catch exactly that.
 
     Longest-first and non-overlapping, which is the whole point. "Elizabeth
     Bennet arrived." contains the full name *and* the alias "Elizabeth" inside it,
@@ -415,160 +374,33 @@ def owed_forms(entry: dict[str, Any], source: str, *,
             consumed.append((start, end))
             used.append(form)
 
-    accepted: list[str] = []
-    for form in used:
+    obligations: list[dict[str, Any]] = []
+    for form in dict.fromkeys(used):
         if form == entry.get("source"):
-            accepted.append(canonical(entry))
+            allowed = [canonical(entry)]
             if not distinct:
-                accepted += alias_accepted(entry)
+                allowed += alias_accepted(entry)
         elif form in mapping:
-            accepted.append(mapping[form])
+            allowed = [mapping[form]]
             if not distinct:
-                accepted.append(canonical(entry))
+                allowed.append(canonical(entry))
         else:
             # An alias with no pairing — an older glossary's flat list. Which form
             # it owes is unknown, so every approved form is accepted: guessing
             # strictly would reject a faithful translation on evidence the file
             # does not contain.
-            accepted.append(canonical(entry))
-            accepted += alias_accepted(entry)
-    return sorted(set(used), key=len, reverse=True), accepted
+            allowed = [canonical(entry)] + alias_accepted(entry)
+        obligations.append({"source_form": form,
+                            "accepted": [name for name in dict.fromkeys(allowed)
+                                         if name]})
+    return sorted(set(used), key=len, reverse=True), obligations
 
 
-def introduction_owner(entry: dict[str, Any],
-                       blocks: list[dict[str, Any]]) -> str:
-    """Which block should carry this name's original spelling. One answer, asked
-    by the enforcement pass and by the QA gate.
-
-    The scan pins ``first_block_id`` to where the *entity* first appears in the
-    **source** — which may be a block whose Persian is a nickname. The
-    parenthetical attaches to the canonical form, so it cannot go there, and
-    :func:`_place_once` has always fallen back to the first block that actually
-    names her. That fallback is right; the defect was that the gate did not know
-    about it.
-
-    With "Lizzy/لیزی" in block one and "Elizabeth Bennet/الیزابت بنت" in block two,
-    enforcement introduced the name in block two and QA demanded block one, so
-    three identical passes left the same error and no number of re-runs converged.
-    The rule is now stated once, here: **the pinned block if it is eligible,
-    otherwise the first eligible one** — and the nickname is never expanded to
-    make a block eligible.
-    """
-    later_form = canonical(entry)
-    if not later_form:
-        return ""
-    # `standalone_spans` over `prose_of`, not `in`. A substring test called a
-    # paragraph eligible when its only «علی» was inside backticks, inside a URL or
-    # inside «علیرضا» — and `_place_once`, which is careful, went to the next
-    # paragraph. The gate then demanded the pinned one for ever.
-    eligible = [block for block in blocks
-                if standalone_spans(prose_of(block.get("target") or ""), later_form)]
-    pinned = entry.get("first_block_id") or ""
-    if any(block["id"] == pinned for block in eligible):
-        return pinned
-    return eligible[0]["id"] if eligible else ""
-
-
-def _place_once(group: list[dict[str, Any]], owner_id: str, later_form: str,
-                first_form: str) -> dict[str, Any] | None:
-    """Introduce the name once inside ``group``, the owning block first.
-
-    Falling back to the first block of the group that actually names her keeps a
-    book usable when the owning block was cut or never translated. Returns the
-    block it landed in, or ``None`` when the name stands alone nowhere here.
-    """
-    pinned = next((block for block in group if block["id"] == owner_id), None)
-    for block in ([pinned] if pinned else []) + group:
-        # The cheap test first: parsing every block's markup for every entry is
-        # the one place this pass could get expensive.
-        if later_form not in (block.get("target") or ""):
-            continue
-        rewritten = _introduce_in_prose(block["target"], later_form, first_form)
-        if rewritten is not None:
-            block["target"] = rewritten
-            return block
-    return None
-
-
-def enforce_first_mentions(glossary: dict[str, Any],
-                           book: dict[str, Any]) -> dict[str, Any]:
-    """Give each locked name its original spelling once, where it belongs.
-
-    Chunks are translated in parallel by agents that cannot see one another, so
-    "is this the first mention?" is a question none of them can answer. Every
-    one of them answers yes, and the finished book repeats
-    «الیزابت بنت (Elizabeth Bennet)» in thirty places. The worksheet asks the
-    owning chunk to introduce the name, but asking is not a guarantee — this is
-    the pass that makes it true regardless of what came back.
-
-    It is deliberately mechanical and idempotent: flatten every introduction
-    down to the later form, then re-introduce exactly one, at the first
-    standalone occurrence inside the block the glossary scan already chose. Run
-    it twice and the second run changes nothing.
-
-    ``first_per_chapter`` changes only how many places "once" means: the same
-    placement runs inside every chapter that names her, because a reader who
-    opens at chapter nine never saw chapter one's parenthetical. ``never``
-    flattens and places nothing.
-
-    Aliases are left alone. When a book gives a character a nickname with its
-    own spelling, that is a translation decision, not a drift to normalise —
-    ``policy.keep_aliases_distinct`` says so explicitly.
-    """
-    policy = parenthetical_policy(glossary.get("policy") or {})
-    report: dict[str, Any] = {"policy": policy, "introduced": {}, "flattened": 0,
-                              "unplaceable": [], "skipped": 0}
-
-    blocks = [b for b in ir.iter_text_blocks(book)]
-
-    if policy == "first_per_chapter":
-        chapters = chapters_by_block(book)
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        for block in blocks:
-            grouped.setdefault(chapters.get(block["id"], "front"), []).append(block)
-        # Insertion order is reading order, so the first chapter is placed first
-        # and `introduced` names the earliest block for each entry.
-        groups = list(grouped.values())
-    else:
-        groups = [blocks]
-
-    for entry in glossary.get("entries", []):
-        first_form = (entry.get("first_form") or "").strip()
-        later_form = canonical(entry)
-        if not entry.get("locked") or not first_form or not later_form:
-            report["skipped"] += 1
-            continue
-        if first_form == later_form or not PARENTHETICAL.search(first_form):
-            # No parenthetical policy for this name; nothing to place.
-            report["skipped"] += 1
-            continue
-
-        # 1. Flatten. The long form carries its parenthetical with it, so the
-        #    replace needs no boundary test — but it still only runs on prose.
-        for block in blocks:
-            target = block.get("target") or ""
-            if first_form not in target:
-                continue
-            block["target"], replaced = _flatten_in_prose(
-                target, first_form, later_form)
-            report["flattened"] += replaced
-
-        if policy == "never":
-            continue
-
-        # 2. Re-introduce once per group: the whole book, or each chapter.
-        key = entry.get("id") or entry.get("source")
-        owner_id = entry.get("first_block_id") or ""
-        placed = False
-        for group in groups:
-            landed = _place_once(group, owner_id, later_form, first_form)
-            if landed is not None:
-                placed = True
-                report["introduced"].setdefault(key, landed["id"])
-        if not placed:
-            report["unplaceable"].append(key)
-
-    return report
+def owed_forms(entry: dict[str, Any], source: str, *,
+               distinct: bool = True) -> tuple[list[str], list[str]]:
+    """:func:`obligations`, flattened — the shape the earlier callers expect."""
+    used, owed = obligations_for(entry, source, distinct=distinct)
+    return used, [name for item in owed for name in item["accepted"]]
 
 
 def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]]:
@@ -600,7 +432,7 @@ def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]
             # pass on «الیزابت آمد» alone, because "Elizabeth" is also an alias
             # *inside* the full name — the surname silently dropped, on the very
             # check that exists to catch a dropped name.
-            forms, accepted = owed_forms(entry, source, distinct=distinct_policy)
+            forms, owed = obligations_for(entry, source, distinct=distinct_policy)
             if not forms:
                 continue
             # Boundary-aware, never substring. «علی» sits inside «علیرضا», a
@@ -614,19 +446,34 @@ def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]
             # same way and on its own. So does the first-mention parenthetical
             # «علی (Ali)» — the canonical form stands alone in front of it, which
             # is why there is no separate rule for the untranslated spelling.
-            if any(form and standalone_spans(target_plain, form)
-                   for form in accepted):
+            # **Each** obligation, not any of them. A source unit naming her
+            # twice — "Elizabeth Bennet" and "Lizzy" — was discharged by «لیزی»
+            # alone while the full name had vanished, because the question asked
+            # was whether any accepted form appeared anywhere in the block.
+            #
+            # One occurrence per form, never one per mention: Persian drops a
+            # repeated subject where English repeats it, so counting occurrences
+            # would demand a name a faithful translation leaves to the verb.
+            unmet = [item for item in owed
+                     if not any(form and standalone_spans(target_plain, form)
+                                for form in item["accepted"])]
+            if not unmet:
                 continue
             violations.append({
                 "block": block["id"],
                 "entry": entry["id"],
-                "source_forms": forms,
+                "source_forms": [item["source_form"] for item in unmet],
                 # What *this* block owes, which is not always the canonical form.
                 # Reporting the canonical where the source used a nickname is how
                 # a reader gets talked into expanding it — the message itself was
                 # asking for the drift the check exists to prevent.
-                "expected": accepted[0] if accepted else canonical(entry),
-                "accepted": sorted(set(accepted)),
+                "expected": unmet[0]["accepted"][0] if unmet[0]["accepted"]
+                            else canonical(entry),
+                "accepted": sorted({form for item in unmet
+                                    for form in item["accepted"]}),
+                # Every form the source used, so a reader can see that the block
+                # satisfied one and not the other.
+                "used": forms,
                 "excerpt": target_plain[:120],
             })
     return violations
@@ -718,3 +565,17 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def enforce_first_mentions(glossary: dict[str, Any],
+                           book: dict[str, Any]) -> dict[str, Any]:
+    """The naming plan's enforcement pass — see :mod:`naming`.
+
+    Kept as a name here because `merge` and several tests already reach it this
+    way. The plan, the eligibility rule and the rewriting live in `naming`
+    together, because a plan the writer does not share is how this area came to
+    have two answers to one question.
+    """
+    import naming  # noqa: PLC0415 — `naming` reads this module, so the import
+    #                                is here rather than at the top.
+    return naming.enforce_first_mentions(glossary, book)

@@ -1,12 +1,34 @@
 """The finished `.docx`, checked as a package rather than as a promise.
 
 `qa check` reads `book.json`; this reads the file that was actually written. The
-two answer different questions, and only this one can catch a build that dropped
-a picture, renumbered a footnote or produced a document Word will not open.
+two answer different questions, and only this one can catch a build that dropped a
+picture, renumbered a footnote or produced a document Word will not open.
 
-Split out of `qa` so both have room: the package checks are a different kind of
-work — archive members, relationship graphs, XML namespaces — from the checks over
-the IR, and `qa` was over the 800-line ceiling with both inside it.
+**Package integrity, not whole-document review.** What a page *looks* like is
+`render-qa`'s question and needs eyes; what the package *contains* is this one's
+and is decidable. Keeping them apart is why this file can be strict.
+
+Everything here used to be lexical — regexes over the raw XML, a substring test
+for a content type, a count of `<wp:extent>` tags — and measured against real
+mutations that answered wrongly in both directions:
+
+* removing every footnote reference **and** body passed, because the note checks
+  only ran `if refs:` and nothing compared the book's own note inventory;
+* substituting a note's text passed, because bodies were matched by id and never
+  by content;
+* deleting the footnotes *relationship* passed, because nothing resolved the
+  relationship graph — only the content-type string was searched for;
+* duplicating a reference passed, because the references were collected into a
+  set, which is exactly the shape that loses a duplicate;
+* distorting a picture's extent passed, because extents were counted, not read;
+* a truncated `word/document.xml` passed, because a regex over broken XML finds
+  fewer matches and nothing said the part would not parse;
+* and a package using a different, legal namespace prefix for the relationship
+  elements was **rejected**.
+
+`opc` now does the OPC work — namespace-aware parsing, resolved content types,
+normalised relationship targets, bounded archive — and this module asks the
+questions, against the IR's own expectations.
 """
 
 from __future__ import annotations
@@ -18,20 +40,26 @@ from pathlib import Path
 from typing import Any
 
 import bookir as ir
+import opc
 from findings import ERROR, WARNING, Report
 
-_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+#: Bookmarks and internal links are still read lexically, and that is honest: both
+#: are attributes on elements this project writes itself, in one place, and the
+#: regex is over a part `opc` has already proved parses.
 _BOOKMARK = re.compile(r'<w:bookmarkStart[^>]*w:name="([^"]+)"')
 _ANCHOR = re.compile(r'<w:hyperlink[^>]*w:anchor="([^"]+)"')
-_FOOTNOTE_REF = re.compile(r'<w:footnoteReference[^>]*w:id="(-?\d+)"')
-_FOOTNOTE_BODY = re.compile(r'<w:footnote[^>]*w:id="(-?\d+)"')
-_EXTENT = re.compile(r"<wp:extent[^>]*cx=\"(\d+)\"[^>]*cy=\"(\d+)\"")
-#: One per picture, in the order Word lays them out.
 _BLIP = re.compile(r'<a:blip[^>]*r:embed="([^"]+)"')
-_RELATIONSHIP = re.compile(r"<Relationship\b[^>]*>")
-#: Attributes are pulled by name rather than by position: the order of ``Id``,
-#: ``Type`` and ``Target`` inside a relationship is not fixed by the format.
-_ATTRIBUTE = re.compile(r'(\w+)="([^"]*)"')
+
+#: English metric units per point, and how far a picture's drawn aspect ratio may
+#: drift from the source's before it is a distortion rather than rounding. The
+#: builder converts points to EMU through python-docx, so a point of rounding is
+#: expected; 2% is far tighter than any visible squash.
+EMU_PER_PT = 12700
+ASPECT_TOLERANCE = 0.02
+#: How far the drawn width may exceed the section's text width. The builder fits a
+#: picture to the text block, preserving aspect (`build_docx._image_size`), so
+#: anything wider than the page's own text measure was not produced by it.
+WIDTH_TOLERANCE = 1.02
 
 
 def _package_image_order(archive: zipfile.ZipFile, document: str) -> list[str]:
@@ -39,27 +67,25 @@ def _package_image_order(archive: zipfile.ZipFile, document: str) -> list[str]:
 
     python-docx stores one media part per *distinct* image, so two identical
     pictures share a part and ``word/media/`` cannot describe order at all. The
-    ``<a:blip r:embed>`` sequence in ``document.xml`` can, once each
-    relationship is followed back to the bytes it points at.
+    ``<a:blip r:embed>`` sequence in ``document.xml`` can, once each relationship
+    is followed back to the bytes it points at.
+
+    Kept on the raw text for the callers that already had it; the checks below go
+    through `opc` so a relationship written with another prefix resolves.
     """
     try:
-        rels = archive.read("word/_rels/document.xml.rels").decode("utf-8", "replace")
-    except KeyError:
+        package = opc.Package(archive)
+        targets = {identifier: record["part"] for identifier, record
+                   in package.relationships("word/document.xml").items()}
+    except opc.Damaged:
         return []
-
-    target_by_id: dict[str, str] = {}
-    for tag in _RELATIONSHIP.findall(rels):
-        attributes = dict(_ATTRIBUTE.findall(tag))
-        if "Id" in attributes and "Target" in attributes:
-            target_by_id[attributes["Id"]] = attributes["Target"]
 
     digests: dict[str, str] = {}
     order: list[str] = []
     for relationship_id in _BLIP.findall(document):
-        target = target_by_id.get(relationship_id, "")
-        if not target:
+        name = targets.get(relationship_id, "")
+        if not name:
             continue
-        name = target[1:] if target.startswith("/") else f"word/{target}"
         if name not in digests:
             try:
                 digests[name] = ir.sha256_bytes(archive.read(name))
@@ -68,6 +94,176 @@ def _package_image_order(archive: zipfile.ZipFile, document: str) -> list[str]:
         if digests[name]:
             order.append(digests[name])
     return order
+
+
+def _expected_notes(book: dict[str, Any]) -> list[str]:
+    """The note bodies the document must place, in reading order, with repeats.
+
+    The **IR's** inventory, which is the thing the package has to be checked
+    against: the builder writes one Word footnote per marker it meets while
+    walking the blocks, so the sequence of note texts is the correspondence —
+    not the numeric ids, which Word allocates and renumbers as it pleases.
+    """
+    bodies = {note["id"]: str(note.get("target") or note.get("text") or "").strip()
+              for note in book.get("footnotes") or []}
+    wanted: list[str] = []
+    for block in ir.iter_text_blocks(book):
+        for ref in ir.footnote_refs(block.get("target") or ""):
+            if ref in bodies:
+                wanted.append(bodies[ref])
+    return wanted
+
+
+def _check_footnotes(package: opc.Package, book: dict[str, Any] | None,
+                     report: Report) -> None:
+    """Every note the book places is in the package, once, with its own text."""
+    document = package.xml("word/document.xml")
+    references = opc.footnote_references(document)
+    parts = package.related("word/document.xml", "footnotes")
+    expected = _expected_notes(book) if book is not None else []
+
+    report.count("footnote_references", len(references))
+    if expected and not references:
+        # The strongest form of the failure, and the one that used to pass: the
+        # whole check was behind `if refs:`, so a document with every note
+        # stripped out had nothing asked of it.
+        report.add(ERROR, "footnotes-lost", "word/document.xml",
+                   f"the book places {len(expected)} footnote(s) and the document "
+                   f"has no reference at all — rebuild from book.json")
+        return
+    if not references:
+        return
+
+    if not parts:
+        report.add(ERROR, "footnotes-relationship-missing", "word/document.xml",
+                   f"{len(references)} reference(s) and no footnotes "
+                   f"relationship: Word resolves the notes through the "
+                   f"relationship, so it will not find them")
+        return
+    name = parts[0]
+    if name not in package.names:
+        report.add(ERROR, "footnotes-part-missing", name,
+                   "the footnotes relationship points at a part that is not in "
+                   "the package")
+        return
+    declared = package.content_types().get(name, "")
+    if not declared.endswith("footnotes+xml"):
+        report.add(ERROR, "footnotes-content-type", name,
+                   f"declared as {declared or '(nothing)'!r}; Word opens a part by "
+                   f"its declared content type, so the notes are unreachable")
+
+    bodies = opc.footnote_bodies(package.xml(name))
+    for identifier, times in sorted(Counter(references).items()):
+        if identifier not in bodies:
+            report.add(ERROR, "footnote-body-missing", str(identifier),
+                       "a reference whose note has no body in the footnotes part")
+        elif times > 1:
+            # Multiplicity, which a set could not see. Two markers on one note
+            # means one of the two sentences is footnoted by text written for the
+            # other.
+            report.add(ERROR, "footnote-reference-duplicated", str(identifier),
+                       f"referred to {times} times; each note belongs to one "
+                       f"sentence")
+    orphans = sorted(set(bodies) - set(references))
+    if orphans:
+        report.add(ERROR, "footnote-body-orphaned", ", ".join(orphans[:6]),
+                   "a note body nothing in the document refers to; it prints "
+                   "under a page that does not point at it")
+
+    if book is None:
+        return
+    # The content, compared in reading order. A substituted body is invisible to
+    # every id-based check — the ids line up perfectly and the note says something
+    # the translator never wrote.
+    placed = [bodies.get(identifier, "") for identifier in references]
+    if [_normalised(text) for text in placed] != [_normalised(text) for text in expected]:
+        report.add(ERROR, "footnote-text-mismatch", "word/footnotes.xml",
+                   f"the notes in the document are not the notes in the book: "
+                   f"{len(expected)} expected, {len(placed)} placed, first "
+                   f"difference at "
+                   f"{_first_difference(placed, expected)} — rebuild from book.json")
+
+
+def _normalised(text: str) -> str:
+    """Word's own text, comparable with the book's: whitespace and markup aside."""
+    return " ".join(ir.plain_text(text or "").split())
+
+
+def _first_difference(placed: list[str], expected: list[str]) -> str:
+    for position, (left, right) in enumerate(zip(placed, expected), start=1):
+        if _normalised(left) != _normalised(right):
+            return f"note {position}"
+    return f"note {min(len(placed), len(expected)) + 1}"
+
+
+def _text_width_pt(book: dict[str, Any] | None) -> float:
+    """The measure the builder fits a picture to, from the same fields it reads."""
+    page = (book or {}).get("page") or ir.default_page_setup()
+    return max(72.0, page["width_pt"] - page["margin_inner_pt"]
+               - page["margin_outer_pt"])
+
+
+def _check_image_geometry(package: opc.Package, book: dict[str, Any] | None,
+                          report: Report) -> None:
+    """A picture must be drawn at the shape the book says, fitted as documented.
+
+    Extents used to be counted and never read, so a picture stretched to twice its
+    height passed: the bytes are untouched and the count is unchanged. The rule
+    checked here is the builder's own (`build_docx._image_size`): the source
+    aspect is preserved, and a picture wider than the text measure is scaled down
+    to it.
+    """
+    if book is None:
+        return
+    placed = opc.drawing_extents(package.xml("word/document.xml"))
+    report.count("pictures_drawn", len(placed))
+    if not placed:
+        return
+    targets = {identifier: record["part"] for identifier, record
+               in package.relationships("word/document.xml").items()}
+    by_digest: dict[str, dict[str, Any]] = {}
+    for block in book.get("blocks") or []:
+        if block.get("type") == "image" and block.get("sha256"):
+            by_digest.setdefault(block["sha256"], block)
+
+    limit = _text_width_pt(book) * WIDTH_TOLERANCE
+    for position, (relationship_id, cx, cy) in enumerate(placed, start=1):
+        where = f"picture {position}"
+        if cx <= 0 or cy <= 0:
+            report.add(ERROR, "picture-size-invalid", where,
+                       f"drawn at {cx}x{cy} EMU, which Word cannot render")
+            continue
+        if cx / EMU_PER_PT > limit:
+            report.add(ERROR, "picture-too-wide", where,
+                       f"drawn {cx / EMU_PER_PT:.0f}pt wide on a text measure of "
+                       f"{_text_width_pt(book):.0f}pt; the builder fits a picture "
+                       f"to the text block, so this was widened afterwards")
+        name = targets.get(relationship_id, "")
+        try:
+            digest = ir.sha256_bytes(package.read(name)) if name else ""
+        except opc.Damaged:
+            digest = ""
+        source = by_digest.get(digest)
+        if source is None:
+            continue
+        wanted = _source_aspect(source)
+        if wanted is None:
+            continue
+        drawn = cx / cy
+        if abs(drawn - wanted) / wanted > ASPECT_TOLERANCE:
+            report.add(ERROR, "picture-aspect", where,
+                       f"drawn at {drawn:.3f} and the source is {wanted:.3f}: the "
+                       f"illustration is squashed, which preserving the aspect "
+                       f"ratio cannot produce")
+
+
+def _source_aspect(block: dict[str, Any]) -> float | None:
+    for width_field, height_field in (("width_pt", "height_pt"),
+                                      ("pixel_width", "pixel_height")):
+        width, height = block.get(width_field), block.get(height_field)
+        if width and height:
+            return float(width) / float(height)
+    return None
 
 
 def _check_image_order(archive: zipfile.ZipFile, document: str,
@@ -147,32 +343,53 @@ def _check_bookmarks(names: list[str], book: dict[str, Any] | None,
                    f"has nothing to link to — rebuild")
 
 
+#: The parts a Word package cannot open without, and the root each must have.
+REQUIRED = (
+    ("[Content_Types].xml", ("ct", "Types")),
+    ("word/document.xml", ("w", "document")),
+    ("word/_rels/document.xml.rels", ("pr", "Relationships")),
+)
+
+
 def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
     report = Report()
     try:
-        archive = zipfile.ZipFile(path)
-    except (OSError, zipfile.BadZipFile) as error:
-        report.add(ERROR, "docx-unreadable", str(path), str(error))
+        package = opc.open_package(Path(path))
+    except opc.Damaged as damaged:
+        report.add(ERROR, damaged.code if damaged.code != "docx-unreadable"
+                   else "docx-unreadable", str(path), damaged.detail)
         return report
 
-    with archive:
-        names = set(archive.namelist())
-        # Every part this function goes on to read, checked before it reads any of
-        # them. `[Content_Types].xml` was read without asking, so a package
-        # missing it raised `KeyError` out of a function whose whole job is to
-        # report what is wrong with a package — the one failure mode a verifier
-        # must never have.
-        for required in ("word/document.xml", "[Content_Types].xml",
-                         "word/_rels/document.xml.rels"):
+    with package.archive:
+        names = set(package.names)
+        # Every required part, present *and* parsing, with the root the format
+        # says. A truncated part used to pass every check below it: a regex over
+        # broken XML finds fewer matches, and nothing said the matches were
+        # missing rather than absent.
+        for required, (prefix, tag) in REQUIRED:
             if required not in names:
                 report.add(ERROR, "docx-invalid", str(path),
                            f"no {required}: this is not a Word package Word will "
                            f"open, whatever else is in it")
+                continue
+            try:
+                root = package.xml(required)
+            except opc.Damaged as damaged:
+                report.add(ERROR, damaged.code, required, damaged.detail)
+                continue
+            if root.tag != opc.qname(prefix, tag):
+                report.add(ERROR, "part-root-wrong", required,
+                           f"root element is {root.tag!r}, not {tag}")
         if report.summary()["errors"]:
             return report
 
-        document = archive.read("word/document.xml").decode("utf-8", "replace")
-        content_types = archive.read("[Content_Types].xml").decode("utf-8", "replace")
+        try:
+            document = package.read("word/document.xml").decode("utf-8", "replace")
+            _check_footnotes(package, book, report)
+            _check_image_geometry(package, book, report)
+        except opc.Damaged as damaged:
+            report.add(ERROR, damaged.code, str(path), damaged.detail)
+            return report
 
         bookmark_names = _BOOKMARK.findall(document)
         bookmarks = set(bookmark_names)
@@ -182,41 +399,25 @@ def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
                            "internal link has no matching bookmark")
         _check_bookmarks(bookmark_names, book, report)
 
-        refs = {int(x) for x in _FOOTNOTE_REF.findall(document)}
-        if refs:
-            if "word/footnotes.xml" not in names:
-                report.add(ERROR, "footnotes-part-missing", str(path),
-                           f"{len(refs)} references but no word/footnotes.xml")
-            else:
-                footnotes = archive.read("word/footnotes.xml").decode("utf-8", "replace")
-                bodies = {int(x) for x in _FOOTNOTE_BODY.findall(footnotes)}
-                for missing in sorted(refs - bodies):
-                    report.add(ERROR, "footnote-body-missing", str(missing),
-                               "reference with no footnote body")
-                if "footnotes+xml" not in content_types:
-                    report.add(ERROR, "footnotes-content-type", str(path),
-                               "footnotes part is not declared in [Content_Types].xml")
-
-        media = [n for n in names if n.startswith("word/media/")]
-        extents = _EXTENT.findall(document)
-        if len(extents) < len(media):
-            report.add(WARNING, "picture-size-implicit", str(path),
-                       f"{len(media)} media parts but only {len(extents)} sized extents")
-
-        if "w:bidi" not in document:
+        media = [name for name in names if name.startswith("word/media/")]
+        bidi = next(package.xml("word/document.xml").iter(opc.qname("w", "bidi")),
+                    None)
+        if bidi is None:
             report.add(WARNING, "no-rtl", str(path),
-                       "no w:bidi found — the document is not right-to-left")
+                       "no w:bidi element found — the document is not "
+                       "right-to-left")
 
         if book is not None:
-            expected = sum(1 for b in book["blocks"] if b["type"] == "image")
-            unique = len({b["sha256"] for b in book["blocks"]
-                          if b["type"] == "image" and b.get("sha256")})
+            expected = sum(1 for block in book["blocks"]
+                           if block["type"] == "image")
+            unique = len({block["sha256"] for block in book["blocks"]
+                          if block["type"] == "image" and block.get("sha256")})
             if media and unique and len(media) < unique:
                 report.add(ERROR, "images-lost", str(path),
                            f"{unique} unique images expected, {len(media)} in package")
             elif not media and expected:
                 report.add(ERROR, "images-lost", str(path),
                            f"{expected} images expected, none in package")
-            _check_image_order(archive, document, book, report)
+            _check_image_order(package.archive, document, book, report)
 
     return report

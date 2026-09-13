@@ -27,6 +27,10 @@ import worksheet
 # review stages and the tests all reach through, and moving code should not also
 # be a rename. The dependency points one way: `provenance` knows nothing about
 # cutting or building, so it cannot cycle back here.
+from chunksheet import (  # noqa: F401  (re-exported: the tests reach them here)
+    neighbour_context,
+    render_worksheet,
+)
 from provenance import (  # noqa: F401  (this module's published surface)
     CONTEXT_CHARS, REQUEST_CHARS, REQUEST_LINE_CHARS, REQUEST_VERSION,
     dependency_facet, kind_of, request_token, source_fingerprint, span_problems,
@@ -97,120 +101,6 @@ def _has_prose(book: dict[str, Any], ids: list[str]) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-
-
-def render_worksheet(
-    book: dict[str, Any],
-    glossary: dict[str, Any],
-    ids: list[str],
-    *,
-    index: int,
-    total: int,
-    previous_tail: str,
-    next_head: str,
-    units: list[tuple[str, str, str]] | None = None,
-) -> str:
-    """``units`` overrides what the block run offers.
-
-    The builder needs that: a unit longer than the budget is cut into segments,
-    and a run of units that renders over the budget is split into several
-    worksheets, so what a worksheet carries is no longer simply "every unit of
-    these blocks". Left out, the behaviour is exactly what it always was.
-    """
-    lookup = ir.blocks_by_id(book)
-    units = translatable_units(book, ids) if units is None else units
-    source_blob = "\n".join(text for _, _, text in units)
-
-    lines: list[str] = [
-        comment(f"worksheet {index:04d}/{total:04d} | units {len(units)} "
-                f"| {len(source_blob)} source chars"),
-        comment("Reply with the same @@ headers, in the same order, Persian "
-                "text underneath each. Do not add, drop, merge or reorder "
-                "headers."),
-        # Kept to one line on purpose: every worksheet pays for it out of the
-        # budget, and a small job pays proportionally most.
-        comment("Copy the `request` line above into your reply, unchanged."),
-        "",
-    ]
-
-    # The blocks *this worksheet* carries, not every block in the run. A run
-    # that renders over the budget becomes several worksheets sharing one
-    # ``ids``, and handing each the whole run told every one of them that it
-    # owned the name's first appearance — so four worksheets all said
-    # "introduce this name here", which is the duplication the glossary pass
-    # exists to prevent, asked for in the prompt.
-    carried = [block_id for block_id in ids
-               if any(unit_id == block_id or unit_id.startswith(f"{block_id}#")
-                      for unit_id, _, _ in units)]
-
-    table = gl.render_term_table(
-        gl.entries_for_text(glossary, source_blob), glossary.get("policy", {}),
-        block_ids=carried,
-    )
-    if table:
-        lines += ["## Names — use these exact forms", "", table, ""]
-
-    cards = gl.render_voice_cards(glossary, source_blob)
-    if cards:
-        lines += ["## Character voices", "", cards, ""]
-
-    if previous_tail or next_head:
-        lines += ["## Surrounding text — context only, do not translate or output", ""]
-        if previous_tail:
-            lines += [f"Before: …{previous_tail}", ""]
-        if next_head:
-            lines += [f"After: {next_head}…", ""]
-
-    lines += ["## Translate", ""]
-    for unit_id, kind, text in units:
-        block = lookup.get(unit_id.split("#")[0])
-        if block is not None and block["type"] == "image":
-            lines.append(comment(
-                f"illustration {block['asset']} is anchored here; the picture "
-                f"itself needs nothing from you. The alt header below is its "
-                f"caption text and does need translating."))
-        lines.append(f"@@ {unit_id} {kind}")
-        lines.append(escape_payload(text))
-        lines.append("")
-
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def neighbour_context(book: dict[str, Any], chunks: list[list[str]], index: int) -> tuple[str, str]:
-    def blob(ids: list[str]) -> str:
-        lookup = ir.blocks_by_id(book)
-        return " ".join(
-            ir.plain_text(lookup[i].get("text") or "")
-            for i in ids if i in lookup and lookup[i]["type"] in ir.TEXT_TYPES
-        ).strip()
-
-    previous_tail = blob(chunks[index - 1])[-CONTEXT_CHARS:] if index > 0 else ""
-    next_head = blob(chunks[index + 1])[:CONTEXT_CHARS] if index + 1 < len(chunks) else ""
-    return previous_tail, next_head
-
-
-# --------------------------------------------------------------------------- #
-# Build
-# --------------------------------------------------------------------------- #
-
-class StaleWorksheets(RuntimeError):
-    """Rebuilding would discard translations that answer a different book."""
-
-
-class OverBudget(RuntimeError):
-    """A worksheet cannot be brought inside the budget without cutting prose.
-
-    The same refusal the page route makes, for the same reason: the budget
-    exists to keep a payload inside a model's context, so raising it to fit the
-    one paragraph that overflowed puts every other job at risk of exactly the
-    failure the budget was there to prevent. Shortening the prose is never an
-    option, so the honest answer is to stop and say what the real numbers are.
-    """
-
-
-#: Lives in `runstate` now: it is the staleness primitive, and four
-#: stages need it without taking a dependency on the chunker.
-source_digest = runstate.source_digest
 
 
 def _chunk_inputs(book_path: Path | None, glossary_path: Path | None,
@@ -350,6 +240,30 @@ def _supersede_stale_answers(out_dir: Path,
                        else "the worksheet was cut again from changed input",
         })
     return filed
+
+
+# --------------------------------------------------------------------------- #
+# Build
+# --------------------------------------------------------------------------- #
+
+class StaleWorksheets(RuntimeError):
+    """Rebuilding would discard translations that answer a different book."""
+
+
+class OverBudget(RuntimeError):
+    """A worksheet cannot be brought inside the budget without cutting prose.
+
+    The same refusal the page route makes, for the same reason: the budget
+    exists to keep a payload inside a model's context, so raising it to fit the
+    one paragraph that overflowed puts every other job at risk of exactly the
+    failure the budget was there to prevent. Shortening the prose is never an
+    option, so the honest answer is to stop and say what the real numbers are.
+    """
+
+
+#: Lives in `runstate` now: it is the staleness primitive, and four
+#: stages need it without taking a dependency on the chunker.
+source_digest = runstate.source_digest
 
 
 def build(
