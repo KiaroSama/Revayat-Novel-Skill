@@ -506,6 +506,54 @@ reply, because a reply whose structure cannot be trusted cannot be half trusted.
 Re-running merge after a fix is always safe; the first-mention pass is
 idempotent.
 
+## Step 6b — Read it against the source
+
+Every gate after this one is deterministic, and not one of them can tell you
+whether the Persian says what the English said. A flipped negation, a dropped
+subordinate clause, an adverb the author never wrote: all three pass QA, and the
+length ratio cannot separate a missing clause from a terser sentence.
+
+```bash
+# 1. bilingual sheets — each unit's source and translation, adjacent
+$PY $SKILL_DIR/scripts/revayat-novel.py meaning sheets \
+  --book $WORK/book.json --out $WORK/review
+
+# 2. read $WORK/review/sheet_NNNN.md and write your findings to
+#    $WORK/review/out_sheet_NNNN.md — the sheet carries the rubrics, an
+#    example of a finding and an example of what is not one
+
+# 3. file them against the revision they were made from
+$PY $SKILL_DIR/scripts/revayat-novel.py meaning record \
+  --book $WORK/book.json --out $WORK/review
+
+# 4. what it asks for
+$PY $SKILL_DIR/scripts/revayat-novel.py meaning status \
+  --book $WORK/book.json --out $WORK/review
+```
+
+A finding is `?? <unit-id> <rubric>` and then your argument for it. Three
+rubrics are about meaning and **block**: `omission`, `addition`, `sense`. Two are
+about style and do **not**: `register`, `fluency`.
+
+**That separation is the point of the step.** A style note is recorded and
+reported, and nothing in this pipeline asks a translator to act on it, because
+"make this read better" is how a faithful sentence becomes a smoother one that
+says something slightly different. Do not send prose back for polish. If a
+clumsy sentence genuinely changes the meaning, file it under `sense` and argue
+that — where it has to be argued as a meaning defect.
+
+| Field | Meaning | Action |
+| --- | --- | --- |
+| `verdict.ok: true` | nothing blocking, style notes may still be listed | continue to step 7 |
+| `not-reviewed` | nobody has read this yet | do steps 1–3 |
+| `incomplete` | a sheet has no findings file, or one has no `!! reviewed` line, or a finding has no argument | an empty report is silence, not approval — report on every sheet |
+| `stale-sheets` | the book changed after the sheets were written | write the sheets again |
+| `stale-review` | the translation **or its source** changed after the review | review again; the findings describe text that is gone |
+| `unverified-digest` | the review records a digest this version cannot recompute | review again rather than assume it is fresh |
+| `meaning-rejected` | meaning findings are open | `repair.units` names them — re-translate only those |
+| `no-new-evidence` | this round found exactly what the last round found | stop re-translating; the cause is the glossary entry, the voice card or the extraction |
+| `rounds-exhausted` | two rounds of repair have been asked for | same: find the cause rather than asking a third time |
+
 ## Step 7 — Persian typography
 
 ```bash
