@@ -126,12 +126,40 @@ Two are about style, and will **not**:
 - **register** — the voice is more formal, or plainer, than the source's;
 - **fluency** — it reads as translated English rather than as Persian.
 
-Those two are recorded for you to read and nothing asks you to act on them. The
-reason is not indifference to style. A faithful sentence sent back to be made
-smoother comes back smoother and slightly different, and the second change is
-invisible to every check here — so polish is yours to apply while translating,
-never a repair cycle afterwards. Write it well the first time; the review is
-there to catch what it means, not how it sounds.
+Those two are recorded for you to read and nothing sends them back to you as a
+re-translation request. The reason is not indifference to style. A faithful
+sentence sent back to be made smoother comes back smoother and slightly
+different, and that second change is invisible to every check here.
 
 If you believe a clumsy sentence genuinely changes the meaning, that is a
 `sense` finding, and it has to be argued as one.
+
+## How the prose does get smoothed, and why not by you
+
+There *is* a stage that edits Persian for how it reads — but it happens after
+your work, without the source in front of it, and it is not a request to you.
+
+The reason it is separate is worth knowing, because it is also the reason your
+own polish matters: **a reviewer who can see the English cannot judge whether
+the Persian reads as Persian.** They recognise the sentence behind it, so
+English clause order parses effortlessly and passes. The later stage therefore
+gets your Persian and nothing else — no source, not one English word — and is
+asked only whether a Persian reader would believe a person wrote it.
+
+What that means for you:
+
+- **Write it well the first time.** A blind editor can fix word order and the
+  join between sentences. They cannot restore a nuance you smoothed away,
+  because they do not know it was there.
+- **Nothing that stage proposes is accepted on its own.** Every edit moves the
+  book, which makes the meaning review stale, and the translation is compared
+  against its source again before anything passes. A smoothing that changed the
+  meaning is caught there, by someone holding both texts.
+- **Deliberate roughness survives if the source has it.** An abrupt sentence, a
+  character who speaks badly, a repetition the author chose: a blind editor may
+  propose smoothing it, and the source comparison is what puts it back. You do
+  not need to defend it in your final message — though a line saying *this is
+  meant to read this way* makes the second reviewer's job easier.
+
+So: meaning first and yours to get right, style second and never at meaning's
+expense. Both are re-checked after any change.
