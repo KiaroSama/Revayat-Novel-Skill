@@ -38,7 +38,7 @@ import shutil
 from pathlib import Path
 
 import bookir as ir
-from worksheet import comment
+from worksheet import SCAFFOLD_COMMENT, comment  # noqa: F401  (the stages read it)
 
 #: Version tag, so a reader that cannot recompute a token says so rather than
 #: guessing. Invariant 9 in AGENTS.md.

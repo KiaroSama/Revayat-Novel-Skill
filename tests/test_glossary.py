@@ -165,3 +165,46 @@ def test_two_people_sharing_a_surname_are_not_conflated():
 
     book = _one_block("Mary Ashcroft left the room.", "جان اشکرافت از اتاق رفت.")
     assert [v["entry"] for v in gl.check(glossary, book)] == ["g0001"]
+
+
+def test_the_books_own_voice_reaches_every_worksheet(tmp_path):
+    """The one discretionary improvement this audit implemented.
+
+    Left empty — the default — nothing is rendered: an invented house style is
+    worse than none. Filled in, it is on every worksheet, so the twentieth chunk
+    is told what the first was told rather than picking a register from the prose
+    in front of it.
+    """
+    import chunk as chunking
+
+    book = ir.new_book(source_path="s.epub", source_format="epub")
+    for index in range(1, 13):
+        book["blocks"].append(ir.make_block(
+            "paragraph", index, text=f"Paragraph {index} of ordinary prose. " * 6))
+    book_path = tmp_path / "book.json"
+    ir.save_book(book, book_path)
+
+    store = gl.new_glossary()
+    assert store["policy"]["book_voice"] == "", "a house style nobody chose"
+    quiet = tmp_path / "quiet.json"
+    gl.save(store, quiet)
+    silent = chunking.build(book_path, tmp_path / "silent", glossary_path=quiet,
+                            budget=2200)
+    for entry in silent["chunks"]:
+        text = (tmp_path / "silent" / entry["file"]).read_text(encoding="utf-8")
+        assert "This book's voice" not in text
+
+    store["policy"]["book_voice"] = "روایت رسمی اما ساده؛ جملات کوتاه."
+    spoken = tmp_path / "spoken.json"
+    gl.save(store, spoken)
+    built = chunking.build(book_path, tmp_path / "voiced", glossary_path=spoken,
+                           budget=2200)
+    assert len(built["chunks"]) > 1, "one worksheet proves nothing about the rest"
+    for entry in built["chunks"]:
+        text = (tmp_path / "voiced" / entry["file"]).read_text(encoding="utf-8")
+        assert "روایت رسمی اما ساده" in text, entry["id"]
+
+    # And it is part of the question, so it moves the request token: a worksheet
+    # translated against one register is not an answer to another.
+    assert [entry["request"] for entry in built["chunks"]] \
+        != [entry["request"] for entry in silent["chunks"]]

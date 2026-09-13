@@ -31,6 +31,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import bookir as ir  # noqa: E402
 import glossary as gl  # noqa: E402
+import naming  # noqa: E402
 
 
 def _ali_glossary() -> tuple[dict, dict]:
@@ -60,7 +61,7 @@ def test_placement_and_the_gate_agree_about_what_counts_as_a_mention(pinned, why
     glossary, entry = _ali_glossary()
     book = _two_paragraphs(pinned)
 
-    owner = gl.introduction_owner(entry, book["blocks"])
+    owner = naming.owner_of(entry, book["blocks"])
     placed = (gl.enforce_first_mentions(glossary, book).get("introduced")
               or {}).get(entry["id"], "")
 

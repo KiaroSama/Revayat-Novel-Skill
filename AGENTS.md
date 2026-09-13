@@ -90,8 +90,18 @@ tests/              pytest; fixtures are generated, never committed
 5. **Every CLI entry point calls `ir.use_utf8_stdio()` first.** A Windows
    console defaults to a legacy code page and raises on the first Persian
    character.
-6. **Write files with `ir.write_text`.** It is atomic and uses `newline=""`, so
-   files do not silently become CRLF on Windows.
+6. **Write files with `ir.write_text`, and change `book.json` only through
+   `bookwrite.transaction`.** `write_text` is atomic and uses `newline=""`, so
+   files do not silently become CRLF on Windows — and atomic replacement of one
+   file is not what a book needs. The transaction takes a lock, reads the book
+   inside it, validates the result whole before anything lands, journals every
+   file it will touch with both states, and writes the side files before the book
+   so the book's own digest says whether the commit happened. A writer that
+   computed its result from an earlier read passes that digest as `expect` and is
+   refused — never merged by guesswork — if the file moved: a lost update is a
+   well-formed file nobody notices. An interrupted write is finished or undone by
+   the next writer, deterministically, and a journal describing a state the book
+   is not in is left for a person rather than guessed at.
 7. **A worksheet id must round-trip.** If a worksheet offers `@@ b00042#alt`,
    merge must accept it — the `#` in `HEADER` is deliberate, and the regression is
    covered. The grammar lives in `worksheet.py` precisely so there is one of it:
@@ -269,9 +279,23 @@ Everything else — LibreOffice on all three platforms, the OCR tier — runs in
     and kinds, the exact segment boundaries, the neighbouring context and the term
     table — but not our own scaffolding comments, because one of them counts the
     jobs and a reply that is still valid must stay usable. Separately,
-    `source_sha256` is the `units2:` digest over the units **as cut**,
+    `source_sha256` is the `units3:` digest over the units **as cut**,
     recomputable from the `unit_spans` the manifest records; the old `units:` form
     hashed the parent blocks, which is one value for every segment of a paragraph,
     so a recut at a different budget compared a digest against itself and merged
-    one generation's answers into another's cut. A reply carrying no token is
-    refused by name, with `merge --revalidate-unbound` as the explicit migration.
+    one generation's answers into another's cut. `units3:` adds the live kind and
+    the live glossary and context the worker was shown, because `units2:` hashed
+    the *recorded* kind — the manifest against itself — so turning a paragraph
+    into a heading left it still. A reply carrying no token is refused by name,
+    with `merge --revalidate-unbound` as the explicit migration.
+
+11. **A check must not be able to answer itself.** Every defect the audits have
+    found is one shape: a value compared against its own source, a field nothing
+    writes, a list truncated for display, or a counter reset by the thing it
+    counts. So a scheduler and the writer it feeds read **one** resolver
+    (`eligible.eligibility`), the review stages and the typography pass read
+    **one** inventory of what the book publishes (`published.units`), and a repair
+    budget counts arguments about an issue (`repairlog`) rather than rounds keyed
+    to a revision a repair moves. When a formula changes, its tag changes with it
+    (`units3:`, `page3:`, `meaning2:`, `fluency2:`, `rev1:`, `req1:`) so an older
+    record is reported unverifiable instead of being guessed either way.

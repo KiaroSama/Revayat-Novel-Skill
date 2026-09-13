@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import bookir as ir
+import bookwrite
 import famorph
 import published
 import runstate
@@ -441,6 +442,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     book_path = Path(args.book)
+    before = bookwrite.file_digest(book_path)
     book = ir.load_book(book_path)
 
     if args.action == "fix":
@@ -451,7 +453,15 @@ def main(argv: list[str] | None = None) -> int:
             ellipsis=not args.no_ellipsis,
         )
         report = fix_book(book, options)
-        ir.save_book(book, book_path)
+        try:
+            bookwrite.replace(book_path, book, actor="falint.fix", expect=before)
+        except bookwrite.Refused as stopped:
+            # Typography rewrites every target in the book, so committing over a
+            # file that moved would take somebody's translation with it.
+            print(json.dumps({"ok": False, "refused": stopped.reason,
+                              "detail": stopped.detail}, ensure_ascii=False,
+                             indent=1))
+            return 2
         # The source side is the input: typography rewrites targets, so hashing
         # the file would mark this stage stale against its own output.
         runstate.RunState(book_path.parent).record("typography", {

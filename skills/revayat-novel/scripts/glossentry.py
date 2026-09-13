@@ -91,6 +91,17 @@ def new_glossary() -> dict[str, Any]:
             "original_parenthetical": "first_mention",
             "lock_canonical": True,
             "keep_aliases_distinct": True,
+            # How this book's *narration* sounds, in one or two sentences of
+            # Persian: formal or plain, contemporary or period, spare or
+            # ornamented. Empty by default, because an invented house style is
+            # worse than none — a translator asked to match a voice nobody chose
+            # picks one per chunk, which is the same defect as every chunk
+            # deciding for itself where to introduce a name. Filled in, it is
+            # rendered into every worksheet, so the twentieth chunk is told what
+            # the first was told. The character cards in `voices` are a different
+            # question: they are about who is speaking, this is about the prose
+            # around them.
+            "book_voice": "",
         },
         "entries": [],
         "voices": [],
