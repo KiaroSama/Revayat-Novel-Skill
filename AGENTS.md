@@ -48,6 +48,7 @@ tests/              pytest; fixtures are generated, never committed
 | `chunk.py` | worksheets by character budget, and superseding an answer whose worksheet was re-cut |
 | `worksheet.py` | the transport: the `@@` grammar, the escape, the reader, and **one** verdict on a reply that merge and status both ask |
 | `pagerun.py` | the page lifecycle: one job per source page, and the gates a page must clear |
+| `pageprogress.py` | the read side of a run — where every page stands, which is next, and whether a page reported finished still matches the book |
 | `pageidentity.py` | what a page *is*: which blocks it owns, its geometry, its OCR state, and the versioned digest that says whether its translation still matches |
 | `pagecli.py` | the `pages` command line; `pagerun.main` forwards here |
 | `sourcepages.py` | the source PDF as an artefact: a page's visual identity, one file per page |
