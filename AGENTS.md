@@ -176,10 +176,16 @@ Keep the three plugin manifests at the same `version` — CI enforces it.
 
 Every tracked text file must be UTF-8; CI enforces that too.
 
-CI also runs `ruff check skills/revayat-novel/scripts tests` on ruff's default
-rules, so an unused import fails the build. It is **pinned** (`ruff.toml` sets
-only `target-version`; the CI step pins the version) because ruff's default set
-widens between releases. If you split a module, put every deliberate re-export
+CI also runs `ruff check skills/revayat-novel/scripts tests evaluation` on ruff's
+default rules, so an unused import fails the build. The version is **pinned in
+`requirements-lint.txt`** — `ruff.toml` sets only `target-version` — because
+ruff's default set widens between releases: this gate went in green at 0.15.14
+and 0.16.6 reported 196 findings, mostly on Persian string literals. Lint locally
+with that same version or you are not testing the gate:
+`pip install -r requirements-lint.txt`. The pin lives in a tracked manifest rather
+than on the CI command line so Dependabot can see it and propose a bump; moving it
+means reading ruff's changelog for new default rules first.
+If you split a module, put every deliberate re-export
 in one block with `# noqa: F401` — the linter cannot tell a re-export from a
 dead import, and a name a test imports is public whatever it looks like inside
 the file.
