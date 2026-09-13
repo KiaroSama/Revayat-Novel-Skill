@@ -14,7 +14,13 @@
     "`fails` is the other half and the reason the file is useful: a plausible,",
     "fluent rendering that changes the meaning. Those are the ones structural QA",
     "cannot see — they have the right length, the right markers and the right",
-    "names."
+    "names.",
+    "",
+    "The fourth audit asked for the axes below the first eight: negation scope,",
+    "modality, speaker attribution, irony, a second idiom, dialogue register and a",
+    "clause split across segments. Each was written for this file and checked",
+    "against the rubric it states; none was reviewed by an independent translator,",
+    "and that is a limit of the benchmark rather than a claim about it."
   ],
   "cases": [
     {
@@ -144,6 +150,122 @@
         }
       ],
       "rationale": "A dropped subordinate clause and a terser style look identical to a length ratio."
+    },
+    {
+      "id": "negscope-01",
+      "axis": "negation scope",
+      "source": "Not all of the guests had left.",
+      "accepts": [
+        "همهٔ مهمان‌ها نرفته بودند.",
+        "بعضی از مهمان‌ها هنوز مانده بودند."
+      ],
+      "fails": [
+        {
+          "text": "هیچ‌یک از مهمان‌ها نرفته بود.",
+          "why": "*None* of the guests had left. The negation now takes the whole set instead of `all`, so a sentence about a partial departure says nobody moved."
+        }
+      ],
+      "rationale": "Negation and a quantifier in one clause: which of the two the negation attaches to is the fact, and both readings are fluent Persian of the same length."
+    },
+    {
+      "id": "modal-01",
+      "axis": "modality",
+      "source": "He must have waited outside.",
+      "accepts": [
+        "باید بیرون منتظر مانده باشد.",
+        "حتماً بیرون منتظر مانده است."
+      ],
+      "fails": [
+        {
+          "text": "باید بیرون منتظر بماند.",
+          "why": "*He is required to wait outside.* An inference about the past became an instruction about the future — one verb form apart, with the same «باید»."
+        }
+      ],
+      "rationale": "English `must` is inference here and obligation elsewhere; Persian marks the difference in the verb, so the wrong form turns a guess into an order."
+    },
+    {
+      "id": "speaker-01",
+      "axis": "speaker attribution",
+      "source": "She told her sister that she had signed it herself.",
+      "accepts": [
+        "به خواهرش گفت که خودش آن را امضا کرده است.",
+        "به خواهرش گفت آن را خودش امضا کرده."
+      ],
+      "fails": [
+        {
+          "text": "خواهرش گفت که او آن را امضا کرده است.",
+          "why": "*Her sister said that she had signed it.* Speaker and signer are swapped, which Persian's dropped subjects make easy and no count can see."
+        }
+      ],
+      "rationale": "Persian omits the subject where English repeats it, so who is speaking and who acted have to be carried by the structure the translator chooses."
+    },
+    {
+      "id": "irony-01",
+      "axis": "irony",
+      "source": "Wonderful, another letter from the bank.",
+      "accepts": [
+        "چه عالی، یک نامهٔ دیگر از بانک.",
+        "به‌به، نامهٔ دیگری از بانک."
+      ],
+      "fails": [
+        {
+          "text": "نامهٔ دیگری از بانک رسید، که خبر خوبی بود.",
+          "why": "The irony is resolved into a statement that the news was good — the opposite of what the line means, and an explanation the source does not contain."
+        }
+      ],
+      "rationale": "Irony survives translation only as form; explaining it away is the commonest way a fluent rendering states the opposite of the source."
+    },
+    {
+      "id": "idiom-02",
+      "axis": "idiom",
+      "source": "He let the cat out of the bag before the contract was signed.",
+      "accepts": [
+        "پیش از امضای قرارداد راز را لو داد.",
+        "قبل از اینکه قرارداد امضا شود، راز را فاش کرد."
+      ],
+      "fails": [
+        {
+          "text": "پیش از امضای قرارداد گربه را از کیف بیرون آورد.",
+          "why": "The calque. Every word is Persian, the length is right, and the sentence is about a cat."
+        }
+      ],
+      "rationale": "A second idiom case, because the failure is not rare: an idiom is exactly the shape a model renders word by word while every structural gate passes."
+    },
+    {
+      "id": "dialogue-01",
+      "axis": "dialogue register",
+      "source": "The judge said, «Sit.» The clerk said, «Please, do sit down, sir.»",
+      "accepts": [
+        "قاضی گفت: «بنشین.» منشی گفت: «خواهش می‌کنم بفرمایید بنشینید، قربان.»",
+        "قاضی گفت: «بشین.» منشی گفت: «لطفاً بفرمایید بنشینید، آقا.»"
+      ],
+      "fails": [
+        {
+          "text": "قاضی گفت: «بفرمایید بنشینید.» منشی گفت: «بفرمایید بنشینید، آقا.»",
+          "why": "Both lines rendered at the clerk's register. The judge's curtness is the relationship between the two men, and flattening it deletes the scene."
+        },
+        {
+          "text": "قاضی گفت: «بشین بابا.» منشی گفت: «بشین دیگه.»",
+          "why": "Both flattened into colloquial speech instead. The same defect from the other side: two registers became one, and neither is the source's."
+        }
+      ],
+      "rationale": "Two speakers of different standing in one unit. Persian marks deference in the verb, so register is a fact about the text rather than a matter of taste."
+    },
+    {
+      "id": "split-01",
+      "axis": "cross-segment clauses",
+      "source": "Because the letter arrived after the office had closed, and because nobody had thought to leave a key, the clerk waited in the rain until morning.",
+      "accepts": [
+        "چون نامه پس از تعطیلی اداره رسید و چون هیچ‌کس به فکر جا گذاشتن کلید نبود، منشی تا صبح زیر باران ماند.",
+        "نامه پس از بسته شدن اداره رسید و کسی هم کلیدی نگذاشته بود؛ برای همین منشی تا صبح زیر باران ماند."
+      ],
+      "fails": [
+        {
+          "text": "چون نامه پس از تعطیلی اداره رسید، منشی تا صبح زیر باران ماند.",
+          "why": "The second cause — the key nobody left — is gone. A long sentence cut across two segments loses exactly the clause that fell in the other one, and the result reads perfectly."
+        }
+      ],
+      "rationale": "The failure a segmented worksheet produces: the sentence still parses, the length ratio is inside the band, and one of its two reasons is missing."
     }
   ]
 }
