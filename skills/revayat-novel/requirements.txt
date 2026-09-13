@@ -14,9 +14,11 @@
 # declares the wheels two stages need and the rest of the pipeline does without.
 # `../../constraints-ci.txt` is the exact set the build was checked against — the
 # floors below are the range the skill supports, which is not the same claim.
-# `.github/workflows/supported-range.yml` is what makes the floors a tested claim
-# rather than a stated one: it pins each to the lowest release that exists and
-# runs the suite on 3.10.
+# What makes the floors a tested claim rather than a stated one is
+# `dependency-floors.json`, which holds the lowest release inside each floor's own
+# series, plus the two lanes that read it: `supported-range.yml` installs that set
+# exactly and runs the suite on it, and `dependency-audit.yml` asks the advisory
+# database about the same set. One list, two questions.
 
 # Core — required for every run.
 # 1.24.3 and not 1.24: PyMuPDF published the module name `pymupdf` in 1.24.3,
@@ -24,7 +26,7 @@
 # imports `pymupdf`, so `>=1.24` named versions that cannot run it at all —
 # measured on 3.10: 1.24.0, 1.24.1 and 1.24.2 all raise ModuleNotFoundError,
 # 1.24.3 imports. The floor was never installed by any job, which is why a
-# false one survived; supported-range.yml installs it now.
+# false one survived; the floors lane installs it now.
 pymupdf>=1.24.3          # PDF text, geometry and original image bytes
 python-docx>=1.1         # DOCX reading and writing
 beautifulsoup4>=4.12     # EPUB (XHTML) parsing
