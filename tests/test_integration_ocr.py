@@ -136,6 +136,19 @@ def image_only_pdf(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope="module")
 def ocred(image_only_pdf, tmp_path_factory) -> Path:
+    """An OCR'd copy of the image-only fixture.
+
+    The guard lives here rather than on each test, because asking for this
+    fixture *is* asking for the whole toolchain — OCRmyPDF and Ghostscript as
+    well as Tesseract. A test marked `needs_tesseract` and given this fixture
+    did not skip on a machine with Tesseract and no OCRmyPDF: the fixture
+    raised, so pytest reported an **error**, which is not a skip and fails a
+    build. And because the fixture is module-scoped, pytest caches that
+    exception and re-raises it for every later requester. One guard at the
+    shared thing cannot be forgotten by the next test that needs it.
+    """
+    if not (HAVE_OCRMYPDF and HAVE_TESSERACT and HAVE_GHOSTSCRIPT):
+        pytest.skip("OCRmyPDF, Tesseract and Ghostscript are not all installed")
     directory = tmp_path_factory.mktemp("ocr-output")
     destination = directory / "ocr.pdf"
     run_ocr(image_only_pdf, destination, kind="scanned", language="eng")

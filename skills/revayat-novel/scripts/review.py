@@ -229,7 +229,14 @@ def _panels(paths: list[tuple[str, Path]], height: int) -> list[tuple[str, Any]]
             # it as ABSENT, and the sheet should say the same thing to a person.
             image = Image.new("RGB", (round(height * 0.7), height), (240, 240, 240))
             ImageDraw.Draw(image).text((10, 10), "(not rendered)", fill=(120, 0, 0))
-            label += " — absent"
+            # ASCII, because this string is *drawn* rather than printed and
+            # Pillow's default bitmap font encodes latin-1 only. An em dash
+            # here raised UnicodeEncodeError on pillow 10.0 — the version
+            # requirements.txt declares as the floor — and the broad except
+            # below turned it into "no compare sheet for this page", which
+            # is a reviewing step lost to a dash. Found by running the suite
+            # against the floors (supported-range.yml), not in CI.
+            label += " (absent)"
         out.append((label, image))
     return out
 
