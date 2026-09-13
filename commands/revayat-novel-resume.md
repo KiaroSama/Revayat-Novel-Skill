@@ -18,7 +18,8 @@ route, a `chunks/` directory means the budget route.
 3. For that page, the loop from SKILL.md step 4: translate the worksheet,
    `pages merge`, `render-qa`, look at both rendered images, `pages review`,
    `pages accept`. Then `pages next` again.
-4. When `next` reports nothing left: typography, `qa check`, build, and both
+4. When `next` reports nothing left: the bilingual review, typography,
+   `qa check`, build, and both
    step-9 checks.
 
 **Budget route (`<dir>/chunks` exists — EPUB, DOCX, text):**
@@ -26,7 +27,7 @@ route, a `chunks/` directory means the budget route.
 1. `revayat-novel.py chunk status --chunks <dir>/chunks` to find what is pending.
 2. Translate only the pending worksheets, in batches, as the skill describes.
 3. `revayat-novel.py merge --glossary …`, and re-run any chunk the report names.
-4. Continue with typography, QA, build and verify.
+4. Continue with the bilingual review, typography, QA, build and verify.
 
 Report how many worksheets were already complete, how many this run finished,
 and — on the page route — how many pages are accepted out of the total.

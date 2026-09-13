@@ -81,12 +81,12 @@ python skills/revayat-novel/scripts/revayat-novel.py doctor
 
 </div>
 
-اختیاری، و فقط برای PDF‌های اسکن‌شده یا ترکیبی:
+اختیاری. فایل `skills/revayat-novel/requirements-optional.txt` دو wheelی را اعلام می‌کند که دو مرحله به آن‌ها نیاز دارند: `ocrmypdf` برای PDF‌های اسکن‌شده یا ترکیبی، و `pywin32` برای مسیر رندر Word روی ویندوز. بقیهٔ خط لوله بی آن‌ها کار می‌کند و `doctor` می‌گوید کدام نصب است.
 
 <div dir="ltr">
 
 ```bash
-pip install ocrmypdf
+pip install -r skills/revayat-novel/requirements-optional.txt
 
 # Tesseract (موتور OCR):
 winget install tesseract-ocr.tesseract     # Windows
@@ -140,6 +140,13 @@ $PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1
 $PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
 $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
 
+# فارسی را پیش از صیقل‌دادن، کنار انگلیسی بخوانید. سه rubric دربارهٔ معنا
+# هستند و جلو را می‌گیرند؛ دو تای دیگر دربارهٔ سبک‌اند و عمداً چیزی نمی‌خواهند.
+$PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
+#   … work/review/sheet_NNNN.md را بخوانید و یافته‌ها را در out_sheet_NNNN.md بنویسید …
+$PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
+$PY $S/revayat-novel.py meaning status --book work/book.json --out work/review
+
 $PY $S/revayat-novel.py falint fix   --book work/book.json
 $PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
 $PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"
@@ -174,6 +181,9 @@ book.pdf / .epub / .docx
         ▼  translated in parallel, one fresh context each
    merge ── every @@ id must return exactly once, or it is a named error
         │
+        ▼
+   bilingual review ── does the Persian say what the English said? meaning
+        │               blocks, style is recorded and never sent back
         ▼
    Persian typography ── ZWNJ, punctuation, digits; protected regions untouched
         │
@@ -228,7 +238,7 @@ python -m pytest tests -q
 
 فایل‌های آزمون ساخته می‌شوند، نه commit: مجموعهٔ تست خودش PDF و EPUB و DOCX می‌سازد، پس سریع می‌ماند و هیچ متن کتاب متعلق به دیگران در مخزن قرار نمی‌گیرد.
 
-`tests/e2e_pipeline.py` تمام مراحل را روی یک کتاب ساختگی اجرا می‌کند — استخراج، واژه‌نامه، chunk، merge، تایپوگرافی، QA، ساخت و بازبینی package — تا شکستگی در درزِ میان دو مرحله حتی وقتی تست‌های هر ماژول سبزند هم گرفته شود. CI آن را روی Linux و macOS و Windows اجرا می‌کند.
+`tests/e2e_pipeline.py` تمام مراحل را روی یک کتاب ساختگی اجرا می‌کند — استخراج، واژه‌نامه، chunk، merge، بازبینی دوزبانه، تایپوگرافی، QA، ساخت و بازبینی package — تا شکستگی در درزِ میان دو مرحله حتی وقتی تست‌های هر ماژول سبزند هم گرفته شود. CI آن را روی Linux و macOS و Windows اجرا می‌کند.
 
 ## سپاس
 
