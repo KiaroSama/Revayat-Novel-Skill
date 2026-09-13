@@ -262,12 +262,21 @@ Never translate a block that appears under the neighbour-context heading — it
 already belongs to another page's worksheet.
 
 ```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py pages status --pages $WORK/pages
+$PY $SKILL_DIR/scripts/revayat-novel.py pages status   --pages $WORK/pages --book $WORK/book.json
 $PY $SKILL_DIR/scripts/revayat-novel.py pages next   --pages $WORK/pages
 ```
 
 `status` reports every page's state; `next` names the first page still to do,
 so an interrupted run resumes where it stopped rather than from the beginning.
+
+**Pass `--book`.** Without it `status` reports a stored label, and a label cannot
+notice that a page's text moved after it was finished — edit a paragraph, correct
+the source, re-merge, and the page still reads `accepted` while its rendered
+content no longer matches the evidence that was checked. With the book, each
+finished page's recorded digest is re-compared and a page whose content has moved
+comes back as `stale`, is not counted as accepted, and is what `next` hands you.
+The report says `freshness: unchecked` when the book is absent, rather than
+implying a check nobody ran; the command exits 2 when any page is stale.
 
 ### The page loop
 
@@ -446,7 +455,7 @@ Check what is left at any time — one of these, matching your route:
 
 ```bash
 $PY $SKILL_DIR/scripts/revayat-novel.py chunk status --chunks $WORK/chunks
-$PY $SKILL_DIR/scripts/revayat-novel.py pages status --pages  $WORK/pages
+$PY $SKILL_DIR/scripts/revayat-novel.py pages status --pages  $WORK/pages   --book $WORK/book.json
 ```
 
 `chunk status` reads each reply rather than trusting that the file exists, and

@@ -250,3 +250,238 @@ def test_the_digest_reads_no_field_the_project_never_writes(tmp_path):
 
     assert not invented, (
         f"the digest reads field(s) this project does not write: {invented}")
+
+
+# --------------------------------------------------------------------------- #
+# The source side — the digest hashed the Persian and not the English
+# --------------------------------------------------------------------------- #
+#
+# Every case above changes a *target*. That is the half that was thought about.
+# Re-extracting the source — a corrected OCR line, a re-read PDF — changed none of
+# them, so a page kept its accepted verdict while its Persian now answered text
+# that had gone. The same defect the chunk route fixed by moving `units:` to
+# `units2:`, and it survived here because a digest over the target *looks* like it
+# covers the page.
+
+@pytest.mark.parametrize("what, change", [
+    ("the body source",
+     lambda b: b["blocks"][0].update(text="Ali arrived at noon.[[fn:fn0001]]")),
+    ("a footnote's source",
+     lambda b: b["footnotes"][0].update(text="A corrected source note.")),
+    ("a running head's source",
+     lambda b: b["sections"][0]["headers"]["default"]["paragraphs"][0]
+     ["pieces"][0].update(text="Pride and Prejudice, Revised")),
+])
+def test_a_change_to_the_source_moves_the_digest(tmp_path, what, change):
+    book_path = _book(tmp_path)
+    before = pagerun.translation_hash(book_path, 1)
+
+    assert _edit(book_path, change) != before, (
+        f"{what} left the digest unchanged, so `accept` would pass a page whose "
+        f"translation answers text nobody compared it against")
+
+
+# --------------------------------------------------------------------------- #
+# A running head prints on every page of its section, not only the first
+# --------------------------------------------------------------------------- #
+#
+# The book above is one page, so it cannot express the case. A head used to be
+# selected by the rule that decides who *translates* it — the section's start
+# block being on this page — and a head is printed on every page of its section.
+# Correcting one moved the digest of the section's first page and no other, so
+# pages 2..n kept an accepted verdict above a changed header. These need a section
+# that spans pages.
+
+def _chapters(tmp_path: Path) -> Path:
+    """Three pages, two sections: page 1 is section one, pages 2-3 section two.
+
+    The PDF is not decoration — `pagerun.build` cuts one PDF per source page and
+    correctly refuses a book whose source is missing, which the `status` tests
+    below need. Three blank pages; nothing reads their content.
+    """
+    pymupdf = pytest.importorskip("pymupdf")
+    source = tmp_path / "source.pdf"
+    document = pymupdf.open()
+    for _ in range(3):
+        document.new_page(width=396, height=612)
+    document.save(str(source))
+    document.close()
+
+    book = ir.new_book(source_path=str(source), source_format="pdf",
+                       lang_source="en", lang_target="fa-IR")
+    for index, (page, text) in enumerate(
+            [(1, "The first chapter opens here."),
+             (2, "The second chapter opens here."),
+             (3, "And carries on across a page break.")], start=1):
+        block = ir.make_block("paragraph", index, page=page,
+                              bbox=[72, 90, 320, 140], text=text)
+        block["target"] = f"[fa] {text}"
+        book["blocks"].append(block)
+
+    def section(start_block, unit, title):
+        return {"start_block": start_block, "footers": {},
+                "headers": {"default": {"paragraphs": [
+                    {"align": "center", "pieces": [
+                        {"id": unit, "text": title,
+                         "target": f"[fa] {title}"}]}]}}}
+
+    book["sections"] = [section(None, "rh0001", "Chapter One"),
+                        section("b00002", "rh0002", "Chapter Two")]
+    path = tmp_path / "book.json"
+    ir.save_book(book, path)
+    return path
+
+
+def test_sections_covering_is_not_the_ownership_rule(tmp_path):
+    """The resolver the fix rests on, and the distinction it exists to keep."""
+    book = ir.load_book(_chapters(tmp_path))
+    first, second = book["sections"]
+
+    assert ir.sections_covering(book, ["b00001"]) == [first]
+    # b00003 is inside section two without opening it — the case the ownership
+    # rule got wrong, and the only case that distinguishes the two rules.
+    assert ir.sections_covering(book, ["b00003"]) == [second]
+    assert ir.sections_covering(book, ["b00001", "b00003"]) == [first, second]
+    assert ir.sections_covering(book, []) == []
+    # The first section is in force from the top of the book whatever it declares,
+    # which is how `build_docx` builds it: no break before the first.
+    assert first["start_block"] is None
+
+
+@pytest.mark.parametrize("field, value", [
+    ("target", "[fa] فصل دوم، اصلاح‌شده"),
+    ("text", "Chapter Two, Revised"),
+])
+def test_correcting_a_head_moves_every_page_of_its_section(tmp_path, field, value):
+    book_path = _chapters(tmp_path)
+    before = {page: pagerun.translation_hash(book_path, page) for page in (1, 2, 3)}
+
+    book = ir.load_book(book_path)
+    piece = book["sections"][1]["headers"]["default"]["paragraphs"][0]["pieces"][0]
+    piece[field] = value
+    ir.save_book(book, book_path)
+    after = {page: pagerun.translation_hash(book_path, page) for page in (1, 2, 3)}
+
+    assert after[2] != before[2], "the page the section opens on did not move"
+    assert after[3] != before[3], (
+        "page 3 prints this header and kept its digest, so an accepted page now "
+        "shows a running head nobody re-read")
+    assert after[1] == before[1], (
+        "page 1 is in the other section and must not be invalidated by it")
+
+
+def test_a_head_from_another_section_does_not_reach_this_page(tmp_path):
+    """The negative twin: the fix must not be "invalidate everything"."""
+    book_path = _chapters(tmp_path)
+    before = pagerun.translation_hash(book_path, 3)
+
+    book = ir.load_book(book_path)
+    piece = book["sections"][0]["headers"]["default"]["paragraphs"][0]["pieces"][0]
+    piece["target"] = "[fa] فصل یکم، اصلاح‌شده"
+    ir.save_book(book, book_path)
+
+    assert pagerun.translation_hash(book_path, 3) == before
+
+
+# --------------------------------------------------------------------------- #
+# `pages status` — a stored label cannot notice that the page moved
+# --------------------------------------------------------------------------- #
+#
+# `accept` catches a moved page, but only when somebody runs `accept`. Until then
+# `status` reported the label and `next` skipped the page, so the operator was
+# told the work was finished. Given the book, status re-compares each finished
+# page through the same one formula.
+
+def _finish(pages_dir: Path, book_path: Path, page: int) -> None:
+    import runstate
+
+    state = runstate.RunState(pages_dir.parent)
+    state.set_page(page, "merged",
+                   hashes={"translation": pagerun.translation_hash(book_path, page)})
+    state.set_page(page, "qa_passed")
+    state.set_page(page, "accepted")
+
+
+def test_status_hands_back_a_finished_page_whose_text_moved(tmp_path):
+    book_path = _chapters(tmp_path)
+    pages_dir = tmp_path / "pages"
+    pagerun.build(book_path, pages_dir)
+    _finish(pages_dir, book_path, 1)
+
+    fresh = pagerun.status(pages_dir, book_path)
+    assert fresh["freshness"] == "checked"
+    assert fresh["stale"] == []
+    assert next(p for p in fresh["pages"] if p["page"] == 1)["state"] == "accepted"
+
+    book = ir.load_book(book_path)
+    book["blocks"][0]["text"] = "Corrected entirely."
+    ir.save_book(book, book_path)
+
+    moved = pagerun.status(pages_dir, book_path)
+    page_one = next(p for p in moved["pages"] if p["page"] == 1)
+    assert page_one["state"] == "stale", (
+        "status still reports the page as accepted, so the operator is told a "
+        "page is finished whose translation answers text that is gone")
+    assert page_one["stale"] == "translation-changed"
+    assert page_one["recorded_state"] == "accepted", (
+        "the stored label is still worth reporting — it says what was claimed")
+    assert moved["stale"] == [1]
+    assert moved["next"] == 1, "a stale page must be handed back, not skipped"
+
+
+def test_status_without_a_book_says_it_checked_nothing(tmp_path):
+    """An unverifiable report must not read like a verified one."""
+    import runstate
+
+    book_path = _chapters(tmp_path)
+    pages_dir = tmp_path / "pages"
+    pagerun.build(book_path, pages_dir)
+    state = runstate.RunState(pages_dir.parent)
+    state.set_page(1, "merged", hashes={
+        "translation": pagerun.PAGE_DIGEST_VERSION + ":" + "0" * 64})
+    state.set_page(1, "qa_passed")
+    state.set_page(1, "accepted")
+
+    blind = pagerun.status(pages_dir)
+    assert blind["freshness"] == "unchecked"
+    assert blind["stale"] == []
+
+    seen = pagerun.status(pages_dir, book_path)
+    assert seen["freshness"] == "checked"
+    assert seen["stale"] == [1]
+
+
+def test_a_page_with_no_digest_yet_is_not_called_stale(tmp_path):
+    """A gate that fired here would call every un-translated page stale."""
+    book_path = _chapters(tmp_path)
+    pages_dir = tmp_path / "pages"
+    pagerun.build(book_path, pages_dir)
+
+    report = pagerun.status(pages_dir, book_path)
+    assert report["stale"] == []
+    assert {page["state"] for page in report["pages"]} == {"extracted"}
+
+
+def test_the_status_cli_exits_non_zero_on_a_stale_page(tmp_path, capsys):
+    import json
+
+    import pagecli
+
+    book_path = _chapters(tmp_path)
+    pages_dir = tmp_path / "pages"
+    pagerun.build(book_path, pages_dir)
+    _finish(pages_dir, book_path, 1)
+
+    where = ["status", "--pages", str(pages_dir), "--book", str(book_path)]
+    assert pagecli.main(where) == 0
+    capsys.readouterr()
+
+    book = ir.load_book(book_path)
+    book["blocks"][0]["target"] = "[fa] چیز دیگری."
+    ir.save_book(book, book_path)
+
+    assert pagecli.main(where) == 2, (
+        "a page the operator was told is finished, and is not, exited 0")
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["stale"] == [1], printed
+    assert printed["by_state"].get("stale") == 1, printed

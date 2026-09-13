@@ -39,6 +39,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
     p_status = sub.add_parser("status", help="where every page stands")
     p_status.add_argument("--pages", required=True)
+    p_status.add_argument("--book", default=None,
+                          help="check that each finished page's recorded "
+                               "evidence still matches the book. Without it the "
+                               "report is a stored label, which cannot notice "
+                               "that a page's text moved; it then says "
+                               "`freshness: unchecked` rather than implying a "
+                               "check nobody ran")
 
     p_next = sub.add_parser("next", help="the first page that is not accepted")
     p_next.add_argument("--pages", required=True)
@@ -119,10 +126,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.action == "status":
-        progress = pagerun.status(Path(args.pages))
+        progress = pagerun.status(Path(args.pages),
+                                 Path(args.book) if args.book else None)
         print(json.dumps({k: v for k, v in progress.items() if k != "pages"},
                          ensure_ascii=False, indent=1))
-        return 0
+        # A stale page is not a failure to report and exit 0 on: it is a page
+        # the operator has already been told is finished.
+        return 2 if progress["stale"] else 0
 
     if args.action == "merge":
         report = pagerun.merge_page(

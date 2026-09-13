@@ -462,7 +462,14 @@ def qa_report_path(work_dir: Path, page: int) -> Path:
     return work_dir / "qa" / "pages" / f"page-{page:04d}.json"
 
 
-def status(out_dir: Path) -> dict[str, Any]:
+#: States whose evidence a recorded digest can be compared against. Earlier
+#: states have no digest yet, so checking them would report every pending page as
+#: stale — a gate that fires on everything is as useless as one that fires on
+#: nothing.
+_FRESHNESS_CHECKED = frozenset({"merged", "qa_passed", "accepted"})
+
+
+def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
     """Where every page stands, and which one to work on next.
 
     Reported per source page, not per job: a page split into sub-jobs is still
@@ -471,6 +478,21 @@ def status(out_dir: Path) -> dict[str, Any]:
     ``next`` is the first page that is not accepted, in page order. A page is
     finished when the run state says ``accepted`` and not before: a worksheet
     with an answer in it is translated, which is three states short of done.
+
+    **``book_path`` is what makes ``accepted`` mean anything.** Without it this
+    function reports a stored label, and a label cannot notice that the page's
+    text moved underneath it — edit a paragraph, re-merge through the chunk
+    route, correct the source, and the page still reads ``accepted`` while its
+    rendered content no longer matches the evidence that was checked. `accept`
+    catches that at accept time, but by then the operator has already been told
+    the page is done and ``next`` has already skipped it. Given the book, each
+    accepted page's recorded digest is re-compared with
+    :func:`translation_hash` — the one formula, not a second opinion — and a page
+    whose content has moved is reported ``stale``, counted as unfinished, and
+    handed back by ``next``.
+
+    Without it the report says ``freshness: "unchecked"`` rather than implying a
+    verification nobody performed.
     """
     manifest = load_manifest(out_dir)
     state = runstate.RunState(out_dir.parent)
@@ -479,15 +501,25 @@ def status(out_dir: Path) -> dict[str, Any]:
     for number in dict.fromkeys(entry["page"] for entry in manifest["chunks"]):
         entries = jobs_for(manifest, number)
         record = state.page(number) or {}
+        reported = record.get("state", "pending")
+        stale = ""
+        if book_path is not None and reported in _FRESHNESS_CHECKED:
+            refusal, detail = _translation_moved(Path(book_path), number, record)
+            if refusal:
+                stale, reported = refusal, "stale"
         pages.append({
             "page": number,
-            "state": record.get("state", "pending"),
+            "state": reported,
+            "stale": stale,
+            "recorded_state": record.get("state", "pending"),
             "attempts": int(record.get("attempts", 0)),
             "last_error": record.get("last_error", ""),
             "answered": all(answer(out_dir, entry) for entry in entries),
             "jobs": len(entries),
             "payload_chars": max(entry["payload_chars"] for entry in entries),
         })
+        if stale:
+            pages[-1]["last_error"] = detail
 
     unfinished = [p for p in pages if p["state"] != "accepted"]
     return {
@@ -496,6 +528,8 @@ def status(out_dir: Path) -> dict[str, Any]:
         "next": unfinished[0]["page"] if unfinished else None,
         "by_state": dict(sorted(Counter(p["state"] for p in pages).items())),
         "failed": [p["page"] for p in pages if p["state"] == "failed"],
+        "stale": [p["page"] for p in pages if p["stale"]],
+        "freshness": "checked" if book_path is not None else "unchecked",
         "split": manifest.get("split", []),
         "orphaned": manifest.get("orphaned", []),
         "reference_pdf": manifest.get("reference_pdf", ""),
