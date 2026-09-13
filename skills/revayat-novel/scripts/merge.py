@@ -25,7 +25,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import bookir as ir
 import glossary as gl
@@ -212,15 +212,48 @@ def _anchor_notes(book: dict[str, Any], notes: list[dict[str, Any]]) -> None:
 # Writing
 # --------------------------------------------------------------------------- #
 
+def addressing(book: dict[str, Any]) -> Callable[[str], tuple[dict[str, Any], str] | None]:
+    """A resolver from unit id to ``(container, field)``, or ``None`` if it has none.
+
+    One addressing rule, built once per book. :func:`apply_units` writes through
+    it and `meaning.py` reads through it, because a reader with its own copy of
+    "where does the translation of this unit live" drifts in one direction:
+    towards reading a field nothing writes. A check against a field nothing
+    writes compares emptiness with emptiness and passes — this repository has
+    shipped that twice, and both times the check looked right.
+
+    Built once rather than resolved per call: the indexes are O(book), and a
+    review walks every unit.
+    """
+    blocks = ir.blocks_by_id(book)
+    notes = {note["id"]: note for note in book.get("footnotes", [])}
+    running = ir.running_heads(book)
+
+    def resolve(unit_id: str) -> tuple[dict[str, Any], str] | None:
+        if unit_id.endswith("#alt"):
+            block = blocks.get(unit_id[: -len("#alt")])
+            if block is None or block["type"] != "image":
+                return None
+            return block, "target_alt"
+        if unit_id in notes:
+            return notes[unit_id], "target"
+        if unit_id in running:
+            return running[unit_id], "target"
+        block = blocks.get(unit_id)
+        if block is not None and block["type"] in ir.TEXT_TYPES:
+            return block, "target"
+        return None
+
+    return resolve
+
+
 def apply_units(book: dict[str, Any], units: dict[str, str]) -> dict[str, Any]:
     """Write translations onto the book. Returns a report of what landed.
 
     ``unknown`` is load-bearing: a manifest id that resolves to nothing in this
     book is not a merge, and the caller must not count the chunk as applied.
     """
-    blocks = ir.blocks_by_id(book)
-    notes = {note["id"]: note for note in book.get("footnotes", [])}
-    running = ir.running_heads(book)
+    resolve = addressing(book)
     applied, unknown, blank = [], [], []
 
     for unit_id, value in units.items():
@@ -229,21 +262,12 @@ def apply_units(book: dict[str, Any], units: dict[str, str]) -> dict[str, Any]:
             blank.append(unit_id)
             continue
 
-        if unit_id.endswith("#alt"):
-            block = blocks.get(unit_id[: -len("#alt")])
-            if block is None or block["type"] != "image":
-                unknown.append(unit_id)
-                continue
-            block["target_alt"] = text
-        elif unit_id in notes:
-            notes[unit_id]["target"] = text
-        elif unit_id in running:
-            running[unit_id]["target"] = text
-        elif unit_id in blocks and blocks[unit_id]["type"] in ir.TEXT_TYPES:
-            blocks[unit_id]["target"] = text
-        else:
+        slot = resolve(unit_id)
+        if slot is None:
             unknown.append(unit_id)
             continue
+        container, field = slot
+        container[field] = text
         applied.append(unit_id)
 
     return {"applied": applied, "unknown": unknown, "blank": blank}
@@ -304,7 +328,14 @@ def merge(
             report["missing_outputs"].append(entry["id"])
             continue
 
-        entries = read_worksheet(output.read_text(encoding="utf-8"))
+        # `read_reply`, not `read_worksheet`: the second drops the transport's own
+        # verdict, and this is the only door a translation walks through. An
+        # unclosed fence — the shape of a truncated answer — was reported by
+        # `payload`, discarded here and merged, while `classify` read the same
+        # reply and called it `invalid`. So `status` said the job was unfinished
+        # and `merge` wrote it in anyway: the two sides of the grammar disagreeing
+        # about one file, which is the thing worksheet.py exists to prevent.
+        entries, transport = read_reply(output.read_text(encoding="utf-8"))
         expected = list(entry.get("unit_ids") or [])
         expected_set = set(expected)
         kinds = entry.get("unit_kinds") or {}
@@ -312,6 +343,7 @@ def merge(
             report["unverified_kinds"].append(entry["id"])
 
         problems, rejected = validate_reply(entries, expected, kinds)
+        problems = transport + problems
 
         # The manifest says which formula produced its digest, because the two
         # routes record different ones under the same key.
