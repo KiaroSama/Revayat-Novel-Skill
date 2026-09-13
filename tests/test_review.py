@@ -16,6 +16,11 @@ import pytest
 import review
 import runstate
 
+#: This whole module is the `render` tier: it drives a real renderer and costs
+#: minutes. CI runs it on every push; a local run can deselect it with
+#: `-m "not render and not ocr"`. See pytest.ini.
+pytestmark = pytest.mark.render
+
 
 def _rendered(work_dir, page: int = 1, digest: str = "a" * 64) -> str:
     """Put a page in the state a reviewer would find it in."""

@@ -32,6 +32,11 @@ import renderqa  # noqa: E402
 import wordrender  # noqa: E402
 from build_docx import Builder, add_arguments  # noqa: E402
 
+#: This whole module is the `render` tier: it drives a real renderer and costs
+#: minutes. CI runs it on every push; a local run can deselect it with
+#: `-m "not render and not ocr"`. See pytest.ini.
+pytestmark = pytest.mark.render
+
 pymupdf = pytest.importorskip("pymupdf")
 
 PERSIAN = "متن فارسی یکتا برای آزمون کش رندر است و باید روی صفحه بیاید."

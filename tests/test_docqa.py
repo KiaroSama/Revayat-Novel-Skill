@@ -37,6 +37,11 @@ import review
 import wordrender
 from build_docx import Builder, add_arguments
 
+#: This whole module is the `render` tier: it drives a real renderer and costs
+#: minutes. CI runs it on every push; a local run can deselect it with
+#: `-m "not render and not ocr"`. See pytest.ini.
+pytestmark = pytest.mark.render
+
 #: Findings that describe the *machine that rendered*, not the book. A CI runner
 #: with no Persian font installed reports `font-fallback` on every page of a
 #: perfectly correct document — that is the check working, and it is a WARNING

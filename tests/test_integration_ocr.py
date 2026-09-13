@@ -27,6 +27,11 @@ import bookir as ir
 import qa
 from extract import find_ocrmypdf, find_tool, ocr_command, run_ocr
 
+#: This whole module is the `ocr` tier: it drives a real OCR toolchain and costs
+#: minutes. CI runs it on every push; a local run can deselect it with
+#: `-m "not render and not ocr"`. See pytest.ini.
+pytestmark = pytest.mark.ocr
+
 #: A tessdata directory inside the project, used when the system one cannot be
 #: written to. It must be the *whole* directory, not just the language file:
 #: Tesseract reads `configs/` from TESSDATA_PREFIX too, and a prefix holding
