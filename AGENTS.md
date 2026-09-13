@@ -134,6 +134,16 @@ with extra steps. The one tier CI cannot run is the Word COM backend: no hosted
 runner has an Office licence, so that path is exercised only by a local full run
 on a machine with Word, and `doctor` reports which backend a machine has.
 
+**The suite's scratch files stay inside the repository**, in a git-ignored
+`.pytest-tmp/`. They are not small — a render tier writes PDFs, DOCX files and
+page rasters — and under pytest's default they accumulate in the OS temp
+directory, where nobody looking at the project can see them. `tests/conftest.py`
+points `tmp_path` here instead, resolved from its own location so it does not
+matter which directory you started pytest in. pytest **deletes** an explicitly
+given basetemp at the start of each run, so that hook refuses the directory and
+falls back to the default if it ever holds something the suite did not create;
+pass `--basetemp=<dir>` to override it deliberately.
+
 `pytest.ini` carries the per-test ceiling (300s, thread method) so a bare
 `pytest` is bounded too — the flag used to live only in CI. The two workflows
 that override it, `integration.yml` and `word-render.yml`, do so because real

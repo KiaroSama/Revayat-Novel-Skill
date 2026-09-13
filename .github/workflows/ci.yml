@@ -332,12 +332,12 @@ jobs:
 
       - name: Nothing unused, nothing undefined
         run: |
-          # Pinned, and it has to be. Ruff's *default* rule set widens between
-          # releases: this gate went in verified against 0.15.14 (zero findings)
-          # and 0.16.6 reported 196, most of them ISC004 on the Persian string
-          # literals this project exists to handle. An unpinned linter turns a
-          # green build red on someone else's release schedule.
-          python -m pip install ruff==0.15.14
+          # Pinned in a tracked manifest rather than on this line, so Dependabot
+          # can see it: the `/` pip entry already collects `requirements-lint.txt`
+          # beside `constraints-ci.txt`, while an inline `pip install X==Y` here
+          # was in no lane at all and could never be told it was out of date.
+          # `requirements-lint.txt` carries the reason the pin exists.
+          python -m pip install -r requirements-lint.txt
           # Defaults only. The repository had seven dead imports in the
           # published scripts when this went in, two of them left behind by
           # refactors that moved the code but not the import — the kind of thing

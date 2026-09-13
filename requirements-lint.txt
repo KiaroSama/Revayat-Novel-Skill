@@ -1,0 +1,28 @@
+# The linter the build gates on, pinned, and tracked so something watches it.
+#
+# It has to be pinned. Ruff's *default* rule set widens between releases: this
+# gate went in verified against 0.15.14 (zero findings) and 0.16.6 reported 196,
+# most of them ISC004 on the Persian string literals this project exists to
+# handle. An unpinned linter turns a green build red on someone else's release
+# schedule, on a commit that changed nothing.
+#
+# It used to be pinned inline in `ci.yml` (`pip install ruff==0.15.14`), which
+# was correct and invisible: `dependabot.yml` watches `github-actions` for action
+# versions and the `/` pip directory for `constraints-ci.txt`, and an inline
+# `pip install X==Y` inside a workflow step is in neither. So the pin could not
+# drift a build red — and could never be told it was out of date either. It lives
+# here instead, in the same directory as `constraints-ci.txt`, which the existing
+# `/` pip entry already collects; a bump now arrives as a reviewable pull request
+# rather than as nothing at all.
+#
+# NOT in `constraints-ci.txt`, deliberately: a contract in
+# `tests/test_dependency_lanes.py` requires that file to name exactly what
+# `skills/revayat-novel/requirements.txt` declares, and ruff is neither a runtime
+# nor a test dependency of the skill. Adding it there would have broken a true
+# invariant to satisfy a tooling convenience.
+#
+# Moving this pin is a deliberate act: read ruff's changelog for new default
+# rules, run `ruff check skills/revayat-novel/scripts tests evaluation` locally
+# at the candidate version, and only then raise it.
+
+ruff==0.15.14

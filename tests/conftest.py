@@ -6,6 +6,8 @@ repository stays small, and no third-party book text is vendored in.
 
 from __future__ import annotations
 
+import os
+import stat
 import sys
 from pathlib import Path
 
@@ -17,6 +19,63 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 from tests_support import building, png_bytes  # noqa: E402  (path set above)
+
+#: Where every test's `tmp_path` lives: inside the project, not in the system temp
+#: directory. **pytest deletes an explicitly given basetemp at the start of every
+#: run**, so the deletable path is one level down and named for what it is —
+#: `.pytest-tmp/` is ours to keep, `.pytest-tmp/scratch/` is ours to wipe. Nothing
+#: but this suite should ever write either, and both are git-ignored.
+BASETEMP = Path(__file__).resolve().parents[1] / ".pytest-tmp" / "scratch"
+
+
+def _reparse_point(path: Path) -> bool:
+    """A symlink *or* a Windows directory junction.
+
+    `Path.is_symlink()` returns **False** for a junction, which is the form this
+    project's own notes warn about elsewhere — so checking only that would miss
+    the case on the platform it matters on.
+    """
+    try:
+        return bool(os.lstat(path).st_file_attributes
+                    & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except AttributeError:      # not Windows: no such attribute
+        return path.is_symlink()
+    except OSError:             # does not exist yet, which is the normal case
+        return False
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Keep the suite's scratch files in the project, wherever pytest was started.
+
+    Without this, `tmp_path` lands under the OS temp directory — nine
+    `pytest-of-<user>` trees had accumulated there, holding generated PDFs, DOCX
+    files and page rasters, none of it visible to anyone looking at the project.
+
+    Set here rather than as `addopts = --basetemp=.pytest-tmp` because that option
+    resolves against the **invocation directory**: run pytest from anywhere but the
+    repository root and the scratch tree appears there instead. This path comes
+    from the conftest file's own location, so it does not matter where you started.
+
+    The one refusal is a reparse point. Wiping *through* a junction or symlink is
+    the way a contained delete stops being contained, and it is the only case here
+    that could reach something real — an unexpected plain file cannot, because the
+    deletable directory is `.pytest-tmp/scratch` and nothing else claims that name.
+    """
+    if config.option.basetemp:  # an explicit --basetemp wins, as it should
+        return
+    for path in (BASETEMP, BASETEMP.parent):
+        if _reparse_point(path):
+            config.issue_config_time_warning(
+                UserWarning(f"{path} is a link rather than a directory; leaving "
+                            f"temporary files in the system directory rather than "
+                            f"deleting through it"),
+                stacklevel=1)
+            return
+    # pytest `mkdir`s the basetemp itself but **not** its parents, so a nested
+    # path without this raises `FileNotFoundError` at the first `tmp_path` — 29
+    # errors, all at setup, before this line existed.
+    BASETEMP.parent.mkdir(parents=True, exist_ok=True)
+    config.option.basetemp = str(BASETEMP)
 
 
 @pytest.fixture(scope="session")

@@ -32,6 +32,10 @@ venv/
 /.uv-cache/
 *.egg-info/
 .pytest_cache/
+# Where the suite keeps every test's tmp_path, so scratch files stay inside the
+# project instead of the OS temp directory. pytest wipes `scratch/` at the start
+# of each run, which is why the deletable path is one level down.
+/.pytest-tmp/
 .ruff_cache/
 
 # --- Revayat Novel working directories and outputs ---
