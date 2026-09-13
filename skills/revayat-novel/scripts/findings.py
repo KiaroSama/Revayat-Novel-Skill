@@ -33,7 +33,14 @@ class Report:
         """
         self.counts[name] = value
 
-    def summary(self, limit: int = 60) -> dict[str, Any]:
+    def summary(self, limit: int | None = 60) -> dict[str, Any]:
+        """``limit=None`` for every finding — what a *gate* has to ask for.
+
+        The default exists so a report a person opens is readable. Anything that
+        branches on the list, or counts it, or concatenates it into a list
+        something else will branch on, passes ``None``: the cap is a display
+        decision and must never become a verdict.
+        """
         errors = [f for f in self.findings if f["severity"] == ERROR]
         warnings = [f for f in self.findings if f["severity"] == WARNING]
         by_code: dict[str, int] = {}
@@ -46,5 +53,5 @@ class Report:
             "counts": dict(sorted(self.counts.items())),
             "by_code": dict(sorted(by_code.items(), key=lambda kv: -kv[1])),
             "findings": (errors + warnings)[:limit],
-            "truncated": max(0, len(self.findings) - limit),
+            "truncated": 0 if limit is None else max(0, len(self.findings) - limit),
         }

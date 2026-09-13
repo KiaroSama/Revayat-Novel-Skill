@@ -560,6 +560,68 @@ that — where it has to be argued as a meaning defect.
 | `no-new-evidence` | this round found exactly what the last round found | stop re-translating; the cause is the glossary entry, the voice card or the extraction |
 | `rounds-exhausted` | two rounds of repair have been asked for | same: find the cause rather than asking a third time |
 
+## Step 6c — Read the Persian without the source
+
+Step 6b cannot answer this one, and the reason is worth understanding before you
+run it: **a reviewer holding the English cannot tell you whether the Persian
+reads as Persian.** They see the English behind every sentence, so calque word
+order parses effortlessly and passes. That is why `fluency` is only a style note
+in 6b, and why this step takes the source away.
+
+The sheets here carry Persian and nothing else — no English, not one source word.
+Read them as a Persian reader with no idea what the original said.
+
+```bash
+# 1. Persian-only sheets. Refused unless step 6b passed at this revision:
+#    smoothing prose whose meaning is still disputed just hides the defect.
+$PY $SKILL_DIR/scripts/revayat-novel.py fluency sheets \
+  --book $WORK/book.json --out $WORK/fluency --meaning $WORK/review
+
+# 2. read $WORK/fluency/sheet_NNNN.md and write proposed replacements to
+#    $WORK/fluency/out_sheet_NNNN.md
+
+# 3. file them against the Persian they were proposed from
+$PY $SKILL_DIR/scripts/revayat-novel.py fluency record \
+  --book $WORK/book.json --out $WORK/fluency
+
+# 4. write them into the book, keeping what each one replaced
+$PY $SKILL_DIR/scripts/revayat-novel.py fluency apply \
+  --book $WORK/book.json --out $WORK/fluency
+
+# 5. THE SOURCE COMPARISON: the book moved, so step 6b is now stale. Re-run it
+#    — all four commands — and only then does this step pass.
+$PY $SKILL_DIR/scripts/revayat-novel.py fluency status \
+  --book $WORK/book.json --out $WORK/fluency --meaning $WORK/review
+```
+
+An edit is `++ <unit-id> <rubric>` and then the Persian to put there. Four
+rubrics, all answerable blind: `calque` (English word order in Persian words),
+`flow` (sentences that do not follow one another), `opaque` (a sentence that
+cannot be parsed at all), `register` (a passage that does not sound like the one
+before it — asked *internally*, not against the source).
+
+**Every edit is a proposal, never an acceptance.** You cannot know, blind, that
+the abruptness you smoothed was the author's. So applying an edit moves the book,
+which makes step 6b's review stale by construction, and this step's verdict stays
+false until that review has been redone. Step 5 of the recipe is not a courtesy —
+it is the only way this gate ever returns true. Leave a unit alone if it reads
+well; a pass that proposes nothing is a real and useful result.
+
+| Field | Meaning | Action |
+| --- | --- | --- |
+| `ok: true` | read blind, edits written, and the source comparison passed | continue to step 7 |
+| `meaning-unsettled` | step 6b has not passed at this revision | finish 6b first; nothing here is safe to smooth |
+| `nothing-translated` | no unit has Persian in it | that is a translation gap — go back to step 6 |
+| `not-reviewed` | nobody has read the Persian on its own | do steps 1–3 |
+| `incomplete` | a sheet has no reply, one has no `!! reviewed` line, an edit has no replacement, or a replacement is identical to what is there | an edit that changes nothing reads as a reviewed unit and is not one |
+| `stale-sheets` | the Persian changed after the sheets were written | write them again |
+| `edits-unapplied` | edits were recorded and never written | run step 4 |
+| `already-applied` | these edits are already in the book | go to step 5 |
+| `meaning-unconfirmed` | the smoothed Persian has not been compared against its source | run step 5 — re-run 6b in full |
+| `stale-review` | the Persian changed after this pass | read it again |
+| `no-new-evidence` | two blind passes proposed exactly these edits | the sentence is not the problem; look at the glossary entry, the voice card or the extraction |
+| `rounds-exhausted` | two blind passes have been applied | a third is taste, not fluency |
+
 ## Step 7 — Persian typography
 
 ```bash

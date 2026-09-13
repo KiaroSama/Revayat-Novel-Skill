@@ -35,6 +35,7 @@ STAGES = {
     "doc-qa": "docqa",
     "merge": "merge",
     "meaning": "meaning",
+    "fluency": "fluency",
     "falint": "falint",
     "qa": "qa",
     "build": "build_docx",

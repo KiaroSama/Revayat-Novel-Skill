@@ -135,6 +135,16 @@ $PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
 $PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
 $PY $S/revayat-novel.py meaning status --book work/book.json --out work/review
 
+# Then read the Persian with the English taken away — the one question a
+# bilingual reviewer cannot answer, because they read the English behind it.
+$PY $S/revayat-novel.py fluency sheets --book work/book.json --out work/fluency --meaning work/review
+#   … read work/fluency/sheet_NNNN.md, propose replacements in out_sheet_NNNN.md …
+$PY $S/revayat-novel.py fluency record --book work/book.json --out work/fluency
+$PY $S/revayat-novel.py fluency apply  --book work/book.json --out work/fluency
+#   … the book moved, so re-run the four `meaning` commands above: that re-run
+#       is the comparison against the source, and nothing passes without it …
+$PY $S/revayat-novel.py fluency status --book work/book.json --out work/fluency --meaning work/review
+
 $PY $S/revayat-novel.py falint fix   --book work/book.json
 $PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
 $PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"

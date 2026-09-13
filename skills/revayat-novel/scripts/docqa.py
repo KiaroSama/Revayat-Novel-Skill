@@ -78,6 +78,11 @@ MACHINE_DEPENDENT_CODES = frozenset({"font-fallback", "font-unverified"})
 FINAL_RENDER_DIR = ("renders", "final")
 FINAL_PAGE_DIR = ("renders", "final", "pages")
 
+#: Findings this report prints. The cap is a courtesy to whoever opens the JSON,
+#: not a fact about the document — which is the whole reason `document_verdict`
+#: exists below.
+SHOWN_FINDINGS = 60
+
 
 def report_path(work_dir: Path) -> Path:
     return Path(work_dir) / "qa" / "document.json"
@@ -345,6 +350,33 @@ def check_assembled_page(target: dict[str, Any], setup: dict[str, Any],
 # The run
 # --------------------------------------------------------------------------- #
 
+def document_verdict(findings: list[dict[str, Any]], *,
+                     limit: int = SHOWN_FINDINGS) -> dict[str, Any]:
+    """The document's verdict and its totals, decided on *every* finding.
+
+    The list this publishes is capped for a reader; the verdict and the counts
+    are not, and the gap between those two facts is the defect this function
+    exists to close. A gate that branched on the capped slice would call a
+    document with eighty-two errors "sixty errors" and read as the whole truth,
+    and — because the slice is ordered, not sampled — its verdict would be
+    correct only by the accident of which check happened to run last. The
+    dropped count is published for the same reason `per_page_truncated` is in
+    the watermark report: a short list that does not say it is short is worse
+    than a long one.
+
+    `ok` ignores the machine-dependent codes, which describe the renderer
+    rather than the book; they are still counted and still printed.
+    """
+    real = [f for f in findings if f.get("code") not in MACHINE_DEPENDENT_CODES]
+    return {
+        "ok": not real,
+        "errors": sum(1 for f in findings if f.get("severity") == qa.ERROR),
+        "warnings": sum(1 for f in findings if f.get("severity") == qa.WARNING),
+        "findings": findings[:limit],
+        "findings_truncated": max(0, len(findings) - limit),
+    }
+
+
 def check_document(work_dir: Path, book_path: Path, docx: Path, *,
                    dpi: int = pagecheck.DEFAULT_DPI,
                    keep_pdf: bool = False,
@@ -388,9 +420,12 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
     # `pagecheck.views_and_pngs` for the measurement.
     views, written = pagecheck.views_and_pngs(rendered, pngs, dpi=dpi)
     for index, view in enumerate(views):
+        # `limit=None`: every finding, because these are concatenated into the
+        # list the document's verdict is taken from. A per-page display cap
+        # applied here would silently decide the book.
         summary = check_assembled_page(view, setup_for(view, setups),
                                        f"page{index + 1:04d}",
-                                       requested_font=wanted_font).summary()
+                                       requested_font=wanted_font).summary(limit=None)
         pages.append({"page": index + 1, "ok": summary["ok"],
                       "errors": summary["errors"], "warnings": summary["warnings"]})
         for finding in summary["findings"]:
@@ -405,9 +440,10 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
     check_section_order(views, declared_sections(book), whole)
     check_completeness(views, document_expectations(book), whole,
                        source=pagecheck.document_text(docx))
-    global_summary = whole.summary()
+    global_summary = whole.summary(limit=None)
     findings += global_summary["findings"]
     findings += pagecheck.check_direction_in_document(docx)
+    outcome = document_verdict(findings)
 
     subject = ir.sha256_file(docx)
     # The review is bound to the sheets, not to the .docx. The document's bytes
@@ -422,6 +458,11 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
         # is not failed for want of a review — it is *unverified*, which is a
         # different and honest thing to report.
         return _write(work_dir, {
+            **outcome,
+            # A document nobody has looked at is unverified whatever its pages
+            # measured, so this overrides the measured verdict — and only that.
+            # The counts stay, because "how much is wrong with the thing nobody
+            # checked" is exactly what the next reader needs.
             "ok": False,
             "verified": False,
             "unverified": seen["detail"],
@@ -429,7 +470,6 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
             "font_requested": wanted_font,
             "fonts_seen": sorted({n for v in views for n in v.get("fonts") or ()}),
             "pages": total,
-            "findings": findings[:60],
             "render": str(rendered),
             # The artefact whose every page was just measured, named only when
             # asked. It is already on disk — the render is written here and
@@ -447,8 +487,7 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
         })
 
     return _write(work_dir, {
-        "ok": not [f for f in findings
-                   if f.get("code") not in MACHINE_DEPENDENT_CODES],
+        **outcome,
         "verified": True,
         "laid_out_by": wordrender.backend(),
         # The same reason `laid_out_by` is here: the same .docx sets
@@ -456,7 +495,6 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
         "font_requested": wanted_font,
         "fonts_seen": sorted({n for v in views for n in v.get("fonts") or ()}),
         "pages": total,
-        "findings": findings[:60],
         "render": str(rendered),
         # The artefact whose every page was measured and whose images the
         # reviewer approved — not a fresh render made later, which can lay out
