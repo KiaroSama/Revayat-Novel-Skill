@@ -143,3 +143,55 @@ def test_a_url_is_not_touched_by_either_rule():
     text = "به https://example.com/می رفت و برگشت."
 
     assert "https://example.com/می" in falint.fix_text(text)
+
+
+# --------------------------------------------------------------------------- #
+# A comparative needs positive evidence, not an absent blacklist
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("sentence", [
+    "من تری لباس را حس کردم.",      # I felt the wetness of the cloth
+    "او تری دستش را دید.",          # she saw the wetness of his hand
+    "هنوز تری هوا بود.",            # the wetness of the air was still there
+    "از تری موهایش",                # from the wetness of her hair
+])
+def test_a_wetness_noun_is_never_joined_as_a_comparative(sentence):
+    """«تری» is also the noun *wetness*, so the join needs evidence.
+
+    The rule used to be "not in a short list of function words", which made every
+    noun and pronoun in Persian eligible: «من تری…» became «من‌تری», which says
+    nothing at all. A blacklist cannot fix that — the words it would have to
+    exclude are most of the language.
+    """
+    assert falint.fix_text(sentence) == sentence
+
+
+def test_an_undecided_comparative_is_reported_rather_than_silently_left():
+    """Leaving it alone is only half the answer; a person has to be able to see it."""
+    found = falint.lint_text("من تری لباس را حس کردم.")
+    codes = {item["code"] for item in found}
+    assert "zwnj-comparative-undecided" in codes, found
+    detail = next(item["detail"] for item in found
+                  if item["code"] == "zwnj-comparative-undecided")
+    assert "_COMPARABLE" in detail, (
+        "the report must say what to do about it, not only that it happened")
+
+
+@pytest.mark.parametrize("sentence, joined", [
+    ("هوا سرد تری داشت.", "سرد\u200cتری"),
+    ("او بزرگ ترین خانه را دید.", "بزرگ\u200cترین"),
+    ("این راه کوتاه تری است.", "کوتاه\u200cتری"),
+])
+def test_a_real_comparative_still_joins(sentence, joined):
+    """The negative control. A pass that joined nothing would be worse."""
+    assert joined in falint.fix_text(sentence)
+
+
+def test_a_superlative_needs_no_lexicon():
+    """«ترین» is evidence by its own shape: Persian has no noun of that form.
+
+    So an unfamiliar adjective still gets its superlative joined, while «تری» — a
+    real noun — waits for the lexicon.
+    """
+    assert famorph.takes_comparative("واژه‌ای‌ناشناس", suffix="ترین") is True
+    assert famorph.takes_comparative("واژه‌ای‌ناشناس", suffix="تری") is False
