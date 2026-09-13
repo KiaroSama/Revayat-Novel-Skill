@@ -25,18 +25,35 @@ is present, and whether a paragraph is right-to-left. PyMuPDF drops the
 zero-width non-joiner and transposes letters, and its block boxes do not report
 alignment. Both come from the document's own XML - `document_text` and
 `check_direction_in_document` - and geometry alone comes from the page.
+
+Where the three pieces live, since this file reached the size ceiling:
+
+* `pagepdf` opens a rendered PDF and produces measurements — the part that needs
+  PyMuPDF installed and whose numbers move when it is upgraded;
+* `pagedocx` reads the built .docx for the two questions above — no renderer, no
+  tolerances;
+* **this module decides what those measurements have to satisfy**, which is the
+  one thing `renderqa` and `docqa` must never disagree about.
+
+Both are re-exported here, because `pagecheck.page_view` and
+`pagecheck.document_text` are how every caller and every test already reach them.
 """
 
 from __future__ import annotations
 
 import re
-import zipfile
-from pathlib import Path
 from typing import Any
 
 import bookir as ir
 import pagerun
 import qa
+from pagedocx import (  # noqa: F401  (this module's published surface)
+    check_direction_in_document, document_text, requested_fonts,
+)
+from pagepdf import (  # noqa: F401  (this module's published surface)
+    DEFAULT_DPI, _pymupdf, combine, page_count, page_view, render_png,
+    views_and_pngs, views_of,
+)
 
 SCHEMA = "revayat-novel/renderqa@1"
 
@@ -44,8 +61,6 @@ SCHEMA = "revayat-novel/renderqa@1"
 #: that fails the same way four times is not going to pass on the fifth, and a
 #: caller driving this in a loop must be able to hit a wall rather than spin.
 MAX_ATTEMPTS = 3
-
-DEFAULT_DPI = 110
 
 #: A page size within this of the profile is the same size — a converter that
 #: rounds points to millimetres and back lands a fraction of a point out.
@@ -91,207 +106,6 @@ _SPACE = re.compile(r"\s+")
 def _flat(text: str) -> str:
     """Markup stripped and whitespace collapsed — what a renderer emits."""
     return _SPACE.sub(" ", ir.plain_text(text or "")).strip()
-
-
-# --------------------------------------------------------------------------- #
-# Rendering
-# --------------------------------------------------------------------------- #
-
-def _pymupdf():
-    """PyMuPDF, or ``None``.
-
-    Imported here rather than at module scope so that a machine without it
-    reports a page as *unverified* instead of failing to import the checker at
-    all — "we could not look" and "we looked and it was fine" must never be the
-    same answer.
-    """
-    try:
-        import pymupdf  # noqa: PLC0415  (deliberate optional import)
-        return pymupdf
-    except ImportError:
-        try:
-            import fitz  # noqa: PLC0415
-            return fitz
-        except ImportError:
-            return None
-
-
-def _basefont(name: str) -> str:
-    """``"BCDEEE+Calibri"`` -> ``"Calibri"``. PDF subset tags are per-file noise."""
-    return str(name).split("+", 1)[-1].strip()
-
-
-def _view_of_open(document: Any, index: int, pdf_path: Path) -> dict[str, Any]:
-    """`page_view`'s measuring half, on a document somebody else opened.
-
-    Split out so a caller with every page to measure opens the file once.
-    `page_view` keeps its contract exactly: it raises on an unopenable file and
-    on an out-of-range index.
-    """
-    if not 0 <= index < len(document):
-        raise IndexError(f"{pdf_path} has {len(document)} pages; "
-                         f"wanted index {index}")
-    page = document[index]
-    blocks = [
-        {"text": item[4], "bbox": [round(float(v), 2) for v in item[:4]]}
-        for item in page.get_text("blocks")
-        if len(item) > 6 and item[6] == 0 and str(item[4]).strip()
-    ]
-    images = []
-    for info in page.get_images(full=True):
-        for rect in page.get_image_rects(info[0]):
-            images.append({
-                "bbox": [round(float(v), 2) for v in rect],
-                "width_pt": round(float(rect.width), 2),
-                "height_pt": round(float(rect.height), 2),
-            })
-    # Which fonts the page was *actually* set in. Measured: a book built
-    # with `--font Vazirmatn` came back set in Calibri on a machine that
-    # has Vazirmatn installed - the installed build is a variable font and
-    # Word will not resolve one for `w:cs`, so it fell back to the theme's
-    # minorBidi without a word. Every other check here passed, because
-    # every other check measures a layout that is not the one the reader
-    # gets - and a fallback's metrics differ, so those findings describe a
-    # page nobody will see.
-    fonts = sorted({_basefont(span["font"])
-                    for block in page.get_text("dict")["blocks"]
-                    for line in block.get("lines", ())
-                    for span in line.get("spans", ())
-                    if span.get("text", "").strip()})
-    return {
-        "width_pt": round(float(page.rect.width), 2),
-        "height_pt": round(float(page.rect.height), 2),
-        "blocks": blocks,
-        "images": images,
-        "fonts": fonts,
-    }
-
-
-def page_view(pdf_path: Path, index: int) -> dict[str, Any]:
-    """One PDF page reduced to the geometry the checks compare.
-
-    ``{"width_pt", "height_pt", "blocks": [{"text", "bbox"}],
-       "images": [{"bbox", "width_pt", "height_pt"}], "fonts": [str]}``
-    """
-    pymupdf = _pymupdf()
-    if pymupdf is None:
-        raise RuntimeError("PyMuPDF is not installed")
-    document = pymupdf.open(str(pdf_path))
-    try:
-        return _view_of_open(document, index, Path(pdf_path))
-    finally:
-        document.close()
-
-
-def _png_of_open(document: Any, index: int, out_path: Path,
-                 dpi: int) -> Path | None:
-    """`render_png`'s rasterising half. Returns ``None`` rather than raising."""
-    if not 0 <= index < len(document):
-        return None
-    page = document[index]
-    try:
-        # A page declares its own size and PyMuPDF renders whatever it is
-        # told; a legal 200-inch page at this dpi is gigabytes. Refused from
-        # the declared size, before any pixel exists — and reported the way
-        # every other "could not render" is here: no artefact, unverified.
-        ir.check_render_area(page.rect.width, page.rect.height, dpi)
-    except ir.RenderTooLarge:
-        return None
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    page.get_pixmap(dpi=dpi).save(str(out_path))
-    return out_path
-
-
-def render_png(pdf_path: Path, index: int, out_path: Path,
-               dpi: int = DEFAULT_DPI) -> Path | None:
-    """Rasterise one PDF page, or ``None`` when it cannot be rendered.
-
-    Producing evidence must never be the thing that stops a page being
-    reported on: a missing or damaged file leaves the artifact unwritten and
-    the report says the page is unverified.
-    """
-    pymupdf = _pymupdf()
-    if pymupdf is None or not Path(pdf_path).exists():
-        return None
-    try:
-        document = pymupdf.open(str(pdf_path))
-    except Exception:  # PyMuPDF raises its own hierarchy for a damaged file
-        return None
-    try:
-        return _png_of_open(document, index, out_path, dpi)
-    finally:
-        document.close()
-
-
-def views_and_pngs(pdf_path: Path, out_paths: list[Path], *,
-                   dpi: int = DEFAULT_DPI
-                   ) -> tuple[list[dict[str, Any]], list[Path | None]]:
-    """Every page measured and rasterised, opening the document once.
-
-    `page_view` and `render_png` each open the file, read one page and close it,
-    which is right for one page and wrong for a book: `docqa.check_document`
-    calls both per page, so a 300-page render opened the same file 600 times.
-    Measured on a generated 300-page book, 30 lines a page: `views_of` 7.81s
-    against 2.27s for one open — 3.4x, paid twice per `doc-qa check`, and
-    `doc-qa check` runs at least twice per book by the documented workflow.
-
-    The same shape, and the same fix, as `sourcepages.page_fingerprints`.
-
-    Each failure contract is preserved: a measurement raises, an unwritable PNG
-    is ``None`` in its slot. ``out_paths`` should have one entry per page; a
-    shorter list simply leaves the rest unrendered.
-    """
-    pymupdf = _pymupdf()
-    if pymupdf is None:
-        raise RuntimeError("PyMuPDF is not installed")
-    document = pymupdf.open(str(pdf_path))
-    try:
-        views = [_view_of_open(document, index, Path(pdf_path))
-                 for index in range(len(document))]
-        pngs = [_png_of_open(document, index, out_paths[index], dpi)
-                if index < len(out_paths) else None
-                for index in range(len(document))]
-        return views, pngs
-    finally:
-        document.close()
-
-
-# --------------------------------------------------------------------------- #
-# Expectations
-def views_of(pdf_path: Path) -> list[dict[str, Any]]:
-    """Every page of a preview, read back. Empty when it cannot be opened."""
-    pymupdf = _pymupdf()
-    if pymupdf is None:
-        return []
-    try:
-        document = pymupdf.open(str(pdf_path))
-    except Exception:
-        return []
-    try:
-        return [_view_of_open(document, index, Path(pdf_path))
-                for index in range(len(document))]
-    finally:
-        document.close()
-
-
-def page_count(pdf_path: Path) -> int:
-    """How many pages, or ``0`` when the file cannot be opened at all.
-
-    Deliberately not an exception: a caller counting pages so it can rasterise
-    them has its own "we could not look" path, and a raise from here jumps past
-    it and turns a page that could not be rendered into a crashed run.
-    """
-    pymupdf = _pymupdf()
-    if pymupdf is None:
-        return 0
-    try:
-        document = pymupdf.open(str(pdf_path))
-    except Exception:
-        return 0
-    try:
-        return len(document)
-    finally:
-        document.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -457,94 +271,6 @@ def _check_body_area(target: dict[str, Any], setup: dict[str, Any],
                        f"{what!r} at {box} is outside the body area "
                        f"[{left}, {top}, {right}, {bottom}]")
 
-
-def document_text(docx: Path) -> str:
-    """Every paragraph of a .docx as one string, in document order.
-
-    Read from the file rather than from the render, for the same reason the
-    direction check is: PyMuPDF's Arabic-script readback is not faithful.
-    Measured on a correct Word render of a correct book, the zero-width
-    non-joiner was dropped and ``بالا`` came back with its
-    letters transposed. Probing that for the book's own sentences reports every
-    Persian paragraph missing from a page that is perfectly set - a check that
-    fails on correct output, which is worse than no check at all.
-
-    The file says what Word will draw. Geometry still comes from the render,
-    because that is the question a file cannot answer.
-    """
-    import zipfile
-
-    with zipfile.ZipFile(docx) as archive:
-        body = archive.read("word/document.xml").decode("utf-8")
-    paragraphs = []
-    for block in re.findall(r"<w:p[ >].*?</w:p>", body, re.S):
-        pieces = re.findall(r"<w:t[^>]*>(.*?)</w:t>", block, re.S)
-        if pieces:
-            paragraphs.append("".join(pieces))
-    return " ".join(paragraphs)
-
-
-def requested_fonts(docx: Path) -> dict[str, str]:
-    """Which fonts the *document* asked for: ``{"complex": …, "ascii": …}``.
-
-    Asked of `word/styles.xml` rather than of the caller, for the same reason
-    the text and the direction are: the caller's idea of the options is not
-    what ended up in the file, and the file is what the renderer obeyed. The
-    builder writes the Persian font as `w:cs` in `w:docDefaults`
-    (`ooxml.set_document_defaults`), so docDefaults is the one place that
-    always carries it.
-
-    Empty strings when the document does not say - a state, not a failure: a
-    .docx from somewhere else need not carry any of this.
-    """
-    try:
-        with zipfile.ZipFile(docx) as archive:
-            styles = archive.read("word/styles.xml").decode("utf-8")
-    except (OSError, KeyError, zipfile.BadZipFile, UnicodeDecodeError):
-        return {"complex": "", "ascii": ""}
-
-    defaults = re.search(r"<w:docDefaults>.*?</w:docDefaults>", styles, re.S)
-    if not defaults:
-        return {"complex": "", "ascii": ""}
-    element = re.search(r"<w:rFonts\b[^>]*/>", defaults.group(0))
-    if not element:
-        return {"complex": "", "ascii": ""}
-    found = {}
-    for key, attribute in (("complex", "w:cs"), ("ascii", "w:ascii")):
-        match = re.search(rf'{attribute}="([^"]*)"', element.group(0))
-        found[key] = match.group(1) if match else ""
-    return found
-
-
-def check_direction_in_document(docx: Path) -> list[dict[str, Any]]:
-    """Is the built document right-to-left? Asked of the file, not the render.
-
-    The one direction check that cannot lie. A rendered page tells you where
-    ink landed, and for Arabic script PyMuPDF's block boxes do not report that
-    faithfully — so a correct document comes back looking flush-left. The
-    `w:bidi` on a paragraph, and on the style it inherits from, is the setting
-    Word actually obeys.
-    """
-    findings: list[dict[str, Any]] = []
-    with zipfile.ZipFile(docx) as archive:
-        document = archive.read("word/document.xml").decode("utf-8")
-        styles = archive.read("word/styles.xml").decode("utf-8")
-
-    normal = re.search(r'<w:style [^>]*w:styleId="Normal".*?</w:style>',
-                       styles, re.S)
-    inherits = bool(normal and "<w:bidi" in normal.group(0))
-
-    paragraphs = [p for p in re.findall(r"<w:p.*?</w:p>", document, re.S)
-                  if "<w:t" in p]
-    without = [p for p in paragraphs if "<w:bidi" not in p]
-    if without and not inherits:
-        findings.append({
-            "severity": qa.ERROR, "code": "document-not-rtl", "unit": "document",
-            "detail": f"{len(without)} of {len(paragraphs)} paragraphs carry no "
-                      f"w:bidi and the Normal style does not supply one, so "
-                      f"Word will set them left-to-right",
-        })
-    return findings
 
 
 def _probe(text: str) -> str:
@@ -783,30 +509,6 @@ def check_page(target: dict[str, Any], expected: dict[str, Any], *,
     report.count("expected_images", len(expected["images"]))
     report.count("rendered_images", len(target["images"]))
     return report
-
-
-def combine(views: list[dict[str, Any]]) -> dict[str, Any]:
-    """Every page of a preview as one surface, in reading order.
-
-    Each sheet's boxes are pushed down by the sheets above it. Nothing measures
-    against those coordinates - the geometry checks read the per-page views -
-    but `_check_images` orders illustrations by where they sit, and without the
-    offset a picture at the top of sheet two would sort ahead of one halfway
-    down sheet one. That is a reordering finding on a page that is in order.
-    """
-    blocks: list[dict[str, Any]] = []
-    images: list[dict[str, Any]] = []
-    offset = 0.0
-    for view in views:
-        for source, sink in ((view["blocks"], blocks), (view["images"], images)):
-            for item in source:
-                box = item["bbox"]
-                sink.append({**item, "bbox": [box[0], box[1] + offset,
-                                              box[2], box[3] + offset]})
-        offset += float(view["height_pt"] or 0.0)
-    return {"blocks": blocks, "images": images,
-            "width_pt": views[0]["width_pt"], "height_pt": views[0]["height_pt"]}
-
 
 def check_preview(views: list[dict[str, Any]], expected: dict[str, Any], *,
                   source: str | None = None,
