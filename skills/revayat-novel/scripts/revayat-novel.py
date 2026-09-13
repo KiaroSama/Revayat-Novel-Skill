@@ -34,6 +34,7 @@ STAGES = {
     "render-qa": "renderqa",
     "doc-qa": "docqa",
     "merge": "merge",
+    "meaning": "meaning",
     "falint": "falint",
     "qa": "qa",
     "build": "build_docx",

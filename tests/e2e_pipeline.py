@@ -29,6 +29,7 @@ import build_docx              # noqa: E402
 import chunk as chunking       # noqa: E402
 import falint                  # noqa: E402
 import glossary as gl          # noqa: E402
+import meaning                 # noqa: E402
 import merge as merging        # noqa: E402
 import qa                      # noqa: E402
 from tests_support import png_bytes   # noqa: E402
@@ -231,6 +232,33 @@ def main() -> int:
         print(f"  4 merge       : {report['units_applied']} units, "
               f"{sum(len(v) for v in report['translator_notes'].values())} translator "
               f"notes, {len(placed)} name(s) introduced")
+
+        # 4b. the bilingual review ------------------------------------------ #
+        # A stage nothing exercises is a stage that rots, and this one is easy to
+        # leave out of the chain because a human answers it. What is mechanical
+        # about it is checked here: the sheets carry both sides, a clean report
+        # binds to the revision it was made from, and the same report stops being
+        # valid the moment the translation moves. The judgement itself is not
+        # simulated — a blank report with the sheet claimed read is exactly what
+        # "the reviewer found nothing" looks like.
+        review_dir = work / "review"
+        sheets = meaning.write_sheets(book_path, review_dir)
+        check(sheets["units"] > 0, "the review sheets cover no units")
+        first = (review_dir / f"{sheets['sheets'][0]}.md").read_text(encoding="utf-8")
+        source_one = ir.load_book(book_path)["blocks"][0]
+        check((source_one.get("text") or "")[:20] in first,
+              "the review sheet does not carry the source side")
+        check((source_one.get("target") or "")[:20] in first,
+              "the review sheet does not carry the translation side")
+        for sheet_id in sheets["sheets"]:
+            ir.write_text(review_dir / f"out_{sheet_id}.md",
+                          f"!! reviewed {sheet_id}\n")
+        filed = meaning.record(review_dir, book_path)
+        check(filed.get("ok"), f"the review was refused: {json.dumps(filed)[:300]}")
+        check(meaning.verdict(review_dir, sheets["revision"])["ok"],
+              "a clean review did not pass its own gate")
+        print(f"  4b review     : {sheets['units']} pairs, "
+              f"{len(sheets['sheets'])} sheet(s), bound to {sheets['revision'][:16]}…")
 
         # 5. typography ----------------------------------------------------- #
         translated = ir.load_book(book_path)
