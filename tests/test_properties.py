@@ -1,7 +1,7 @@
 """Properties that must hold for every input, not only the ones someone thought of.
 
 The rest of the suite is example-based, and examples are chosen by the same mind
-that wrote the code — so they agree with it. Five invariants here are stated as
+that wrote the code — so they agree with it. Ten invariants here are stated as
 properties and checked against generated input instead:
 
 1. **Transport round-trips.** A unit's text survives being written into a
@@ -16,6 +16,17 @@ properties and checked against generated input instead:
    against an arbitrary mix of good and broken replies.
 5. **No page keeps `accepted` once its source moves.** The page state machine,
    driven by random sequences.
+6. **A cut is a partition of its owner.** The recorded spans cover the text
+   exactly once, at every budget — the arithmetic form of this project's
+   recurring defect, since a span nothing covers is verified by nothing.
+7. **A request token moves exactly when the question does.** Both directions:
+   an unchanged worksheet keeps its token, a changed one loses it.
+8. **Whatever merge refuses, status offers again.** One property over the
+   repairable shapes, because the two answering separately is the defect.
+9. **The note graph answers the same way from both doors** — the validator and
+   the write transaction — with the resolvable shapes as positive controls.
+10. **No sequence of edits returns a spent repair budget.** The episode state
+    machine, driven by wordings rather than by rounds.
 
 Generated, not random: one seed, fixed example counts, and a corpus that
 *deliberately* contains the adversarial shapes — a line that looks like a
@@ -40,9 +51,12 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "skills" / "revayat-novel" / "sc
 sys.path.insert(0, str(SCRIPTS))
 
 import bookir as ir  # noqa: E402
+import bookwrite  # noqa: E402
 import chunk as chunking  # noqa: E402
 import falint  # noqa: E402
 import merge as merging  # noqa: E402
+import notegraph  # noqa: E402
+import repairlog  # noqa: E402
 import runstate  # noqa: E402
 import segments  # noqa: E402
 import worksheet as ws  # noqa: E402
@@ -403,3 +417,237 @@ def test_an_unknown_page_state_is_refused_rather_than_stored(tmp_path):
     with pytest.raises(ValueError, match="unknown page state"):
         state.set_page(1, "nearly-accepted")
     assert state.page(1) is None
+
+
+# --------------------------------------------------------------------------- #
+# 6. A cut is a partition of its owner
+# --------------------------------------------------------------------------- #
+# The audits' recurring defect in its arithmetic form: the recorded spans have to
+# cover the owner's text exactly once. Measured before it did, on a 2700-character
+# paragraph at budget 1400: three segments, all `offset: 0`, so 1692 characters
+# were verified by nothing and a same-length edit past the first segment merged.
+
+@pytest.mark.parametrize("budget, length",
+                         [(1400, 2700), (900, 5000), (2500, 2499), (700, 9000)])
+def test_the_recorded_spans_cover_their_owner_exactly_once(tmp_path, budget, length):
+    book_path = tmp_path / f"book-{budget}-{length}.json"
+    book = ir.new_book(source_path="sample.epub", source_format="epub")
+    prose = "Sentence of perfectly ordinary prose. "
+    book["blocks"].append(ir.make_block(
+        "paragraph", 1, text=(prose * (length // len(prose) + 1))[:length]))
+    ir.save_book(book, book_path)
+
+    manifest = chunking.build(book_path, tmp_path / f"chunks-{budget}-{length}",
+                              glossary_path=None, budget=budget)
+    spans = [span for entry in manifest["chunks"]
+             for span in entry["unit_spans"]]
+    by_owner: dict[str, list[dict]] = {}
+    for span in spans:
+        by_owner.setdefault(span["owner"], []).append(span)
+
+    live = {block["id"]: block["text"] for block in ir.iter_text_blocks(
+        ir.load_book(book_path))}
+    for owner, records in by_owner.items():
+        records.sort(key=lambda record: record["offset"])
+        assert records[0]["offset"] == 0, (owner, records)
+        for earlier, later in zip(records, records[1:]):
+            assert earlier["offset"] + earlier["length"] == later["offset"], (
+                f"{owner}: {earlier} and {later} overlap or leave a gap")
+        covered = records[-1]["offset"] + records[-1]["length"]
+        assert covered == len(live[owner]), (
+            f"{owner}: the spans cover {covered} of {len(live[owner])} "
+            f"characters, so the rest is verified by nothing")
+    # And the project's own checker agrees, which is what merge relies on.
+    assert chunking.span_problems(spans, live) == []
+
+
+# --------------------------------------------------------------------------- #
+# 7. A request token changes when the question changes, and not otherwise
+# --------------------------------------------------------------------------- #
+
+def _worksheet_pair(tmp_path: Path, name: str, *, texts_: list[str],
+                    budget: int = 4000) -> dict:
+    book_path = tmp_path / f"{name}.json"
+    book = ir.new_book(source_path="sample.epub", source_format="epub")
+    for index, text in enumerate(texts_, start=1):
+        book["blocks"].append(ir.make_block("paragraph", index, text=text))
+    ir.save_book(book, book_path)
+    return chunking.build(book_path, tmp_path / f"{name}-chunks",
+                          glossary_path=None, budget=budget)
+
+
+#: Each mutation changes something a translator would be *shown*, so the token
+#: has to move. `same` is the control: a change nobody is shown must not move it.
+@pytest.mark.parametrize("what, texts_, same", [
+    ("the prose itself", ["Paragraph one is here. " * 3,
+                          "Paragraph two is different. " * 3], False),
+    ("nothing at all", ["Paragraph one is here. " * 3,
+                        "Paragraph one is here. " * 3], True),
+])
+def test_the_request_token_moves_exactly_when_the_question_does(tmp_path, what,
+                                                               texts_, same):
+    first = _worksheet_pair(tmp_path, "a", texts_=[texts_[0], "Unrelated. " * 4])
+    second = _worksheet_pair(tmp_path, "b", texts_=[texts_[1], "Unrelated. " * 4])
+    tokens = (first["chunks"][0]["request"], second["chunks"][0]["request"])
+
+    assert all(token.startswith("req1:") for token in tokens), tokens
+    if same:
+        assert tokens[0] == tokens[1], (
+            f"{what}: the token moved although the worksheet is identical, so "
+            f"every unchanged reply would be refused as answering another cut")
+    else:
+        assert tokens[0] != tokens[1], (
+            f"{what}: the token did not move, so an answer to the old question "
+            f"is accepted for the new one")
+
+
+# --------------------------------------------------------------------------- #
+# 8. Status and merge agree, for every repairable shape
+# --------------------------------------------------------------------------- #
+
+def _mutations() -> list[tuple[str, str]]:
+    """``(name, the reply body to write)``. `None` means: write no file."""
+    return [
+        ("missing", ""),
+        ("empty", " "),
+        ("prose with no headers", "I cannot help with that request.\n"),
+        ("half the units", "@@ b00001 para\nترجمه.\n"),
+        ("an unresolved note", "@@ b00001 para\nترجمه. [[fn:tr-01]]\n"
+                               "@@ b00002 para\nترجمه.\n"),
+    ]
+
+
+@pytest.mark.parametrize("name, body", _mutations(), ids=lambda value: value)
+def test_whatever_merge_refuses_status_offers_again(tmp_path, name, body):
+    """One property, both sides: a refusal is work, and work is offered.
+
+    The defect this closes was the two answering separately — `merge` refusing a
+    reply while `status` counted it translated and `next` returned nothing.
+    """
+    manifest = _worksheet_pair(tmp_path, f"agree-{abs(hash(name)) % 9999}",
+                               texts_=["Paragraph one is here. " * 3,
+                                       "Paragraph two is here. " * 3])
+    chunks = next(iter(tmp_path.glob("agree-*-chunks")))
+    entry = manifest["chunks"][0]
+    output = chunks / entry["output"]
+    if name == "missing":
+        output.unlink(missing_ok=True)
+    else:
+        ir.write_text(output, reply_text(chunks / entry["file"], body))
+
+    book_path = next(iter(tmp_path.glob("agree-*.json")))
+    report = merging.merge(book_path, chunks, strict=True)
+    progress = chunking.status(chunks)
+
+    assert report["ok"] is False, f"{name}: merge accepted it"
+    assert progress["next"] == entry["id"], (
+        f"{name}: merge refused and status offers {progress['next']!r}")
+    assert progress["next_reason"], f"{name}: offered with no reason"
+    assert progress["translated"] == 0, progress
+
+
+# --------------------------------------------------------------------------- #
+# 9. The note graph refuses exactly the unresolvable shapes
+# --------------------------------------------------------------------------- #
+
+def _noted(target: str, *, note: str | None = "یادداشت.",
+           origin: str = "translator", anchor: str = "b00001") -> dict:
+    book = ir.new_book(source_path="sample.epub", source_format="epub")
+    book["blocks"].append(ir.make_block("paragraph", 1, text="A paragraph."))
+    book["blocks"][0]["target"] = target
+    if note is not None:
+        book["footnotes"].append(
+            ir.make_footnote(1, anchor_block=anchor, text=note, origin=origin))
+        book["footnotes"][0]["target"] = note
+    return book
+
+
+@pytest.mark.parametrize("what, book, resolves", [
+    ("a plain translator note", _noted("متن.[[fn:fn0001]]"), True),
+    ("a quoted example", _noted("متن `[[fn:fn0001]]` است.", note=None), True),
+    ("a marker naming nothing", _noted("متن.[[fn:fn0404]]", note=None), False),
+    ("a note with no marker", _noted("متن."), False),
+    ("an anchor elsewhere", _noted("متن.[[fn:fn0001]]", anchor="b00404"), False),
+])
+def test_the_note_graph_answers_the_same_way_from_both_doors(what, book, resolves):
+    """`notegraph` and the write transaction cannot disagree: one list.
+
+    The positive controls are half the property. A validator that refused
+    everything would satisfy the negative cases and make the pipeline unusable.
+    """
+    problems = notegraph.problems(book)
+    assert bool(problems) is (not resolves), f"{what}: {problems}"
+
+
+def test_the_write_transaction_refuses_the_graphs_the_validator_refuses(tmp_path):
+    """Fault injection at the one door that writes: the refusal is named."""
+    book_path = tmp_path / "book.json"
+    ir.save_book(_noted("متن.[[fn:fn0001]]"), book_path)
+
+    with pytest.raises(bookwrite.Refused) as stopped:
+        with bookwrite.transaction(book_path, actor="property") as tx:
+            tx.book["blocks"][0]["target"] = "متن.[[fn:fn0404]]"
+    assert stopped.value.reason == "invalid-book", stopped.value.reason
+    assert "fn0404" in stopped.value.detail
+    assert "[[fn:fn0001]]" in ir.load_book(book_path)["blocks"][0]["target"], (
+        "the refused change reached the book anyway")
+
+
+# --------------------------------------------------------------------------- #
+# 10. A repair budget no sequence of edits can reset
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("edits", [
+    ("A", "B", "C", "D", "E"),
+    ("A", "A", "A"),
+    ("A", "B", "A", "B"),
+])
+def test_no_sequence_of_edits_returns_a_spent_repair_budget(edits):
+    """The state machine, driven by wordings rather than by rounds.
+
+    Whatever the sequence, the episode's attempt count only rises and the policy
+    stops the loop: three arguments about one unit, two identical ones, or a
+    wording that comes back. A round counter keyed to the revision was reset by
+    every one of these, because each edit moves the revision.
+    """
+    episodes: dict[str, dict] = {}
+    attempts = 0
+    stopped_at = None
+    for step, wording in enumerate(edits, start=1):
+        episode = repairlog.attempt(
+            episodes, key="b00001/sense", source="src1:constant",
+            text=wording, argument=f"still wrong at step {step}",
+            revision=f"meaning2:{step:08d}")
+        assert episode["attempts"] == attempts + 1, (
+            f"step {step}: the budget went {attempts} -> {episode['attempts']}")
+        attempts = episode["attempts"]
+        refusal, detail = repairlog.decision(episode)
+        if refusal and stopped_at is None:
+            stopped_at = (step, refusal, detail)
+
+    assert stopped_at is not None, (
+        f"{edits}: {attempts} attempts and the loop was never stopped")
+    step, refusal, detail = stopped_at
+    assert refusal in ("no-new-evidence", "oscillating", "rounds-exhausted")
+    assert detail, "a refusal with nothing to act on"
+    assert step <= repairlog.MAX_ATTEMPTS, (
+        f"{edits}: stopped at step {step}, later than the cap")
+
+
+def test_a_closed_episode_still_remembers_what_was_rejected():
+    """The laundering path: close an episode, then put the old wording back."""
+    episodes: dict[str, dict] = {}
+    for wording in ("A", "B"):
+        repairlog.attempt(episodes, key="b00001/sense", source="src1:constant",
+                          text=wording, argument="wrong", revision="meaning2:1")
+    repairlog.close_absent(episodes, seen=set(), revision="meaning2:2")
+    assert episodes["b00001/sense"]["state"] == "closed"
+
+    reopened = repairlog.attempt(
+        episodes, key="b00001/sense", source="src1:constant", text="A",
+        argument="wrong again", revision="meaning2:3")
+
+    assert reopened["attempts"] == 1, "a recurrence has its own budget"
+    assert reopened["recurrences"] == 1
+    refusal, detail = repairlog.decision(reopened)
+    assert refusal == "oscillating", (refusal, detail)
