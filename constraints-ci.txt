@@ -31,6 +31,19 @@
 #
 # To move a pin: change it here, push, and read the matrix. Dependabot opens a
 # PR per update against this file.
+# Dependabot does update this file. Verified against dependabot-core rather than
+# assumed: its pip fetcher takes every `.txt` whose lines all parse as
+# requirements or comments, which this does, so the `ci-constraints` group in
+# dependabot.yml is real.
+#
+# GitHub's **dependency graph** is a different system and does not list it — the
+# graph recognises `requirements.txt` by name, and of the manifests it reports for
+# this repository, this is not one. So `dependency-review.yml`, which reviews what
+# the graph says a pull request changed, sees nothing when a pin here moves. The
+# advisory question is covered anyway, from the other side: dependency-audit.yml
+# resolves this exact set weekly and audits it. Nothing here is silently
+# unreviewed; it is reviewed by the scheduled scan rather than on the pull request.
+
 pymupdf==1.28.2
 python-docx==1.2.0
 beautifulsoup4==4.15.0

@@ -1,0 +1,27 @@
+# Optional. `pip install -r requirements.txt` does not install any of these, and
+# nothing in the pipeline imports them at module level — every use is behind a
+# probe that reports the tool as absent (`doctor`, `extract.find_ocrmypdf`,
+# `wordrender.unavailable_reason`). A book translates without them; two stages
+# do not.
+#
+# They are declared here, in a file of their own, because undeclared is not the
+# same as optional. While these two lived only in prose, `dependency-audit.yml`
+# said so in a comment — "ocrmypdf and pywin32 are not declared dependencies and
+# are therefore NOT covered" — which means the one part of the toolchain that
+# forks subprocesses over untrusted PDFs and the one part that drives a COM
+# automation server were the two the advisory scan never looked at.
+#
+# No version floor, deliberately. A floor is a claim about the oldest version
+# that works, and nothing here has ever run an old one: CI installs whatever
+# resolves today. An invented number would read as tested. If one of these ever
+# needs a minimum, it belongs in constraints-floors.txt too, with a lane that
+# proves it.
+
+# Adds a text layer to a scanned or mixed PDF, via Tesseract and Ghostscript.
+# Those two are binaries, not wheels: `doctor` locates them and
+# `extract.OPTIONAL_TOOLS` names them. pip cannot install them and does not try.
+ocrmypdf
+
+# Microsoft Word through COM, which is how the render-QA path lays a document out
+# on Windows. LibreOffice covers every other platform and needs no wheel.
+pywin32 ; sys_platform == "win32"

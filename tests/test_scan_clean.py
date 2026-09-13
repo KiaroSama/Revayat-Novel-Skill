@@ -146,6 +146,17 @@ def test_a_ghost_cut_removes_mid_grey_the_colour_pass_left(stamped_pdf, tmp_path
 
     plain = mid_grey_share(made["renders"]["cleaned"])
     ghosted = mid_grey_share(made["renders"]["ghost_120"])
+    if plain == 0:
+        # The premise, stated rather than assumed. The mid-grey this measures is
+        # the anti-aliasing on the page's own body text, and whether `_page` has
+        # any depends on Pillow: from 10.1 the default font is a FreeType face
+        # and the glyph edges are grey, while on 10.0 — the declared floor — it
+        # is the built-in bitmap font and every pixel is black or white. So the
+        # comparison below would be `0 < 0`, which fails while saying nothing
+        # about the ghost cut. Measured on CPython 3.10 with pillow 10.0.0.
+        pytest.skip("no anti-aliased grey to cut on this Pillow: the default "
+                    "bitmap font draws hard edges, so a measurement about "
+                    "removing grey has nothing to measure")
     assert ghosted < plain, (
         f"the ghost cut left as much mid-grey as the colour pass "
         f"({ghosted:.5f} vs {plain:.5f}); it is not doing anything")
