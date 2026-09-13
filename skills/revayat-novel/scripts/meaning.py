@@ -232,7 +232,10 @@ def write_sheets(book_path: Path, out_dir: Path, *,
     ir.write_text(out_dir / "manifest.json", json.dumps(
         {"schema": SCHEMA, "revision": rev, "sheets": written,
          "units": len(units)}, ensure_ascii=False, indent=1) + "\n")
-    return {"revision": rev, "sheets": written, "units": len(units)}
+    # `ok` is not decoration: `main` turns it into the exit code, and without it
+    # writing the sheets reported failure to every caller that checks one — which
+    # is every caller, since this stage is four shell commands in a recipe.
+    return {"ok": True, "revision": rev, "sheets": written, "units": len(units)}
 
 
 def read_findings(text: str) -> tuple[list[dict[str, str]], list[str], list[str]]:
@@ -463,17 +466,25 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     out_dir = Path(args.out)
 
+    # Each action names where its verdict lives, rather than one chained
+    # `.get(..., .get(...))` guessing across three report shapes. That expression
+    # stacked two silent defaults: a report with no `ok` fell through to a
+    # `verdict` that was not there either, and `sheets` — which cannot fail
+    # halfway — exited 2 every time it succeeded.
     if args.action == "sheets":
         report = write_sheets(Path(args.book), out_dir, per_sheet=args.per_sheet)
+        ok = report["ok"]
     elif args.action == "record":
         report = record(out_dir, Path(args.book))
+        ok = report["ok"]
     else:
         rev = revision(pairs(ir.load_book(Path(args.book))))
         report = {"verdict": verdict(out_dir, rev),
                   "repair": repair_requests(out_dir)}
+        ok = report["verdict"]["ok"]
 
     print(json.dumps(report, ensure_ascii=False, indent=1))
-    return 0 if report.get("ok", report.get("verdict", {}).get("ok")) else 2
+    return 0 if ok else 2
 
 
 if __name__ == "__main__":

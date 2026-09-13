@@ -147,6 +147,16 @@ $PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
 $PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
 $PY $S/revayat-novel.py meaning status --book work/book.json --out work/review
 
+# بعد فارسی را بدون انگلیسی بخوانید؛ همان پرسشی که بازبینِ دوزبانه نمی‌تواند
+# پاسخ دهد، چون انگلیسیِ پشت جمله را می‌خواند و جمله برایش روان به نظر می‌رسد.
+$PY $S/revayat-novel.py fluency sheets --book work/book.json --out work/fluency --meaning work/review
+#   … work/fluency/sheet_NNNN.md را بخوانید و جانشین‌ها را در out_sheet_NNNN.md بنویسید …
+$PY $S/revayat-novel.py fluency record --book work/book.json --out work/fluency
+$PY $S/revayat-novel.py fluency apply  --book work/book.json --out work/fluency
+#   … کتاب تغییر کرد، پس چهار فرمان `meaning` بالا را دوباره اجرا کنید: همان
+#       اجرای دوباره، مقایسه با متن اصلی است و بی آن هیچ چیز سبز نمی‌شود …
+$PY $S/revayat-novel.py fluency status --book work/book.json --out work/fluency --meaning work/review
+
 $PY $S/revayat-novel.py falint fix   --book work/book.json
 $PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
 $PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"
