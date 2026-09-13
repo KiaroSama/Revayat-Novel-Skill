@@ -25,6 +25,11 @@ import runstate
 import wordrender
 from tests_support import png_bytes
 
+#: This whole module is the `render` tier: it drives a real renderer and costs
+#: minutes. CI runs it on every push; a local run can deselect it with
+#: `-m "not render and not ocr"`. See pytest.ini.
+pytestmark = pytest.mark.render
+
 #: Long enough to have wrapped, and unambiguously Persian.
 PERSIAN = "صبح به آرامی از فراز تپه‌ها بالا آمد و الیزابت کنار پنجره ایستاده بود."
 PERSIAN_OTHER = "دارسی هیچ نگفت و او رویش را از پنجره برگرداند و به راه افتاد."

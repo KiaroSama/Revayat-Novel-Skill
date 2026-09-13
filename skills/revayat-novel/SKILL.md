@@ -419,6 +419,9 @@ at a time — the result is the same, only slower.
 > `$SKILL_DIR/references/translation-policy.md` first and follow it.
 >
 > Output format — this is mechanical, get it exactly right:
+> - Copy the `<!-- revayat-novel: request … -->` line from the top of the
+>   worksheet into your reply, **unchanged**. It is the only thing that says
+>   which version of the worksheet you answered.
 > - Copy each `@@ <id> <kind>` line **unchanged**, in the same order.
 > - Put the Persian translation on the lines under it.
 > - Output nothing else: no preamble, no English, no commentary, no summary.
@@ -489,7 +492,10 @@ exactly one. `first_mentions.introduced` in the report says where each landed.
 | `missing_outputs` | those chunks were never translated | translate them |
 | `missing_units` | headers were dropped | re-run those chunks |
 | `unknown_units` | headers were invented | re-run those chunks |
-| `malformed` | a reply broke the protocol: an id answered twice, answered under the wrong kind, the headers came back reordered — or its **footnote graph does not resolve**: a `[[fn:tr-NN]]` with no body, a body no sentence refers to, one marker used twice, or a note answered as a heading | re-run that chunk; the message names the unit or the note |
+| `malformed` | a reply broke the protocol: an id answered twice, answered under the wrong kind, the headers came back reordered, the reply opens a code fence it never closes — or its **footnote graph does not resolve**: a `[[fn:tr-NN]]` with no body, a body no sentence refers to, one marker used twice, a note answered as a heading, or a note body that refers to another note | re-run that chunk; the message names the unit or the note |
+| `malformed`, "answers request …, and the worksheet now asks …" | the worksheet was rebuilt after this reply was written, so the answer belongs to a different cut of the job. The earlier answer is in `chunks/superseded/` to copy from | translate the current worksheet |
+| `malformed`, "carries no request line" | the reply does not say which version of the worksheet it answers — written before worksheets carried the line, or the translator dropped it | re-translate it, or `--revalidate-unbound` to accept it on the source digest alone |
+| `invalid_ir` | the merged book would not pass `validate_book` — a reference to a footnote that does not exist, a duplicate block id | the message names it; nothing was written |
 | `coverage` | a block split across worksheets had only some of its parts answered | translate the other parts before merging; merging one would replace the block with part of itself |
 | `stale` | the source those units were cut from has changed since the worksheet was written | re-cut the worksheets (`chunk build --force`) and translate them against the current text |
 | `superseded` (on the manifest, not the report) | `chunk build` found an answer whose worksheet had been re-cut from changed input, and **moved** it to `chunks/superseded/` under a name carrying the revision it answered | translate the new worksheet; the old translation is kept there to copy from, never deleted |
@@ -668,6 +674,12 @@ is put together, and that check asks the one question no page can.
 | `duplicate-translation` | two different sources got the same Persian | a worksheet reply was pasted twice; re-run both |
 | `first-mention-repeated` | a name is introduced in more than one place | keep the first, drop the rest |
 | `image-order` | pictures are in the wrong order in the package | re-build |
+| `image-missing-placement` | the book places an illustration and the document does not show it. The media part can still be in the package, which is why counting the files cannot see this | re-build from `book.json` |
+| `image-unexpected` | a placed illustration's bytes are not any picture the book expects — substituted or edited after the build | re-build; never edit the document |
+| `untranslated-alt` | an illustration's caption still holds the source language. A caption whose every span is `` `verbatim` `` is exempt: it is meant to survive as it is | translate that `#alt` unit |
+| `ir-invalid` | `book.json` does not pass its own validator — a duplicate block id, a reference to a footnote that does not exist. Every other check reads the structure this one validates | the message names it; fix the IR before reading anything else |
+| `docx-invalid` | a required part of the package is absent (`word/document.xml`, `[Content_Types].xml`, the document relationships) | re-build; Word will not open this file |
+| `footnote-untranslated` | a **referenced** note has no Persian, so the marker prints and the reader finds the source language at the foot of the page. A warning when completeness is not required | translate that note's unit |
 | `bookmarks-missing` / `bookmark-duplicate` | the TOC would link nowhere, or to the wrong place | re-build |
 | `emphasis-parity` (warning) | bold/italic/verbatim **count** changed | check one; often fine |
 | `verbatim-content-changed` | a literal run came back different — `` `ABC-123` `` as `` `XYZ-999` ``. The count signature cannot see inside a verbatim span, and a code identifier, filename or command is not translatable | restore the literal exactly; it must survive byte for byte |

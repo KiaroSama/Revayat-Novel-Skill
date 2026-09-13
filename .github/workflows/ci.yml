@@ -64,6 +64,26 @@ jobs:
         if: always()
         run: python tests/skip_budget.py --junit results.xml --profile bare
 
+      # The evidence, kept on failure as well as on success — a red run is the one
+      # whose junit document and resolved versions somebody actually needs, and
+      # those are exactly the runs where a step that only runs on success does
+      # not. It is also what makes the expensive tiers cost a contributor
+      # nothing: the answer is downloadable instead of re-derivable.
+      - name: Keep the junit document and the versions it ran against
+        if: always()
+        run: python -m pip freeze > resolved-versions.txt
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests-${{ matrix.os }}-py${{ matrix.python }}
+          path: |
+            results.xml
+            resolved-versions.txt
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Smoke-test the CLI
         env:
           PYTHONIOENCODING: utf-8
@@ -322,7 +342,7 @@ jobs:
           # published scripts when this went in, two of them left behind by
           # refactors that moved the code but not the import — the kind of thing
           # nothing else here would ever have mentioned.
-          ruff check skills/revayat-novel/scripts tests
+          ruff check skills/revayat-novel/scripts tests evaluation
 
       - name: Every plugin manifest is valid JSON and agrees on version
         run: |

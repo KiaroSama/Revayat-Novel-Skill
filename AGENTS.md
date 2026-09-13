@@ -54,7 +54,9 @@ tests/              pytest; fixtures are generated, never committed
 | `meaning.py` | the translation read against its source: bilingual sheets, a verdict bound to the revision, and bounded repair |
 | `falint.py` | Persian typography lint and fix |
 | `famorph.py` | whether a Persian space may become a ZWNJ: verb-form and comparative evidence |
-| `qa.py` | deterministic gates over the IR and over the built package |
+| `findings.py` | a finding and the report that collects them — shared by every gate |
+| `qa.py` | deterministic gates over the IR |
+| `package.py` | the finished `.docx` checked as a package: placement bytes, required parts, relationships |
 | `preview.py` | one source page laid out alone, with the production builder |
 | `pagecheck.py` | the measurements both render scopes share |
 | `renderqa.py` | one source page against its source page |
@@ -107,8 +109,24 @@ tests/              pytest; fixtures are generated, never committed
 
 ```bash
 pip install -r skills/revayat-novel/requirements.txt
+
+# Working locally: skip the two tiers that cost minutes rather than seconds.
+python -m pytest tests -q -m "not render and not ocr"
+
+# Everything, as CI runs it. Worth doing once before a push if you changed the
+# render or OCR path; otherwise let the runners do it.
 python -m pytest tests -q
 ```
+
+The `render` and `ocr` markers exist so the expensive work happens where it is
+free. `render` lays real documents out through Word or LibreOffice and `ocr` runs
+OCRmyPDF, Tesseract and Ghostscript; together they are most of the suite's wall
+time and very little of its coverage of the decisions. **No CI job passes `-m`**,
+so a marked test still runs on every push — `tests/test_ci_tiers.py` fails if a
+workflow ever deselects one, because a tier that runs nowhere has been deleted
+with extra steps. The one tier CI cannot run is the Word COM backend: no hosted
+runner has an Office licence, so that path is exercised only by a local full run
+on a machine with Word, and `doctor` reports which backend a machine has.
 
 `pytest.ini` carries the per-test ceiling (300s, thread method) so a bare
 `pytest` is bounded too — the flag used to live only in CI. The two workflows
@@ -126,6 +144,17 @@ a new shared fixture's expensive step in `tests_support.building("name", path)` 
 the failure names the fixture rather than its victims. Keep `pytest.importorskip`
 outside the wrapper: `Skipped` is not an `Exception`, so an optional dependency
 still skips instead of erroring.
+
+`evaluation/` is the bilingual benchmark: eight short English passages written
+for this repository, several acceptable Persian renderings each, and one recorded
+*wrong* rendering per case — the fluent, right-length, right-marker kind that
+structural QA cannot see. `score.py` grades per axis and returns `pass`, `fail` or
+**`unknown`**, and it produces **no overall number**, deliberately: an average over
+these axes is not a fact about a translation, and a single number is what invites
+tuning against the benchmark instead of the book. `unknown` is the honest verdict
+for a rendering the file has not seen, and it does not fail a build. Its limit is
+stated in the file: the English was written for it, so it measures translation,
+not extraction from a real scan.
 
 Keep the three plugin manifests at the same `version` — CI enforces it.
 
@@ -208,3 +237,19 @@ label `word` and dispatch `.github/workflows/word-render.yml`; that workflow is
 dispatch-only because a job wanting a label nobody carries queues forever.
 Everything else — LibreOffice on all three platforms, the OCR tier — runs in
 `ci.yml` and `integration.yml`.
+
+10. **An answer is bound to the request it answers.** `out_chunk0002.md` is a
+    reusable name: rebuild and an answer to the previous cut sits where the new
+    one expects it, with the same ids, the same count and the same parent block
+    text. So a worksheet states
+    `<!-- revayat-novel: request req1:… -->`, the reply echoes it, and merge
+    compares the echo with the live request. The token covers the ordered headers
+    and kinds, the exact segment boundaries, the neighbouring context and the term
+    table — but not our own scaffolding comments, because one of them counts the
+    jobs and a reply that is still valid must stay usable. Separately,
+    `source_sha256` is the `units2:` digest over the units **as cut**,
+    recomputable from the `unit_spans` the manifest records; the old `units:` form
+    hashed the parent blocks, which is one value for every segment of a paragraph,
+    so a recut at a different budget compared a digest against itself and merged
+    one generation's answers into another's cut. A reply carrying no token is
+    refused by name, with `merge --revalidate-unbound` as the explicit migration.
