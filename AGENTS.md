@@ -61,7 +61,9 @@ tests/              pytest; fixtures are generated, never committed
 | `qa.py` | deterministic gates over the IR |
 | `package.py` | the finished `.docx` checked as a package: placement bytes, required parts, relationships |
 | `preview.py` | one source page laid out alone, with the production builder |
-| `pagecheck.py` | the measurements both render scopes share |
+| `pagecheck.py` | what a rendered page has to satisfy — the one set of rules `render-qa` and `doc-qa` must not disagree about |
+| `pagepdf.py` | a rendered PDF read back as measurements: page views, fonts actually used, PNGs. The only part that needs PyMuPDF |
+| `pagedocx.py` | the two questions a render cannot answer — is the Persian there, is the paragraph RTL — asked of the .docx's own XML |
 | `renderqa.py` | one source page against its source page |
 | `docqa.py` | the finished book: per-page geometry plus global completeness |
 | `review.py` | the reviewer's five answers, per page or for the document |
