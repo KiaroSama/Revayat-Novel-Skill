@@ -27,6 +27,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import bookir as ir  # noqa: E402
 import meaning  # noqa: E402
+from tests_support import review_reply  # noqa: E402
 import merge as merging  # noqa: E402
 
 SOURCE = [
@@ -56,19 +57,40 @@ def translated(tmp_path: Path) -> Path:
     for block, target in zip(book["blocks"], TARGET):
         container, field = resolve(block["id"])
         container[field] = target
+    # The title page is published prose too: a book whose metadata has no
+    # Persian is unfinished, and the inventory now says so.
+    book["meta"]["title_target"] = "کتابی کوچک"
+    book["meta"]["author_target"] = "نویسندهٔ آزمون"
     ir.save_book(book, path)
     return path
 
 
 def _reply(out_dir: Path, sheet_id: str, body: str) -> None:
+    """A reply echoing its sheet's review line, which the transport requires.
+
+    Without the echo nothing says which sheet or which revision the reply answers,
+    and `record` refuses it — so every fixture here would be measuring that
+    refusal. `_bare_reply` exists for the tests that want exactly that.
+    """
+    ir.write_text(out_dir / f"out_{sheet_id}.md",
+                  review_reply(out_dir / f"{sheet_id}.md", body))
+
+
+def _bare_reply(out_dir: Path, sheet_id: str, body: str) -> None:
+    """A reply with no echoed review line — used to prove it is refused."""
     ir.write_text(out_dir / f"out_{sheet_id}.md", body)
 
 
 def test_the_sheet_shows_both_sides_of_every_unit(translated, tmp_path):
     out = tmp_path / "review"
     report = meaning.write_sheets(translated, out)
-    assert report["units"] == len(SOURCE)
+    # Three paragraphs *and* the title page: the review reads the published
+    # inventory, and the title and byline print before any of the prose does.
+    assert report["units"] == len(SOURCE) + 2
     text = (out / f"{report['sheets'][0]}.md").read_text(encoding="utf-8")
+    assert "A Small Book" in text and "کتابی کوچک" in text, (
+        "the title page is not on the sheet, so nobody reviews the first thing "
+        "a reader sees")
     for source, target in zip(SOURCE, TARGET):
         assert source in text, "the source side is missing from the sheet"
         assert target in text, "the translation side is missing from the sheet"
@@ -109,7 +131,10 @@ def test_silence_is_not_approval(translated, tmp_path):
         _reply(out, sheet_id, "I had a look and it seems fine.\n")
     report = meaning.record(out, translated)
     assert report["ok"] is False
-    assert any("never claimed as read" in problem for problem in report["problems"])
+    # The refusal moved into the shared transport, which names the sheet it is
+    # refusing rather than listing the unclaimed ones at the end.
+    assert any("nothing says this sheet was read" in problem
+               for problem in report["problems"]), report
 
 
 def test_a_clean_review_passes_and_binds_to_the_revision(translated, tmp_path):
@@ -310,35 +335,116 @@ def test_the_same_finding_twice_escalates_instead_of_asking_again(translated,
     assert request["units"] == []
 
 
-def test_the_round_cap_stops_a_review_that_keeps_finding_new_problems(translated,
-                                                                     tmp_path):
-    """Different findings each round is progress, and still bounded."""
+def _repair(translated: Path, unit: int, text: str) -> None:
+    """A real repair: the target changes, which is what moves the revision."""
+    book = ir.load_book(translated)
+    book["blocks"][unit]["target"] = text
+    ir.save_book(book, translated)
+
+
+def test_the_budget_counts_arguments_about_one_unit_not_rounds(translated,
+                                                              tmp_path):
+    """Three real rewrites of one sentence, each still wrong, and it stops.
+
+    The budget used to be a round counter cleared whenever the revision moved,
+    and a repair is what moves it — so five rewrites of the same wrong sentence
+    all reported round 1 and a sixth was still permitted. It counts arguments
+    about one ``(unit, rubric)`` now, and a rewrite is an argument rather than a
+    fresh start.
+    """
+    out = tmp_path / "review"
+    for attempt, rewrite in enumerate(
+            ["او دعوت را پذیرفت.", "او دعوت را قبول کرد.", "او دعوت را رد کرد."],
+            start=1):
+        meaning.write_sheets(translated, out)
+        recorded = _round(out, translated,
+                          f"?? b00002 sense\nStill inverted, try {attempt}.\n")
+        assert recorded["episodes"]["b00002/sense"]["attempts"] == attempt
+        request = meaning.repair_requests(out)
+        if attempt < 3:
+            assert request["ok"] is True, request
+            _repair(translated, 1, rewrite)
+
+    assert request["ok"] is False
+    assert request["refused"] == "rounds-exhausted"
+    # The arguments travel with the escalation: "look at the glossary entry" is
+    # not actionable without the three arguments that were actually made.
+    assert len(request["escalate"][0]["arguments"]) == 3, request
+
+
+def test_an_unrelated_later_issue_starts_with_its_own_budget(translated, tmp_path):
+    """One exhausted issue does not exhaust the next one.
+
+    This is what a whole-review round cap got wrong in the other direction: a
+    problem found in a *different* unit after the first was repaired spent a
+    budget it had nothing to do with, and the review stopped asking for a repair
+    nobody had asked for yet.
+    """
     out = tmp_path / "review"
     meaning.write_sheets(translated, out)
     _round(out, translated, "?? b00001 omission\nA clause is missing.\n")
     assert meaning.repair_requests(out)["ok"] is True
 
+    _repair(translated, 0, "لبخند زد و بی‌آنکه چیزی بگوید رفت، بی‌درنگ.")
+    meaning.write_sheets(translated, out)
     second = _round(out, translated, "?? b00003 sense\nThe lane became a street.\n")
-    assert second["history"] == [["b00001/omission"], ["b00003/sense"]]
+
+    assert second["resolved"] == ["b00001/omission"], second
+    assert second["episodes"]["b00003/sense"]["attempts"] == 1
     request = meaning.repair_requests(out)
-    assert request["ok"] is False
-    assert request["refused"] == "rounds-exhausted"
+    assert request["ok"] is True, request
+    assert request["units"] == ["b00003"]
 
 
-def test_a_new_revision_starts_the_count_again(translated, tmp_path):
-    """A corrected translation has earned another round; a relabel has not."""
+def test_a_corrected_translation_continues_the_episode(translated, tmp_path):
+    """A rewrite earns another attempt, not a fresh budget.
+
+    This assertion used to be the opposite — ``round == 1`` after a real repair,
+    "the repair budget was spent against text that has since changed" — and that
+    is the defect: every repair changed the text, so every repair reset the
+    budget and the cap was unreachable. A corrected translation is the *second
+    attempt* at the same issue; it is allowed, and it counts.
+    """
     out = tmp_path / "review"
     meaning.write_sheets(translated, out)
     _round(out, translated, "?? b00002 sense\nReversed.\n")
 
-    book = ir.load_book(translated)
-    book["blocks"][1]["target"] = "او دعوت را نپذیرفت."
-    ir.save_book(book, translated)
+    _repair(translated, 1, "او دعوت را نپذیرفت.")
     meaning.write_sheets(translated, out)
 
     again = _round(out, translated, "?? b00002 sense\nStill not right.\n")
-    assert again["round"] == 1, (
-        "the repair budget was spent against text that has since changed")
+    episode = again["episodes"]["b00002/sense"]
+    assert episode["attempts"] == 2, episode
+    assert len(set(episode["wordings"])) == 2, "the fixture did not really repair"
+    assert meaning.repair_requests(out)["ok"] is True
+
+
+def test_a_corrected_source_is_a_different_argument(translated, tmp_path):
+    """Re-extracting the source is a new book, and a new episode.
+
+    The line the brief draws: a *target* edit continues the episode, because that
+    is the repair loop; a *source* correction means the earlier argument was
+    about text the book no longer contains. The superseded episode is archived
+    rather than deleted, so the reset is visible to whoever reads it next.
+    """
+    out = tmp_path / "review"
+    meaning.write_sheets(translated, out)
+    _round(out, translated, "?? b00002 sense\nReversed.\n")
+    _repair(translated, 1, "او دعوت را نپذیرفت.")
+    meaning.write_sheets(translated, out)
+    _round(out, translated, "?? b00002 sense\nStill not right.\n")
+
+    book = ir.load_book(translated)
+    book["blocks"][1]["text"] = "She turned the invitation down flat."
+    ir.save_book(book, translated)
+    meaning.write_sheets(translated, out)
+
+    again = _round(out, translated, "?? b00002 sense\nAbout the new source now.\n")
+    episode = again["episodes"]["b00002/sense"]
+    assert episode["attempts"] == 1, episode
+    assert len(episode["superseded"]) == 1, episode
+    assert episode["superseded"][0]["superseded_because"] == "source-changed"
+    assert episode["superseded"][0]["attempts"] == 2, "the history was discarded"
     assert meaning.repair_requests(out)["ok"] is True
 
 

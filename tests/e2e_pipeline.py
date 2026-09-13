@@ -14,6 +14,7 @@ Run it directly, or let CI run it on Linux, macOS and Windows.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -28,12 +29,15 @@ import bookir as ir            # noqa: E402
 import build_docx              # noqa: E402
 import chunk as chunking       # noqa: E402
 import falint                  # noqa: E402
+import fluency                 # noqa: E402
 import glossary as gl          # noqa: E402
 import meaning                 # noqa: E402
 import merge as merging        # noqa: E402
+import published               # noqa: E402
 import qa                      # noqa: E402
+import signoff                 # noqa: E402
 import worksheet as worksheet_module  # noqa: E402
-from tests_support import png_bytes   # noqa: E402
+from tests_support import png_bytes, review_reply   # noqa: E402
 
 #: Deliberately mentions the same character several times, in and out of
 #: sentence-initial position, so the glossary scan has something real to find
@@ -179,9 +183,45 @@ def translate(worksheet: str) -> str:
     return "\n".join(out)
 
 
+def _plain(text: str) -> str:
+    """Text with the XML tags and the run boundaries taken out.
+
+    Word splits one sentence across several `<w:t>` runs whenever it changes
+    anything about the formatting, so a substring search against the raw part
+    fails on text that is present and correct.
+    """
+    return re.sub(r"<[^>]+>", "", text).replace("‌", "")
+
+
+def _approve(out_dir: Path, sheet_ids: list[str]) -> None:
+    """Claim each sheet read, echoing the review line the sheet asks for.
+
+    A reply that echoes nothing cannot say which sheet or which revision it
+    answers, so the transport refuses it — and this script did exactly that
+    until the refusal was added, which is how it became the stage nobody ran.
+    """
+    for sheet_id in sheet_ids:
+        ir.write_text(out_dir / f"out_{sheet_id}.md",
+                      review_reply(out_dir / f"{sheet_id}.md",
+                                   f"!! reviewed {sheet_id}\n"))
+
+
+def _workspace() -> Path:
+    """A working directory inside the project, so a kept run stays with it.
+
+    `tempfile.mkdtemp()` put it under the user's temp directory, and this script
+    deliberately keeps the directory when a stage fails — which left diagnostic
+    copies of a book outside the project it belongs to. `.pytest-tmp` is already
+    git-ignored and is where the pytest runs land.
+    """
+    root = REPO / ".pytest-tmp" / "e2e"
+    root.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix="run-", dir=root))
+
+
 def main() -> int:
     ir.use_utf8_stdio()
-    work = Path(tempfile.mkdtemp(prefix="revayat-novel-e2e-"))
+    work = _workspace()
     passed = False
     try:
         print(f"working in {work}")
@@ -241,6 +281,28 @@ def main() -> int:
               f"{sum(len(v) for v in report['translator_notes'].values())} translator "
               f"notes, {len(placed)} name(s) introduced")
 
+        # 4a. finish the published text ------------------------------------ #
+        # Before anybody reads it, because both of these change what a reader
+        # sees and therefore what an approval is about. Run after the reviews —
+        # which is the order this script used to follow — and the approvals
+        # describe text that has since changed.
+        translated = ir.load_book(book_path)
+        fixed = falint.fix_book(translated)
+        once = json.dumps(translated, ensure_ascii=False)
+        falint.fix_book(translated)
+        check(json.dumps(translated, ensure_ascii=False) == once,
+              "the typography pass is not idempotent")
+        # The one expected hand-edit, and published prose like any paragraph: the
+        # title page is the first thing a reader meets.
+        translated["meta"]["title_target"] = "خانه‌ای در انتهای کوچه"
+        translated["meta"]["author_target"] = "نویسندهٔ آزمون"
+        ir.save_book(translated, book_path)
+        pending = published.pending(ir.load_book(book_path))
+        check(not pending,
+              f"published prose with no Persian: {[u['id'] for u in pending]}")
+        print(f"  4a typography : {fixed['changed_count']} units adjusted, "
+              f"idempotent, title page translated")
+
         # 4b. the bilingual review ------------------------------------------ #
         # A stage nothing exercises is a stage that rots, and this one is easy to
         # leave out of the chain because a human answers it. What is mechanical
@@ -258,32 +320,62 @@ def main() -> int:
               "the review sheet does not carry the source side")
         check((source_one.get("target") or "")[:20] in first,
               "the review sheet does not carry the translation side")
-        for sheet_id in sheets["sheets"]:
-            ir.write_text(review_dir / f"out_{sheet_id}.md",
-                          f"!! reviewed {sheet_id}\n")
+        _approve(review_dir, sheets["sheets"])
         filed = meaning.record(review_dir, book_path)
         check(filed.get("ok"), f"the review was refused: {json.dumps(filed)[:300]}")
         check(meaning.verdict(review_dir, sheets["revision"])["ok"],
               "a clean review did not pass its own gate")
+        check(any(unit["part"] == "metadata"
+                  for unit in published.units(ir.load_book(book_path))),
+              "the title page is not in the reviewed inventory")
         print(f"  4b review     : {sheets['units']} pairs, "
               f"{len(sheets['sheets'])} sheet(s), bound to {sheets['revision'][:16]}…")
 
-        # 5. typography ----------------------------------------------------- #
-        translated = ir.load_book(book_path)
-        fixed = falint.fix_book(translated)
-        ir.save_book(translated, book_path)
-        once = json.dumps(translated, ensure_ascii=False)
-        falint.fix_book(translated)
-        check(json.dumps(translated, ensure_ascii=False) == once,
-              "the typography pass is not idempotent")
-        print(f"  5 typography  : {fixed['changed_count']} units adjusted, idempotent")
+        # 4c. the blind Persian pass ---------------------------------------- #
+        # Part of the documented sequence, and the stage a run is most tempted to
+        # skip because the bilingual review already "read" the prose. It cannot
+        # have: it could see the English behind every sentence.
+        fluency_dir = work / "fluency"
+        blind = fluency.write_sheets(book_path, fluency_dir, review_dir)
+        check(blind.get("ok"), f"the blind pass was refused: {json.dumps(blind)[:300]}")
+        for sheet_id in blind["sheets"]:
+            text = (fluency_dir / f"{sheet_id}.md").read_text(encoding="utf-8")
+            for block in ir.load_book(book_path)["blocks"]:
+                english = (block.get("text") or "").strip()
+                check(not english or english[:24] not in text,
+                      f"{sheet_id} leaked source text into the blind pass")
+        _approve(fluency_dir, blind["sheets"])
+        pass_filed = fluency.record(fluency_dir, book_path)
+        check(pass_filed.get("ok"),
+              f"the blind pass was refused: {json.dumps(pass_filed)[:300]}")
+        settled = fluency.verdict(fluency_dir, book_path, review_dir)
+        check(settled["ok"], f"the blind pass did not pass: {json.dumps(settled)[:300]}")
+        print(f"  4c fluency    : {blind['units']} units read blind, "
+              f"{len(blind['sheets'])} sheet(s), no edits proposed")
 
-        # 6. QA ------------------------------------------------------------- #
+        # 5. typography already settled ------------------------------------- #
+        # The check that step 4a held, which is what the recipe asks for at this
+        # point: nothing left to fix, so no approval is about stale text.
+        left = falint.lint_book(ir.load_book(book_path))
+        check(not left.get("findings"),
+              f"typography still needs fixing after the reviews: "
+              f"{json.dumps(left)[:300]}")
+        print("  5 typography  : nothing left to fix, approvals are about this text")
+
+        # 6. QA, semantic verdicts enforced --------------------------------- #
         translated = ir.load_book(book_path)
         summary = qa.check_book(translated, assets=work / "assets",
                                 glossary=gl.load(glossary_path)).summary()
         check(summary["ok"], f"QA rejected the book: {json.dumps(summary)[:500]}")
-        print(f"  6 QA          : clean ({summary['warnings']} warnings)")
+        gate = signoff.problems(book_path, review_dir=review_dir,
+                                fluency_dir=fluency_dir)
+        check(not gate, f"the delivery gate refused: {gate}")
+        # And the other half of the same gate: not asking is not passing.
+        unasked = signoff.problems(book_path, review_dir=None, fluency_dir=None)
+        check([code for code, _u, _d in unasked] == [signoff.UNVERIFIED] * 2,
+              f"a gate nobody ran must report it: {unasked}")
+        print(f"  6 QA          : clean ({summary['warnings']} warnings), "
+              f"both semantic verdicts current")
 
         # 7. build ---------------------------------------------------------- #
         import argparse
@@ -317,6 +409,35 @@ def main() -> int:
         check('w:val="38"' in document,
               "--heading-size source did not reach the document (19pt = 38 half-points)")
         print(f"  8 package     : verified, {output.stat().st_size // 1024} KB")
+
+        # 9. the shipped content is the approved content --------------------- #
+        # The question the whole gate exists to answer, asked of the file that
+        # will actually be sent. Checked in both directions: every approved
+        # string is in the document, and the approvals still hold for the book it
+        # was built from — the no-edit case, which is the one that silently
+        # passes when the chain is only asserted rather than compared.
+        with zipfile.ZipFile(output) as archive:
+            printed = "".join(
+                archive.read(part).decode("utf-8")
+                for part in ("word/document.xml", "word/footnotes.xml")
+                if part in names)
+        shipped = _plain(printed)
+        for unit in published.units(ir.load_book(book_path)):
+            wanted = _plain(ir.plain_text(unit["target"]))
+            check(bool(wanted), f"{unit['id']} has no Persian at delivery")
+            check(wanted[:60] in shipped,
+                  f"{unit['id']} ({unit['part']}) was approved and is not in the "
+                  f"document: {unit['target'][:60]!r}")
+        after = signoff.approved(book_path, review_dir=review_dir,
+                                 fluency_dir=fluency_dir)
+        check(not after["problems"],
+              f"the approvals no longer hold after the build: {after['problems']}")
+        check(after["meaning_revision"] == filed["revision"],
+              "the book moved between the approval and the build")
+        check(after["fluency_revision"] == pass_filed["revision"],
+              "the Persian moved between the blind pass and the build")
+        print(f"  9 delivery    : {after['published_units']} published units in the "
+              f"file, approved at {after['meaning_revision'][:16]}…")
 
         print("\nend-to-end pipeline OK")
         passed = True

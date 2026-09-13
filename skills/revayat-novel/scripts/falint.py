@@ -28,6 +28,7 @@ from typing import Any, Iterable
 
 import bookir as ir
 import famorph
+import published
 import runstate
 
 ZWNJ = "‌"
@@ -389,21 +390,19 @@ def lint_text(text: str) -> list[dict[str, str]]:
 # --------------------------------------------------------------------------- #
 
 def _targets(book: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any], str]]:
-    """``(unit id, container, field)`` for every translated string in the book."""
-    for block in ir.iter_text_blocks(book):
-        if (block.get("target") or "").strip():
-            yield block["id"], block, "target"
-    for block in book.get("blocks", []):
-        if block["type"] == "image" and (block.get("target_alt") or "").strip():
-            yield f"{block['id']}#alt", block, "target_alt"
-    for note in book.get("footnotes", []):
-        if (note.get("target") or "").strip():
-            yield note["id"], note, "target"
-    # A running head prints on every page, so a stray Latin quotation mark or an
-    # unconverted digit in one is the typographical error a reader meets most.
-    for unit_id, _, piece, _ in ir.iter_running_pieces(book):
-        if (piece.get("target") or "").strip():
-            yield unit_id, piece, "target"
+    """``(unit id, container, field)`` for every translated string in the book.
+
+    The published inventory, so this cannot drift from what the reviews read and
+    the builder prints. It used to walk blocks, alt text, notes and running heads
+    — a running head prints on every page, so a stray Latin quotation mark in one
+    is the typographical error a reader meets most — and it missed the title page,
+    which is the first thing they meet: `meta.title_target` and
+    `meta.author_target` went to print with whatever punctuation the hand-edit
+    left in them.
+    """
+    for unit in published.units(book):
+        if unit["target"].strip():
+            yield unit["id"], unit["container"], unit["field"]
 
 
 def fix_book(book: dict[str, Any], options: Options | None = None) -> dict[str, Any]:

@@ -26,6 +26,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import eligible
 import runstate
 from pageidentity import _translation_moved
 
@@ -132,17 +133,48 @@ def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
     }
 
 
+def _job_to_do(out_dir: Path,
+               entries: list[dict[str, Any]]) -> tuple[dict[str, Any], str]:
+    """``(the sub-job that still needs work, why)`` — merge's own answer.
+
+    The test used to be ``bool(the reply file)``, which is weaker than the one
+    merge applies, so a split page whose *second* part carried a reply merge
+    refuses — one bound to the previous cut, one with no request line, one whose
+    footnote does not resolve — handed back the **first** part instead. Measured:
+    a two-part page with an unbound answer to part 2 refused as
+    ``malformed: ['page0001-02']`` while ``next_page`` offered ``page0001-01``,
+    so a driver re-translated a part that was already correct and the broken one
+    was never named.
+
+    :mod:`eligible` is the same read-only resolver the chunk scheduler and merge
+    share, which is what keeps the two from drifting apart again. Without the
+    book it cannot recheck freshness, and reports ``unverified`` — usable, so a
+    correct job is never mistaken for an unfinished one here.
+    """
+    for entry in entries:
+        verdict = eligible.eligibility(out_dir, entry)
+        if not verdict["usable"]:
+            # A reason names what is wrong with the reply **on disk**. "Nobody has
+            # answered this yet" is the ordinary state of an unanswered job, and
+            # reporting it as a reason would make the field mean nothing.
+            if verdict["state"] in ("missing", "empty"):
+                return entry, ""
+            return entry, verdict["detail"] or f"state {verdict['state']}"
+    return entries[0], ""
+
+
 def next_page(out_dir: Path) -> dict[str, Any] | None:
     """The next job to do, and the page it belongs to.
 
     One job at a time even when a page was split: answer it, ask again, and the
-    same page comes back with its next part until the page is complete.
+    same page comes back with its next part until the page is complete — and
+    when one part's reply is the problem, that part is the one handed back.
     """
     progress = status(out_dir)
     if progress["next"] is None:
         return None
     entries = jobs_for(load_manifest(out_dir), progress["next"])
-    entry = next((e for e in entries if not answer(out_dir, e)), entries[0])
+    entry, reason = _job_to_do(out_dir, entries)
     record = next(p for p in progress["pages"] if p["page"] == entry["page"])
     return {
         "page": entry["page"],
@@ -162,6 +194,9 @@ def next_page(out_dir: Path) -> dict[str, Any] | None:
         "state": record["state"],
         "attempts": record["attempts"],
         "last_error": record["last_error"],
+        # What is wrong with the reply already on disk, when that is why this job
+        # came back. Empty when the job simply has not been answered yet.
+        "reason": reason,
         "remaining": progress["total"] - progress["accepted"],
     }
 
