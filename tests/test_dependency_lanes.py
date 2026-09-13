@@ -22,14 +22,18 @@ immediate subdirectory of it. So `constraints-ci.txt` is in the lane — and a
 future `constraints-ci.toml`, or a pin written as `pymupdf 1.28.2`, silently
 would not be. That is what the first test holds in place.
 
-The same reading is why the floors are pinned inside `supported-range.yml`
-instead of in a tracked file: a tracked one would join the `ci-constraints` group
-and Dependabot would propose raising the floors to latest, which is the single
-change that lane exists to prevent.
+The same reading is why the exact floors live in `dependency-floors.json` rather
+than in a tracked `.txt`: the updater collects every `.txt` whose lines parse as
+requirements, so a tracked constraints file would join the `ci-constraints` group
+and Dependabot would propose raising the floors to latest — the single change
+those lanes exist to prevent. JSON it does not read, and both lanes generate
+their constraints file from it at run time, so there is one list rather than two
+copies drifting apart.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -41,6 +45,8 @@ OPTIONAL = ROOT / "skills" / "revayat-novel" / "requirements-optional.txt"
 PINS = ROOT / "constraints-ci.txt"
 LINT = ROOT / "requirements-lint.txt"
 SUPPORTED_RANGE = ROOT / ".github" / "workflows" / "supported-range.yml"
+AUDIT = ROOT / ".github" / "workflows" / "dependency-audit.yml"
+FLOORS = ROOT / "dependency-floors.json"
 DEPENDABOT = ROOT / ".github" / "dependabot.yml"
 
 
@@ -167,23 +173,63 @@ def test_every_declared_floor_is_a_floor(name, op, version):
 
 
 def floors_pinned_in_the_workflow() -> dict[str, str]:
-    """The `name==version` lines inside supported-range.yml's heredoc."""
-    text = SUPPORTED_RANGE.read_text(encoding="utf-8")
-    heredoc = re.search(r"<<'EOF'\n(.*?)\n\s*EOF", text, re.S)
-    assert heredoc, "supported-range.yml no longer writes a constraints heredoc"
-    return {name.lower(): version for name, version in
-            re.findall(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)==(\S+)\s*$",
-                       heredoc.group(1), re.M)}
+    """The exact pins, from the one tracked list both lanes read."""
+    record = json.loads(FLOORS.read_text(encoding="utf-8"))
+    return {name.lower(): version
+            for name, version in (record.get("pins") or {}).items()}
 
 
 def test_the_floors_lane_pins_every_declared_floor():
     declared = set(requirements(MANIFEST))
     pinned = set(floors_pinned_in_the_workflow())
     assert declared == pinned, (
-        f"supported-range.yml does not pin the declared set: missing "
+        f"dependency-floors.json does not pin the declared set: missing "
         f"{sorted(declared - pinned)}, extra {sorted(pinned - declared)}. A "
-        f"dependency absent from the heredoc resolves to latest there, so the "
-        f"lane would quietly stop testing the oldest set for it")
+        f"dependency absent from it resolves to latest in both lanes, so they "
+        f"would quietly stop testing the oldest set for it")
+
+
+@pytest.mark.parametrize("workflow", [SUPPORTED_RANGE, AUDIT])
+def test_both_lanes_read_the_floors_from_the_one_list(workflow: Path):
+    """Not a copy each. Two pin lists is the drift this project keeps paying for."""
+    text = workflow.read_text(encoding="utf-8")
+    assert "dependency-floors.json" in text, (
+        f"{workflow.name} does not read dependency-floors.json, so its idea of "
+        f"the oldest set can differ from the other lane's")
+    assert not re.search(r"^\s+pymupdf==", text, re.M), (
+        f"{workflow.name} pins a floor inline as well as reading the list; one "
+        f"of the two will be forgotten")
+
+
+def test_the_floors_name_the_interpreter_they_install_on():
+    """Which interpreter can install the oldest set is a fact about the set.
+
+    On CPython 3.13 `pymupdf==1.24.3` has no wheel at all, so a lane taking the
+    interpreter from its own matrix would be testing a set it had silently
+    resolved upwards.
+    """
+    record = json.loads(FLOORS.read_text(encoding="utf-8"))
+    assert re.fullmatch(r"3\.\d+", str(record.get("interpreter", ""))), record
+    for workflow in (SUPPORTED_RANGE, AUDIT):
+        assert "steps.floors.outputs.interpreter" in workflow.read_text(
+            encoding="utf-8"), (
+            f"{workflow.name} hard-codes its interpreter instead of reading the "
+            f"one the floors name")
+
+
+def test_the_audit_does_not_call_a_latest_resolution_floor_coverage():
+    """The label was the defect: `-r` on a range audits the newest match.
+
+    Two steps resolved the same ranges to the same latest versions while one of
+    them was titled as floor coverage, so the oldest supported set — what a reader
+    with an old constraint or a warm cache installs — was audited by nothing.
+    """
+    text = AUDIT.read_text(encoding="utf-8")
+    assert "Audit the floors a reader installs against" not in text, (
+        "the misleading step title is back; `pip-audit -r` on a >= manifest "
+        "resolves to latest and is not floor coverage")
+    assert "Audit the floors, pinned" in text, (
+        "the audit no longer has a job that installs the exact oldest set")
 
 
 @pytest.mark.parametrize("name, pin",
@@ -198,7 +244,7 @@ def test_each_floors_pin_is_the_floors_own_release_series(name, pin):
     """
     floor = requirements(MANIFEST)[name][1]
     assert pin.startswith(f"{floor}.") or pin == floor, (
-        f"{name} is pinned at {pin} in supported-range.yml but declared "
+        f"{name} is pinned at {pin} in dependency-floors.json but declared "
         f">={floor}: that is a different release series, so the lane is not "
         f"testing the declared floor")
     assert _version(pin) >= _version(floor), (
