@@ -158,11 +158,11 @@ def ocr_state(block_ids: list[str],
 
 
 
-PAGE_DIGEST_VERSION = "page2"
+PAGE_DIGEST_VERSION = "page3"
 
 
 def translation_hash(book_path: Path, page: int) -> str:
-    """Identity of one page's Persian, as the book currently holds it.
+    """Identity of one page's rendered content **and the source it answers**.
 
     **One definition, for everyone who records or checks it.** The page record
     has a single ``translation`` hash and it used to be written two different
@@ -171,6 +171,14 @@ def translation_hash(book_path: Path, page: int) -> str:
     disagree, and the way this pair disagreed was silent: every merge looked
     like a changed translation, which is exactly the signal the retry cap and the
     acceptance check read.
+
+    **Both sides, since `page3`.** Until then this hashed only the Persian, so
+    re-extracting the source — a corrected OCR line, a re-read PDF — left every
+    page's digest identical while its translation now answered text that had
+    changed. `accept` then passed a page whose Persian belonged to a source
+    nobody had compared it against. It is the same defect the chunk route fixed
+    by moving from `units:` to `units2:`, and it survived here because a digest
+    over the target alone *looks* like it covers the page.
 
     ``pagecheck`` is imported here rather than at the top because it imports this
     module; the dependency points one way at import time, and this is the one
@@ -191,6 +199,16 @@ def translation_hash(book_path: Path, page: int) -> str:
     # had passed QA against a sheet that no longer exists.
     parts: list[str] = ["body"] + list(expected["texts"])
 
+    # The English this page's Persian is an answer to. `expectations()["texts"]`
+    # is targets only, by design — it is what a rendered page must *show* — so
+    # the source has to be taken from the blocks directly, under the same
+    # ownership rule the job used.
+    parts.append("source")
+    for block_id in (job or {}).get("block_ids") or []:
+        block = lookup.get(block_id) or {}
+        if block.get("type") in ir.TEXT_TYPES:
+            parts.append(f"{block_id}\x00{block.get('text') or ''}")
+
     parts.append("geometry")
     setup = expected.get("setup") or {}
     parts += [f"{key}={setup[key]!r}" for key in sorted(setup)]
@@ -200,7 +218,10 @@ def translation_hash(book_path: Path, page: int) -> str:
                   for ref in ir.ANY_FOOTNOTE_TOKEN.findall(text)}
     for note in book.get("footnotes", []):
         if note.get("id") in referenced:
-            parts.append(f"{note['id']}\x00{note.get('target') or ''}")
+            # Source beside target, for the reason given above: a corrected note
+            # in English changes what its Persian has to say.
+            parts.append(f"{note['id']}\x00{note.get('text') or ''}"
+                         f"\x00{note.get('target') or ''}")
 
     parts.append("figures")
     # The asset's identity is read from the **file**, not from a field on the
@@ -224,10 +245,17 @@ def translation_hash(book_path: Path, page: int) -> str:
                      f"\x00{block.get('target_alt') or ''}"
                      f"\x00{block.get('width_pt')}x{block.get('height_pt')}")
 
+    # Every head this page actually prints, which is every head of every section
+    # the page's blocks fall in — not only a head whose section *opens* on this
+    # page. Under the old rule a corrected running head moved the digest of the
+    # section's first page and no other, so pages 2..n of a chapter kept an
+    # accepted verdict while the header at the top of them had changed.
     parts.append("running")
+    showing = ir.sections_covering(book, ids)
     for unit_id, _kind, piece, section in ir.iter_running_pieces(book):
-        if (section.get("start_block") or "") in ids or not ids:
-            parts.append(f"{unit_id}\x00{piece.get('target') or ''}")
+        if not ids or any(section is shown for shown in showing):
+            parts.append(f"{unit_id}\x00{piece.get('text') or ''}"
+                         f"\x00{piece.get('target') or ''}")
 
     return f"{PAGE_DIGEST_VERSION}:" + ir.sha256_bytes(
         "\n".join(parts).encode("utf-8"))

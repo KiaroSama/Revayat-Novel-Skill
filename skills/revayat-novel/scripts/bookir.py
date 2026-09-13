@@ -45,7 +45,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 # The inline markup language lives in `markup`, and every name it owns is
 # re-exported here: `ir.parse_markup`, `ir.footnote_refs`, `ir.FOOTNOTE_TOKEN` are
@@ -498,6 +498,41 @@ def iter_running_pieces(
                     for piece in paragraph.get("pieces") or []:
                         if piece.get("id"):
                             yield piece["id"], kind, piece, section
+
+
+def sections_covering(book: dict[str, Any],
+                      block_ids: Iterable[str]) -> list[dict[str, Any]]:
+    """Every section these blocks are laid out under, in book order.
+
+    Decided by walking the blocks: the first section is in force from the top of
+    the book whatever it declares, and each later one takes over at its
+    ``start_block``. That is the same rule :mod:`build_docx` inserts its section
+    breaks by, so what this reports is what the builder will actually produce.
+
+    **This is not the rule that decides who translates a running head, and the
+    two must never be swapped.** A head is *translated* once, with the chunk that
+    opens its section (`chunk.translatable_units` anchors it there, so the
+    translator settles a chapter's head while looking at the chapter). A head is
+    *printed* on every page of that section. Anything asking "what does this page
+    show" needs this function; asking it with the ownership rule instead meant a
+    corrected running head moved only the first page's digest, while every later
+    page of the chapter kept its accepted verdict and a header nobody re-read.
+    """
+    sections = book.get("sections") or []
+    if not sections:
+        return []
+    opens = {section["start_block"]: section for section in sections[1:]
+             if section.get("start_block")}
+    wanted = set(block_ids)
+    current = sections[0]
+    found: list[dict[str, Any]] = []
+    for block in book.get("blocks") or []:
+        current = opens.get(block["id"], current)
+        # Identity, not equality: two sections of one book can be equal as dicts
+        # (same geometry, same empty heads) and are still different sections.
+        if block["id"] in wanted and not any(current is seen for seen in found):
+            found.append(current)
+    return found
 
 
 def running_heads(book: dict[str, Any]) -> dict[str, dict[str, Any]]:
