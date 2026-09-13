@@ -10,9 +10,17 @@ language.
 Linux, `python` or `py -3` on Windows, where `python3` usually does not exist.
 
 ```bash
-$PY <skill>/scripts/revayat-novel.py qa check --book ${1:-work}/book.json --assets ${1:-work}/assets --glossary ${1:-work}/glossary.json
+$PY <skill>/scripts/revayat-novel.py qa check --book ${1:-work}/book.json --assets ${1:-work}/assets --glossary ${1:-work}/glossary.json --review ${1:-work}/review --fluency ${1:-work}/fluency
 $PY <skill>/scripts/revayat-novel.py falint lint --book ${1:-work}/book.json
 ```
+
+`--review` and `--fluency` are the directories the two semantic stages wrote to.
+They are how their verdicts are enforced *here*, for the book as it now stands: a
+review recorded against an earlier revision comes back `semantic-rejected`. Leave
+them out and the report says `semantic-unverified` — a warning naming what was not
+asked, never a pass — and `--strict` turns that into an error. `falint lint` must
+report nothing: typography runs before the reviews, so anything left to fix means
+the approvals describe older text.
 
 If a built `.docx` exists, gate it **twice** — the two answer different
 questions and neither substitutes for the other:

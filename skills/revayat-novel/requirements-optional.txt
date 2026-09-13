@@ -14,8 +14,8 @@
 # No version floor, deliberately. A floor is a claim about the oldest version
 # that works, and nothing here has ever run an old one: CI installs whatever
 # resolves today. An invented number would read as tested. If one of these ever
-# needs a minimum, it belongs in constraints-floors.txt too, with a lane that
-# proves it.
+# needs a minimum, it belongs in `dependency-floors.json` too, which is the list
+# both floor lanes install from.
 
 # Adds a text layer to a scanned or mixed PDF, via Tesseract and Ghostscript.
 # Those two are binaries, not wheels: `doctor` locates them and

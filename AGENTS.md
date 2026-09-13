@@ -22,7 +22,11 @@ skills/revayat-novel/
   SKILL.md          the skill; `name: revayat-novel` is the activation key
   scripts/*.py      the pipeline (see below)
   references/*.md   loaded on demand, not up front
-  requirements.txt  the single dependency manifest
+  requirements.txt  the ranges a reader may install
+  requirements-optional.txt  the two wheels two stages need
+constraints-ci.txt  the exact set CI installs against
+requirements-lint.txt  the linter the build gates on, pinned
+dependency-floors.json  the exact oldest set, read by both floor lanes
 commands/           slash commands for plugin hosts
 install/            install.ps1, install.sh — copy the skill into agents
 evaluation/         the bilingual benchmark: cases.json + score.py
@@ -46,21 +50,35 @@ tests/              pytest; fixtures are generated, never committed
 | `glossentry.py` | what a glossary *is*: entries, ids, aliases, the canonical form, and the candidates `scan` proposes |
 | `glossary.py` | making a book honour them: term tables, first mentions, drift checking |
 | `chunk.py` | worksheets by character budget, and superseding an answer whose worksheet was re-cut |
+| `chunksheet.py` | what a chunk worksheet *shows*: the term table, the book's voice, the cards, the bounded neighbour window, the units |
+| `provenance.py` | what identifies a question and the source it was cut from: the request token, the `units3:` digest, the spans |
+| `eligible.py` | one read-only "would merge accept this reply?", read by the scheduler and by merge |
 | `worksheet.py` | the transport: the `@@` grammar, the escape, the reader, and **one** verdict on a reply that merge and status both ask |
 | `pagerun.py` | the page lifecycle: one job per source page, and the gates a page must clear |
+| `pagesheet.py` | what a page worksheet shows, every piece of it bounded |
 | `pageprogress.py` | the read side of a run — where every page stands, which is next, and whether a page reported finished still matches the book |
 | `pageidentity.py` | what a page *is*: which blocks it owns, its geometry, its OCR state, and the versioned digest that says whether its translation still matches |
 | `pagecli.py` | the `pages` command line; `pagerun.main` forwards here |
 | `sourcepages.py` | the source PDF as an artefact: a page's visual identity, one file per page |
 | `segments.py` | one unit longer than the whole budget, cut reversibly; and grouping units into worksheets that fit, for both routes |
 | `merge.py` | worksheets back into the IR, as one transaction, with named failures |
+| `bookwrite.py` | the only way `book.json` changes: a lock, a validated result, a journal, side files before the book |
+| `notegraph.py` | every footnote edge in the book, checked at the write and at the gate |
+| `published.py` | one typed inventory of what the book prints — body, captions, notes, running heads, the title page |
 | `meaning.py` | the translation read against its source: bilingual sheets, a verdict bound to the revision, and bounded repair |
+| `reviewsheet.py` | the transport both review stages travel on: which sheet, which revision, whose grammar |
+| `repairlog.py` | the repair budget, counted per issue and surviving the edits made to repair it |
 | `fluency.py` | the Persian read *without* its source: blind sheets, proposed edits, and a verdict that cannot pass until `meaning` has been re-run over the result |
+| `fluencysheet.py` | that stage's grammar, rendering and reader — including the escape that keeps Persian beginning `~ ` from reading as control |
 | `falint.py` | Persian typography lint and fix |
 | `famorph.py` | whether a Persian space may become a ZWNJ: verb-form and comparative evidence |
 | `findings.py` | a finding and the report that collects them — shared by every gate |
 | `qa.py` | deterministic gates over the IR |
-| `package.py` | the finished `.docx` checked as a package: placement bytes, required parts, relationships |
+| `qanaming.py` | the one place a name's introduction is demanded, reading the plan that placed it |
+| `naming.py` | that plan: which block carries which name's original spelling, and the rewriting it is a plan for |
+| `signoff.py` | the semantic half of the final gate: both review verdicts, for the book as it stands |
+| `package.py` | the finished `.docx` checked as a package: the notes the book places, the pictures' drawn geometry, the required parts |
+| `opc.py` | that package read as OPC: namespace-aware XML, resolved content types and relationships, a bounded archive |
 | `preview.py` | one source page laid out alone, with the production builder |
 | `pagecheck.py` | what a rendered page has to satisfy — the one set of rules `render-qa` and `doc-qa` must not disagree about |
 | `pagepdf.py` | a rendered PDF read back as measurements: page views, fonts actually used, PNGs. The only part that needs PyMuPDF |

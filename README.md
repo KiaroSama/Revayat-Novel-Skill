@@ -128,8 +128,14 @@ $PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1
 $PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
 $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
 
-# Read the Persian against the English before polishing it. Three rubrics are
-# about meaning and block; two are about style and deliberately do not.
+# Finish the published text *before* anybody reads it: typography is mechanical
+# and the title page is published prose. Both move the revision the approvals
+# below are bound to, so running them afterwards makes those approvals stale.
+$PY $S/revayat-novel.py falint fix --book work/book.json
+#   … and translate meta.title_target / meta.author_target in work/book.json …
+
+# Read the Persian against the English. Three rubrics are about meaning and
+# block; two are about style and deliberately do not.
 $PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
 #   … read work/review/sheet_NNNN.md, write findings to out_sheet_NNNN.md …
 $PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
@@ -145,8 +151,12 @@ $PY $S/revayat-novel.py fluency apply  --book work/book.json --out work/fluency
 #       is the comparison against the source, and nothing passes without it …
 $PY $S/revayat-novel.py fluency status --book work/book.json --out work/fluency --meaning work/review
 
-$PY $S/revayat-novel.py falint fix   --book work/book.json
-$PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
+# Nothing left for typography to fix, or the approvals above describe older text.
+$PY $S/revayat-novel.py falint lint  --book work/book.json
+# `--review` and `--fluency` are how the two semantic verdicts are enforced here;
+# without them the report says `semantic-unverified`, which `--strict` blocks on.
+$PY $S/revayat-novel.py qa check --book work/book.json --assets work/assets \
+  --glossary work/glossary.json --review work/review --fluency work/fluency --strict
 $PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"
 
 # Two final gates, and the file is not ready until both pass: the package, and
