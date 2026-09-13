@@ -33,6 +33,7 @@ import fluency                 # noqa: E402
 import glossary as gl          # noqa: E402
 import meaning                 # noqa: E402
 import merge as merging        # noqa: E402
+import notegraph               # noqa: E402
 import published               # noqa: E402
 import qa                      # noqa: E402
 import signoff                 # noqa: E402
@@ -367,6 +368,10 @@ def main() -> int:
         summary = qa.check_book(translated, assets=work / "assets",
                                 glossary=gl.load(glossary_path)).summary()
         check(summary["ok"], f"QA rejected the book: {json.dumps(summary)[:500]}")
+        # Both note origins, both anchored where they print, and the whole graph
+        # resolving — through the production builder below, not only in the IR.
+        check(not notegraph.problems(translated),
+              f"the footnote graph does not resolve: {notegraph.problems(translated)}")
         gate = signoff.problems(book_path, review_dir=review_dir,
                                 fluency_dir=fluency_dir)
         check(not gate, f"the delivery gate refused: {gate}")
