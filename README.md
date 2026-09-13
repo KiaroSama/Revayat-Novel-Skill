@@ -70,10 +70,13 @@ works here, and it stops receiving CPython security fixes.
 python skills/revayat-novel/scripts/revayat-novel.py doctor
 ```
 
-Optional, and only for scanned or mixed PDFs:
+Optional. `skills/revayat-novel/requirements-optional.txt` declares the two
+wheels two stages need — `ocrmypdf` for scanned or mixed PDFs, and `pywin32` for
+the Word render path on Windows. Nothing else needs them, and `doctor` reports
+which are present.
 
 ```bash
-pip install ocrmypdf
+pip install -r skills/revayat-novel/requirements-optional.txt
 
 # Tesseract (the OCR engine):
 winget install tesseract-ocr.tesseract     # Windows
@@ -125,6 +128,13 @@ $PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1
 $PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
 $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
 
+# Read the Persian against the English before polishing it. Three rubrics are
+# about meaning and block; two are about style and deliberately do not.
+$PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
+#   … read work/review/sheet_NNNN.md, write findings to out_sheet_NNNN.md …
+$PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
+$PY $S/revayat-novel.py meaning status --book work/book.json --out work/review
+
 $PY $S/revayat-novel.py falint fix   --book work/book.json
 $PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
 $PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"
@@ -155,6 +165,9 @@ book.pdf / .epub / .docx
         ▼  translated in parallel, one fresh context each
    merge ── every @@ id must return exactly once, or it is a named error
         │
+        ▼
+   bilingual review ── does the Persian say what the English said? meaning
+        │               blocks, style is recorded and never sent back
         ▼
    Persian typography ── ZWNJ, punctuation, digits; protected regions untouched
         │
@@ -222,7 +235,8 @@ Fixtures are generated, not committed: the suite builds its own PDF, EPUB and
 DOCX, so it stays fast and no third-party book text is vendored in.
 
 `tests/e2e_pipeline.py` runs every stage against a generated book — extract,
-glossary, chunk, merge, typography, QA, build, package verification — so a break
+glossary, chunk, merge, bilingual review, typography, QA, build, package
+verification — so a break
 in the seam between two stages fails even when each module's own tests pass. CI
 runs it on Linux, macOS and Windows.
 
