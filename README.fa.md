@@ -140,8 +140,14 @@ $PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1
 $PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
 $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
 
-# فارسی را پیش از صیقل‌دادن، کنار انگلیسی بخوانید. سه rubric دربارهٔ معنا
-# هستند و جلو را می‌گیرند؛ دو تای دیگر دربارهٔ سبک‌اند و عمداً چیزی نمی‌خواهند.
+# متنِ منتشرشدنی را *پیش از* آنکه کسی بخواندش تمام کنید: تایپوگرافی مکانیکی است
+# و صفحهٔ عنوان هم متنِ منتشرشدنی است. هر دو شناسهٔ بازنگری‌ای را جابه‌جا می‌کنند
+# که تأییدهای پایین به آن بسته‌اند، پس اجرای آن‌ها بعد از تأیید، تأیید را کهنه می‌کند.
+$PY $S/revayat-novel.py falint fix --book work/book.json
+#   … و meta.title_target و meta.author_target را در work/book.json ترجمه کنید …
+
+# فارسی را کنار انگلیسی بخوانید. سه rubric دربارهٔ معنا هستند و جلو را
+# می‌گیرند؛ دو تای دیگر دربارهٔ سبک‌اند و عمداً چیزی نمی‌خواهند.
 $PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
 #   … work/review/sheet_NNNN.md را بخوانید و یافته‌ها را در out_sheet_NNNN.md بنویسید …
 $PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
@@ -157,8 +163,13 @@ $PY $S/revayat-novel.py fluency apply  --book work/book.json --out work/fluency
 #       اجرای دوباره، مقایسه با متن اصلی است و بی آن هیچ چیز سبز نمی‌شود …
 $PY $S/revayat-novel.py fluency status --book work/book.json --out work/fluency --meaning work/review
 
-$PY $S/revayat-novel.py falint fix   --book work/book.json
-$PY $S/revayat-novel.py qa     check --book work/book.json --assets work/assets --glossary work/glossary.json
+# دیگر چیزی برای اصلاح تایپوگرافی نمانده باشد، وگرنه تأییدهای بالا دربارهٔ متنی
+# قدیمی‌ترند و باید دوباره گرفته شوند.
+$PY $S/revayat-novel.py falint lint  --book work/book.json
+# `--review` و `--fluency` همان جایی هستند که دو حکم معنایی اعمال می‌شوند؛ بی آن‌ها
+# گزارش `semantic-unverified` می‌دهد و `--strict` روی همان می‌ایستد.
+$PY $S/revayat-novel.py qa check --book work/book.json --assets work/assets \
+  --glossary work/glossary.json --review work/review --fluency work/fluency --strict
 $PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"
 
 # دو دروازهٔ پایانی؛ تا هر دو سبز نشوند فایل آماده نیست: یکی بستهٔ فایل،

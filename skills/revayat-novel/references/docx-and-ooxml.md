@@ -128,17 +128,37 @@ not fidelity, and the author's foot may well be a page number already.
 $PY scripts/revayat-novel.py qa docx --file out/book.fa.docx --book work/book.json
 ```
 
-This reads the saved package, not the builder's own report:
+This reads the saved package, not the builder's own report — and it reads it as
+**OPC**: the XML is parsed with namespaces, the content types are resolved through
+the Default and Override rules, and the relationship targets are resolved to part
+names. That matters because the same document has many legal serialisations: a
+regex looking for one spelling of a tag rejected a package whose relationships
+used a different prefix, and passed a truncated part, where a parse simply fails.
+The archive is bounded before it is read — a member that would write outside the
+package, or one that expands past a ceiling, is refused rather than examined.
+
+The rows below are the ones this reference is about; `references/findings.md` has
+every code:
 
 | Code | Severity | Meaning |
 | --- | --- | --- |
-| `dead-link` | error | a TOC entry points at a bookmark that does not exist |
+| `part-malformed` / `part-root-wrong` | error | a required part does not parse, or its root is not the one the format specifies |
+| `footnotes-lost` | error | the book places notes and the document has no reference at all |
+| `footnotes-relationship-missing` | error | references, and no footnotes relationship for Word to resolve them through |
+| `footnotes-part-missing` | error | the footnotes relationship resolves to a part that is not in the package |
 | `footnote-body-missing` | error | a reference with no matching footnote |
-| `footnotes-part-missing` | error | references but no `word/footnotes.xml` |
+| `footnote-reference-duplicated` | error | two markers on one note, so one sentence is footnoted by the other's text |
+| `footnote-text-mismatch` | error | the notes in the document are not the notes in the book, compared in reading order and by content |
 | `footnotes-content-type` | error | the part is not declared in `[Content_Types].xml` |
+| `picture-aspect` / `picture-too-wide` | error | a picture is drawn at a shape or a width the builder's fitting never produces |
 | `images-lost` | error | fewer pictures in the package than in the book |
-| `picture-size-implicit` | warning | a picture with no explicit extent |
-| `no-rtl` | warning | no `w:bidi` anywhere — the document is not RTL |
+| `dead-link` | error | a TOC entry points at a bookmark that does not exist |
+| `no-rtl` | warning | no `w:bidi` element — the document is not RTL |
+
+The note checks compare the **book's** inventory with what the package places, in
+reading order, by content: the correspondence is the sequence of note texts, not
+the numeric ids, which Word allocates and renumbers. Matching ids cannot see a
+substituted body, and a set of ids cannot see a duplicated reference.
 
 `doc-qa check` asks a second set of questions, about the assembled book's
 sections. Sizes in the wrong order are each individually legal, so this is

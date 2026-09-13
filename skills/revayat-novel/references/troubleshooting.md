@@ -386,3 +386,41 @@ PATH", and ten OCR tests skipped themselves while reporting success.
 If yours is somewhere else — a portable build, a custom prefix — put its
 directory on `PATH`. `doctor` prints what it found under `optional_tools`, and
 that is the same answer the pipeline will get.
+
+## A command refused to write: `locked`, `lost-update`, `invalid-book`, `write-failed`
+
+Every command that changes `book.json` — `merge`, `fluency apply`, `falint fix` —
+goes through one transaction, and these are its four refusals. All of them mean
+**nothing was written**, so the file you would fix against is the file you had.
+
+| Refusal | What happened | What to do |
+| --- | --- | --- |
+| `locked` | another command is writing the book right now; the detail names the actor and its pid | wait for it and run again. A lock left by a process that died is taken over automatically after two minutes |
+| `lost-update` | the book changed between this command reading it and writing it, so the decision it made may no longer hold | run it again. Nothing was discarded — refusing is how the other writer's work survives |
+| `invalid-book` | the change would leave the book invalid: a duplicate id, or a footnote edge that does not resolve | the detail names the unit. A `[[fn:…]]` naming a note the book does not define is the usual cause |
+| `write-failed` | the commit itself failed — disk, permissions, antivirus | the journal beside the book (`book.json.journal.json`) records what was in progress, and the next write finishes or undoes it. Nothing is half applied |
+
+A journal left behind is normal after an interrupted run and needs no action: the
+next write reads it and either rolls forward or rolls back, decided by the book's
+own digest. The one case it cannot decide is a book at neither the before nor the
+after state — something else changed it mid-transaction — and then it refuses with
+`unresolved-journal` and keeps the file, because either guess could destroy
+somebody's work.
+
+## `qa check` says `semantic-unverified` or `semantic-rejected`
+
+The gate enforces the two semantic verdicts; it does not judge meaning itself.
+
+- **`semantic-unverified`** — you did not pass `--review` / `--fluency`, so nothing
+  says this translation was read. A warning by default and an error under
+  `--strict`: a gate nobody ran is not a gate that passed.
+- **`semantic-rejected`** — a directory was named and its approval does not hold
+  for the book as it stands: absent, stale (the text moved after the review), or
+  its repair loop still open. The detail names the stage and the refusal.
+- **`publication-pending`** — published prose has no Persian yet, most often the
+  title page. `meta.title_target` and `meta.author_target` are the one expected
+  hand-edit, and they print whether or not they are translated.
+
+If the reviews were green and are now stale, look at what moved the text: `falint
+fix` and the metadata hand-edit both belong **before** step 6b for exactly this
+reason, and `falint lint` at step 7 is what proves nothing is left to fix.
