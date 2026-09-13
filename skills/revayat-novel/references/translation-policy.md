@@ -110,3 +110,28 @@ three.
 
 Translate it, and say so briefly in your final message. A flagged uncertainty is
 useful; a silently skipped sentence is not.
+
+## What the review afterwards will and will not ask of you
+
+A later stage reads your translation beside its source and files findings under
+five rubrics. Three are about meaning and will come back to you as a request to
+translate that unit again:
+
+- **omission** — a clause of the source is not in the translation;
+- **addition** — the translation states something the source does not;
+- **sense** — a negation, a number, a time or an agent has changed.
+
+Two are about style, and will **not**:
+
+- **register** — the voice is more formal, or plainer, than the source's;
+- **fluency** — it reads as translated English rather than as Persian.
+
+Those two are recorded for you to read and nothing asks you to act on them. The
+reason is not indifference to style. A faithful sentence sent back to be made
+smoother comes back smoother and slightly different, and the second change is
+invisible to every check here — so polish is yours to apply while translating,
+never a repair cycle afterwards. Write it well the first time; the review is
+there to catch what it means, not how it sounds.
+
+If you believe a clumsy sentence genuinely changes the meaning, that is a
+`sense` finding, and it has to be argued as one.
