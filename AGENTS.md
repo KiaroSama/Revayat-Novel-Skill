@@ -41,14 +41,17 @@ tests/              pytest; fixtures are generated, never committed
 | `adapters.py` | importing an extraction MinerU or Markdown already did |
 | `ocr_sidecar.py` | per-word OCR confidence and boxes |
 | `scan_clean.py` | removing a colour watermark from a scan |
-| `glossary.py` | name candidates, term tables, drift checking |
+| `glossentry.py` | what a glossary *is*: entries, ids, aliases, the canonical form, and the candidates `scan` proposes |
+| `glossary.py` | making a book honour them: term tables, first mentions, drift checking |
 | `chunk.py` | worksheets by character budget, and superseding an answer whose worksheet was re-cut |
 | `worksheet.py` | the transport: the `@@` grammar, the escape, the reader, and **one** verdict on a reply that merge and status both ask |
 | `pagerun.py` | the page lifecycle: one job per source page, and the gates a page must clear |
+| `pageidentity.py` | what a page *is*: which blocks it owns, its geometry, its OCR state, and the versioned digest that says whether its translation still matches |
 | `pagecli.py` | the `pages` command line; `pagerun.main` forwards here |
 | `sourcepages.py` | the source PDF as an artefact: a page's visual identity, one file per page |
 | `segments.py` | one unit longer than the whole budget, cut reversibly; and grouping units into worksheets that fit, for both routes |
 | `merge.py` | worksheets back into the IR, as one transaction, with named failures |
+| `meaning.py` | the translation read against its source: bilingual sheets, a verdict bound to the revision, and bounded repair |
 | `falint.py` | Persian typography lint and fix |
 | `famorph.py` | whether a Persian space may become a ZWNJ: verb-form and comparative evidence |
 | `qa.py` | deterministic gates over the IR and over the built package |
@@ -148,8 +151,48 @@ update.
 `requirements.txt` and against what they resolve to that day — the question
 `dependency-review.yml` cannot answer, because it only sees dependencies a pull
 request changed. It is scheduled and dispatchable, not on the push path: a newly
-published advisory should not fail an unrelated commit. `ocrmypdf` and `pywin32`
-are not declared dependencies and are not covered.
+published advisory should not fail an unrelated commit.
+
+The two optional wheels are declared too, in
+`skills/revayat-novel/requirements-optional.txt`: `ocrmypdf`, which forks
+Tesseract and Ghostscript over a PDF from an untrusted source, and `pywin32`,
+which drives Word through COM. Neither is installed by `requirements.txt` and
+nothing imports them at module level, but undeclared is not the same as optional
+— while they lived only in prose they were the two the advisory scan never
+looked at. They carry **no version floor** on purpose: nothing here has ever run
+an old one, and a number would read as tested. Tesseract and Ghostscript
+themselves stay outside any pip audit; they are binaries, and `doctor` locates
+them.
+
+`supported-range.yml` answers the one question `ci.yml` cannot: **does the oldest
+declared set actually work?** Every CI job installs `-c constraints-ci.txt`, so
+the floors were a claim with no lane behind them — and the first run found two of
+them false. `pymupdf>=1.24` named three releases that cannot import this project
+at all, because PyMuPDF published the module name `pymupdf` in 1.24.3 and
+everything before it is `fitz` only (measured: 1.24.0, 1.24.1 and 1.24.2 raise
+`ModuleNotFoundError`). And `review.compare` drew `— absent` through Pillow's
+default bitmap font, which encodes latin-1 only, so on the declared pillow floor
+every compare sheet failed to a broad `except` — a reviewing step lost to a dash.
+One was fixed by raising the floor to the version that exists, the other by using
+ASCII in a string that is drawn rather than printed. That workflow pins each floor to the lowest release that exists — which
+is not the floor string plus `.0`; there is no `pymupdf` 1.24 and no
+`pytest-timeout` 2.3.0 — and runs the suite on Python 3.10, the only interpreter
+where the question can be asked (CPython 3.13 cannot install `pymupdf==1.24.0`
+at all). The pins live in a heredoc inside that workflow rather than a tracked
+file, because Dependabot's pip fetcher collects every `.txt` whose lines parse as
+requirements, from the configured directory *and* each immediate subdirectory of
+it, so a tracked floors file would join the `ci-constraints` group and get
+proposed for raising — the one change it exists to prevent.
+`tests/test_dependency_lanes.py` holds all of that in place: every manifest in a
+lane that reaches it, every pin in its floor's own release series.
+
+A skip is structured evidence, not a number in a summary line.
+`tests/skip_budget.py` reads the run's `--junitxml` document and requires every
+skip to name a cause this project already knows about — the bare matrix skips the
+render and OCR tiers by design, and a *new* kind of skip used to look exactly
+like one more of those. `full-coverage` uses the same script with
+`--profile full`, where any skip at all fails; it replaced a grep for
+`[0-9]+ skipped` in console output, which a run that collected nothing passed.
 
 And the flag table in `references/docx-and-ooxml.md` must state the defaults the
 parser actually has: a test reads the table and compares every literal default
