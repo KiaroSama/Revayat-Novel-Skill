@@ -521,6 +521,29 @@ reply, because a reply whose structure cannot be trusted cannot be half trusted.
 Re-running merge after a fix is always safe; the first-mention pass is
 idempotent.
 
+### Finish the text before anybody reads it
+
+Two mechanical things settle the published text, and both belong **here**, before
+the semantic reviews — not after them:
+
+```bash
+# Persian typography: ZWNJ, digits, quotation marks, ellipses. Deterministic,
+# idempotent, and safe to run twice. Add --digits keep for Latin numerals.
+$PY $SKILL_DIR/scripts/revayat-novel.py falint fix --book $WORK/book.json
+```
+
+Then translate the book's title and author into `meta.title_target` and
+`meta.author_target` in `book.json`. That is the one hand-edit that *is*
+expected, because there is no worksheet for them — and they are published prose
+like any paragraph: the review reads them, `falint` fixes their typography, and
+the gate refuses a book whose title page has no Persian.
+
+**Why before and not after.** Both change the published text, so both move the
+revision the semantic approvals are bound to. Run either one after step 6b and
+6c and you have a book whose approvals describe text that has since changed —
+`qa check` will say so, by design, and the reviews have to be redone. Step 7 is
+where that is verified rather than assumed.
+
 ## Step 6b — Read it against the source
 
 Every gate after this one is deterministic, and not one of them can tell you
@@ -557,6 +580,18 @@ says something slightly different. Do not send prose back for polish. If a
 clumsy sentence genuinely changes the meaning, file it under `sense` and argue
 that — where it has to be argued as a meaning defect.
 
+**The repair budget is per issue, and a rewrite spends it.** `review.json` keeps
+one *episode* per `(unit, rubric)`: how many arguments have been made about it,
+at which wordings, and what each one said. It survives a re-translation on
+purpose — the earlier version counted rounds and cleared them whenever the text
+moved, so five real rewrites of one wrong sentence all reported round 1 and a
+sixth was still permitted. Three arguments about one unit is the cap; the same
+argument about text that has not changed, or a wording that comes back after
+being rejected, stops sooner and says which. A repair that works closes its
+episode, and an issue somewhere else keeps its own budget. When it stops,
+`repair.escalate` carries every argument made — that list is what the glossary
+entry, the voice card or the extraction is then judged from.
+
 | Field | Meaning | Action |
 | --- | --- | --- |
 | `verdict.ok: true` | nothing blocking, style notes may still be listed | continue to step 7 |
@@ -566,8 +601,9 @@ that — where it has to be argued as a meaning defect.
 | `stale-review` | the translation **or its source** changed after the review | review again; the findings describe text that is gone |
 | `unverified-digest` | the review records a digest this version cannot recompute | review again rather than assume it is fresh |
 | `meaning-rejected` | meaning findings are open | `repair.units` names them — re-translate only those |
-| `no-new-evidence` | this round found exactly what the last round found | stop re-translating; the cause is the glossary entry, the voice card or the extraction |
-| `rounds-exhausted` | two rounds of repair have been asked for | same: find the cause rather than asking a third time |
+| `no-new-evidence` | the same unit and rubric came back and its text had not changed | nothing was repaired between the two reports; the cause is the glossary entry, the voice card or the extraction |
+| `oscillating` | a repair put the unit back to a wording already rejected | a repair that undoes the previous repair is not progress — read `repair.escalate` for every argument made so far |
+| `rounds-exhausted` | three arguments have been made about one unit and rubric, each about a different wording | the budget is per issue and a rewrite spends it — find the cause rather than asking a fourth time |
 
 ## Step 6c — Read the Persian without the source
 
@@ -628,24 +664,41 @@ well; a pass that proposes nothing is a real and useful result.
 | `already-applied` | these edits are already in the book | go to step 5 |
 | `meaning-unconfirmed` | the smoothed Persian has not been compared against its source | run step 5 — re-run 6b in full |
 | `stale-review` | the Persian changed after this pass | read it again |
-| `no-new-evidence` | two blind passes proposed exactly these edits | the sentence is not the problem; look at the glossary entry, the voice card or the extraction |
-| `rounds-exhausted` | two blind passes have been applied | a third is taste, not fluency |
+| `no-new-evidence` | the same unit and rubric was proposed again and the Persian had not moved | the sentence is not the problem; look at the glossary entry, the voice card or the extraction |
+| `oscillating` | a pass proposed a wording an earlier pass had already replaced | two passes undoing each other; `escalate` carries every replacement proposed |
+| `rounds-exhausted` | three proposals about one unit and rubric | a fourth is taste, not fluency — applying an edit does not return the budget it spent |
 
-## Step 7 — Persian typography
+## Step 7 — Confirm the typography is already settled
 
 ```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py falint fix --book $WORK/book.json
+$PY $SKILL_DIR/scripts/revayat-novel.py falint lint --book $WORK/book.json
 ```
 
-Mechanical only, and safe to run twice. Add `--digits keep` if the book must
-keep Latin numerals.
+You ran `falint fix` at the end of step 6, before the reviews. This is the
+check that it held: **it must report nothing left to fix.**
+
+If it does report something — a corrected paragraph came in after the fix, a
+hand-edit put a Latin quotation mark back — run `falint fix` again and then
+**redo steps 6b and 6c**. Fixing the typography of approved text changes the
+text, which is what the two approvals were made about. `qa check` refuses a
+stale approval rather than shipping one, so this is not a formality.
 
 ## Step 8 — Gate, then build
 
 ```bash
 $PY $SKILL_DIR/scripts/revayat-novel.py qa check \
-  --book $WORK/book.json --assets $WORK/assets --glossary $WORK/glossary.json
+  --book $WORK/book.json --assets $WORK/assets --glossary $WORK/glossary.json \
+  --review $WORK/review --fluency $WORK/fluency --strict
 ```
+
+`--review` and `--fluency` are how the two semantic verdicts are enforced at the
+gate. Both are recomputed for the book **as it now stands**: a review recorded
+against an earlier revision is `semantic-rejected`, and so is one whose repair
+loop is still open. Omit them and the report says `semantic-unverified` — a
+warning that names what was not asked, never a pass — which `--strict` turns
+into an error, because publication work must not ship prose nobody read. The
+geometric page review is not asked to stand in for either: a page can be laid
+out perfectly around an inverted negation.
 
 ### What render-qa asks of a page
 
@@ -775,12 +828,13 @@ is put together, and that check asks the one question no page can.
 | `page-geometry-mixed` (warning) | the source is not one page size | expected for a book with plates or inserts; check the built sections |
 | `page-rotated` (warning) | pages are rotated in the source; the translation is built upright | confirm those pages read correctly |
 | `docx-unreadable` / `docx-invalid` | the built file could not be opened, or has no `word/document.xml` | re-build; if it recurs the build failed halfway |
+| `semantic-rejected` | the meaning or fluency review does not hold for the book as it stands — absent, stale, or its repair loop still open | the detail names the stage and the refusal; redo that review |
+| `semantic-unverified` (warning; error under `--strict`) | `--review` or `--fluency` was not given, so nothing says this translation was read | pass the directories; a gate nobody ran is not a gate that passed |
+| `publication-pending` | published prose has no Persian — often the title page or a translator's note | translate it; it prints either way |
 
 Add `--strict` to make the last three blocking as well, for publication work.
-
-Translate the book's title and author into `meta.title_target` and
-`meta.author_target` in `book.json` — that is the one hand-edit that *is*
-expected, because there is no worksheet for them.
+It also makes `semantic-unverified` blocking, so a book whose meaning or fluency
+review was never asked for cannot be built from a green gate.
 
 Then build:
 

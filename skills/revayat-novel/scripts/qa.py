@@ -34,6 +34,8 @@ from package import (  # noqa: F401
 )
 import falint
 import glossary as gl
+import published
+import signoff
 
 #: Persian usually runs a little longer than English. Outside this band a block
 #: is suspicious: far too short usually means a dropped clause.
@@ -174,15 +176,12 @@ def _check_coverage(book: dict[str, Any], report: Report, require_complete: bool
         report.count(name, value)
 
 
-def _prose(text: str) -> str:
-    """Everything a translator was meant to rewrite.
-
-    ``verbatim`` spans come out on both sides: `` `literal_token` `` is
-    *supposed* to survive byte for byte, so leaving it in would report the
-    feature working as a leak.
-    """
-    return "".join(span["text"] for span in ir.parse_markup(text or "")
-                   if not span["verbatim"])
+#: The literal-only exemption, defined with the inventory that carries it: a
+#: source whose every span is verbatim — a code sample, a bare URL — is *supposed*
+#: to survive byte for byte, so reporting it as untranslated reports the feature
+#: working. `published` marks such a unit `literal`, and this is the same function
+#: it marks them with.
+_prose = published.prose
 
 
 def _copied_run(source: str, target: str, window: int = COPIED_RUN_CHARS) -> str:
@@ -673,8 +672,14 @@ def main(argv: list[str] | None = None) -> int:
     p_check.add_argument("--assets", default=None)
     p_check.add_argument("--glossary", default=None)
     p_check.add_argument("--allow-incomplete", action="store_true")
+    p_check.add_argument("--review", default=None,
+                         help="the meaning review directory; its verdict has to "
+                              "hold for the book as it now stands")
+    p_check.add_argument("--fluency", default=None,
+                         help="the blind Persian pass directory; same")
     p_check.add_argument("--strict", action="store_true",
-                         help="treat emphasis loss and glossary drift as errors")
+                         help="treat emphasis loss, glossary drift and an "
+                              "unasked semantic review as errors")
     p_check.add_argument("--limit", type=int, default=60)
 
     p_docx = sub.add_parser("docx", help="gate the built .docx")
@@ -708,6 +713,18 @@ def main(argv: list[str] | None = None) -> int:
                        f"{sum(1 for b in book.get('blocks', []) if b.get('type') == 'image')}"
                        f" picture(s); a directory that is absent is a failed "
                        f"check, not a check that does not apply.")
+        # The semantic half of the gate. Asked here rather than inside
+        # `check_book` because it reads two directories of recorded verdicts
+        # rather than the book, and because the answer belongs to the modules
+        # that own those reviews — this gate enforces them, it does not judge
+        # meaning itself. A directory that was not named is reported unverified,
+        # never passed, and `--strict` makes that block.
+        for code, unit, detail in signoff.problems(
+                book_path,
+                review_dir=Path(args.review) if args.review else None,
+                fluency_dir=Path(args.fluency) if args.fluency else None):
+            report.add(WARNING if code == signoff.UNVERIFIED and not args.strict
+                       else ERROR, code, unit, detail)
         if missing_glossary:
             report.add(ERROR, "glossary-missing", str(missing_glossary),
                        f"--glossary named {missing_glossary}, which is not there. "
