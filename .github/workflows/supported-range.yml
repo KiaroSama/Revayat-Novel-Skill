@@ -25,6 +25,23 @@ on:
     # Weekly, well clear of the OCR tier (04:41) and the advisory audit (05:41).
     - cron: "41 6 * * 1"
   workflow_dispatch:
+  # And on a change to the files the lane is *about*. A floor edited in a pull
+  # request used to wait for the following Monday to be tested, which is a week
+  # in which the claim is unproved — and the schedule is still there for the
+  # other direction, an upstream yanking the release a floor names.
+  pull_request:
+    paths:
+      - "skills/revayat-novel/requirements.txt"
+      - "skills/revayat-novel/requirements-optional.txt"
+      - "dependency-floors.json"
+      - ".github/workflows/supported-range.yml"
+  push:
+    branches: [main]
+    paths:
+      - "skills/revayat-novel/requirements.txt"
+      - "skills/revayat-novel/requirements-optional.txt"
+      - "dependency-floors.json"
+      - ".github/workflows/supported-range.yml"
 
 permissions:
   contents: read
@@ -47,36 +64,37 @@ jobs:
       # 3.13 `pymupdf==1.24.3` cannot be installed at all — the lowest wheel is
       # 1.24.11 — and pillow 10.0.0 and lxml 5.0.0 shipped before cp313 existed
       # too. The declared range is therefore only answerable where it is oldest.
+      # The interpreter comes from dependency-floors.json too: which one can
+      # install the oldest set is a property of the set, not a preference.
+      - name: Which interpreter the oldest set installs on
+        id: floors
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib
+          record = json.loads(pathlib.Path("dependency-floors.json").read_text("utf-8"))
+          print(f"interpreter={record['interpreter']}")
+          PY
+
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.10"
+          python-version: "${{ steps.floors.outputs.interpreter }}"
 
-      # The pins live here, not in a tracked constraints file, and that is not
-      # laziness. Dependabot's pip fetcher collects every `.txt`/`.in` whose
-      # lines parse as requirements — from the configured directory *and* each
-      # immediate subdirectory of it — so a tracked `constraints-floors.txt`
-      # would join the `ci-constraints` group and Dependabot would dutifully
-      # propose raising the floors to latest, which is the one change this lane
-      # exists to prevent. Written at run time, it is invisible to the updater
-      # and still exact.
-      #
-      # A pin is not the floor string with `.0` appended. There is no release
-      # called `pytest-timeout` 2.3.0, and `pymupdf` 1.24 is a series rather
-      # than a release — so these are the
-      # lowest release in each floor's own series, and
-      # tests/test_dependency_lanes.py reads them back out of this file and
-      # asserts exactly that, which is what stops the two drifting apart.
+      # The pins come from `dependency-floors.json`, which the advisory audit
+      # reads as well: two lanes need the same oldest set, and two copies of a
+      # pin list is this project's most expensive recurring bug. The constraints
+      # file is generated at run time, so Dependabot — whose pip fetcher would
+      # collect a tracked `constraints-floors.txt` and propose raising it to
+      # latest, the one change this lane exists to prevent — never sees it.
       - name: Pin every floor to the lowest release that exists
+        shell: bash
         run: |
-          cat > /tmp/constraints-floors.txt <<'EOF'
-          pymupdf==1.24.3
-          python-docx==1.1.0
-          beautifulsoup4==4.12.0
-          lxml==5.0.0
-          pillow==10.0.0
-          pytest==8.0.0
-          pytest-timeout==2.3.1
-          EOF
+          python - <<'PY' > /tmp/constraints-floors.txt
+          import json, pathlib
+          record = json.loads(pathlib.Path("dependency-floors.json").read_text("utf-8"))
+          for name, pin in record["pins"].items():
+              print(f"{name}=={pin}")
+          PY
           cat /tmp/constraints-floors.txt
 
       - name: Install the floors
