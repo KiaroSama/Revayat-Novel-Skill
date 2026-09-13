@@ -20,6 +20,7 @@ import pytest
 
 import bookir as ir
 import pagecheck
+import pagepdf
 import renderqa
 import runstate
 import wordrender
@@ -666,10 +667,15 @@ def test_a_page_that_was_laid_out_says_so_even_when_judging_it_fails(tmp_path,
     def damaged(*args, **kwargs):
         raise RuntimeError("the PDF ended in the middle of an object")
 
-    # `_view_of_open` is where reading a page back happens now: `views_of` opens
-    # the document once and measures every page through it, rather than calling
-    # `page_view` per page. Same seam, same assertions — only the name moved.
-    monkeypatch.setattr(pagecheck, "_view_of_open", damaged)
+    # `_view_of_open` is where reading a page back happens: `views_of` opens the
+    # document once and measures every page through it, rather than calling
+    # `page_view` per page. Same seam, same assertions — only the name moved, and
+    # it has now moved twice: reading a PDF back lives in `pagepdf`, and
+    # `views_of` resolves this function as *its own* module global. Patching the
+    # re-export on `pagecheck` therefore replaces a name nothing calls — which is
+    # worse than the AttributeError that caught it, because the test would pass
+    # while exercising the undamaged path.
+    monkeypatch.setattr(pagepdf, "_view_of_open", damaged)
     written = renderqa.check(tmp_path, book_path, 1, target_pdf=rendered)
 
     assert written["verified"] is False, "a page nobody could read is not a pass"
