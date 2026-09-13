@@ -184,6 +184,32 @@ Put the PDF back where the book names it, or beside `book.json`, and run
 `pages build` again. If the file is genuinely gone, re-run `extract` against
 the copy you do have.
 
+## `pages status` calls a page I already accepted `stale`
+
+Not a regression — a page you were previously told was finished, and was not.
+`accepted` is a stored label, and a label cannot notice that the page's text moved
+after it was written. Editing a paragraph, correcting the source, or re-merging
+through the chunk route all change what the page renders while leaving the label
+alone, and `next` then skipped that page as done.
+
+Given `--book`, `status` re-compares each finished page's recorded digest with what
+the book now holds and reports the difference instead of hiding it. The page needs
+the rest of its loop again: `render-qa`, look at the sheets, `pages review`, then
+`pages accept`. Nothing is lost — the translation is still in the book; what expired
+is the evidence that somebody checked it.
+
+Two neighbouring states mean different things:
+
+- **`translation-changed`** — the page's content really moved. Re-run the loop.
+- **`unverified-digest`** — the recorded digest was written by an older formula and
+  cannot be compared at all. One `render-qa` run records a current one; this is
+  expected once after an upgrade that widened what the digest covers, and it is
+  deliberately not reported as "changed", because sending you to look for an edit
+  nobody made is the more expensive wrong answer.
+
+Without `--book` the report says `freshness: unchecked` and no page is called
+stale — that is a report of stored labels, not a verification, and it says so.
+
 ## `render-qa` says `source-missing` or `source-hash-mismatch`
 
 Two different diagnoses about the same artefact, `pages/source/page-NNNN.pdf`:
