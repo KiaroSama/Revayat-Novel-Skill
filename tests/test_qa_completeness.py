@@ -17,6 +17,9 @@ import bookir as ir
 import qa
 from tests_support import png_bytes
 
+#: Long enough that the length-ratio check has something to work with.
+PERSIAN = "بندی فارسی که به اندازهٔ کافی بلند است تا نسبت طول را نشکند."
+
 
 def _book(*paragraphs: tuple[str, str | None]) -> dict:
     """A book of paragraphs given as ``(source, target)`` pairs."""
@@ -304,3 +307,90 @@ def test_swapped_pictures_are_caught_where_counting_them_never_could(
         media = [n for n in archive.namelist() if n.startswith("word/media/")]
     assert len(media) == 2
     assert "images-lost" not in summary["by_code"]
+
+
+# --------------------------------------------------------------------------- #
+# Fail closed: the schema, and every translatable field
+# --------------------------------------------------------------------------- #
+
+def test_a_book_its_own_validator_rejects_does_not_pass_the_gate():
+    """`validate_book` has always caught a duplicate block id.
+
+    Nothing in `check_book` had ever asked it, so a complete strict run returned
+    zero errors for a book the validator refuses — and every check below reads the
+    structure that validator is about.
+    """
+    book = ir.new_book(source_path="sample.epub", source_format="epub")
+    for index in (1, 2):
+        book["blocks"].append(
+            ir.make_block("paragraph", index, text=f"Paragraph {index}."))
+    book["blocks"][1]["id"] = book["blocks"][0]["id"]
+    for block in book["blocks"]:
+        block["target"] = PERSIAN
+
+    summary = qa.check_book(book, strict=True).summary()
+
+    assert summary["ok"] is False
+    codes = {finding["code"] for finding in summary["findings"]}
+    assert "ir-invalid" in codes, codes
+    assert any("duplicate id" in (finding["detail"] or "")
+               for finding in summary["findings"])
+
+
+def test_an_untranslated_caption_is_not_a_complete_book():
+    """An illustration's caption was never in the inventory at all.
+
+    So a strict, complete run on a book whose picture still carried its English
+    alt text came back with zero findings *and* zero warnings — the gate was not
+    lenient about it, it had never heard of it.
+    """
+    book = ir.new_book(source_path="sample.epub", source_format="epub")
+    book["blocks"].append(ir.make_block("paragraph", 1, text="A paragraph."))
+    book["blocks"][0]["target"] = PERSIAN
+    book["blocks"].append(ir.make_block(
+        "image", 2, asset="fig.png", sha256="0" * 64, bbox=None,
+        width_pt=100.0, height_pt=80.0, pixel_width=100, pixel_height=80,
+        alt="A red rectangle", target_alt=None))
+
+    summary = qa.check_book(book, strict=True).summary()
+
+    assert summary["ok"] is False
+    assert "untranslated-alt" in {f["code"] for f in summary["findings"]}
+    assert summary["counts"].get("captions") == 1
+    assert summary["counts"].get("captions_translated", 0) == 0
+
+
+def test_a_translated_caption_passes_and_is_counted():
+    book = ir.new_book(source_path="sample.epub", source_format="epub")
+    book["blocks"].append(ir.make_block("paragraph", 1, text="A paragraph."))
+    book["blocks"][0]["target"] = PERSIAN
+    book["blocks"].append(ir.make_block(
+        "image", 2, asset="fig.png", sha256="0" * 64, bbox=None,
+        width_pt=100.0, height_pt=80.0, pixel_width=100, pixel_height=80,
+        alt="A red rectangle", target_alt="یک مستطیل سرخ"))
+
+    summary = qa.check_book(book, strict=True).summary()
+
+    assert summary["ok"], summary["findings"]
+    assert summary["counts"].get("captions_translated") == 1
+
+
+def test_a_caption_that_is_only_a_literal_is_exempt():
+    """The exemption is specific, not a blanket one.
+
+    A caption whose every span is `` `verbatim` `` — a filename, a figure key — is
+    meant to survive byte for byte, so demanding Persian would be demanding that
+    it be corrupted.
+    """
+    book = ir.new_book(source_path="sample.epub", source_format="epub")
+    book["blocks"].append(ir.make_block("paragraph", 1, text="A paragraph."))
+    book["blocks"][0]["target"] = PERSIAN
+    book["blocks"].append(ir.make_block(
+        "image", 2, asset="fig.png", sha256="0" * 64, bbox=None,
+        width_pt=100.0, height_pt=80.0, pixel_width=100, pixel_height=80,
+        alt="`figure_01.png`", target_alt=None))
+
+    summary = qa.check_book(book, strict=True).summary()
+
+    assert summary["ok"], summary["findings"]
+    assert "captions" not in summary["counts"]
