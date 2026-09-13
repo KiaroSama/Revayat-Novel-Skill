@@ -340,3 +340,36 @@ def test_a_new_revision_starts_the_count_again(translated, tmp_path):
     assert again["round"] == 1, (
         "the repair budget was spent against text that has since changed")
     assert meaning.repair_requests(out)["ok"] is True
+
+
+def test_writing_the_sheets_exits_zero(translated, tmp_path, capsys):
+    """The recipe is four shell commands, so a success that exits 2 stops it.
+
+    `write_sheets` had no `ok` key, and `main` read the exit code through
+    `report.get("ok", report.get("verdict", {}).get("ok"))` — two silent defaults
+    stacked, so a missing key fell through to a `verdict` that was also absent
+    and became `None`. Writing the sheets therefore reported failure every single
+    time it succeeded, and an agent running the step under `set -e` never reached
+    the review.
+    """
+    out = tmp_path / "review"
+    assert meaning.main(["sheets", "--book", str(translated), "--out", str(out)]) == 0
+    capsys.readouterr()
+    assert (out / "sheet_0001.md").exists()
+
+
+def test_every_stage_report_carries_the_key_its_exit_code_is_read_from(
+        translated, tmp_path, capsys):
+    """One assertion per action, so the next one added cannot omit it silently."""
+    out = tmp_path / "review"
+    assert "ok" in meaning.write_sheets(translated, out)
+    _reply(out, "sheet_0001", "!! reviewed sheet_0001\n")
+    assert "ok" in meaning.record(out, translated)
+    assert "ok" in meaning.verdict(
+        out, meaning.revision(meaning.pairs(ir.load_book(translated))))
+    assert "ok" in meaning.repair_requests(out)
+
+    for action in (["record"], ["status"]):
+        assert meaning.main(
+            action + ["--book", str(translated), "--out", str(out)]) == 0
+        capsys.readouterr()

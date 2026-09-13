@@ -54,6 +54,7 @@ tests/              pytest; fixtures are generated, never committed
 | `segments.py` | one unit longer than the whole budget, cut reversibly; and grouping units into worksheets that fit, for both routes |
 | `merge.py` | worksheets back into the IR, as one transaction, with named failures |
 | `meaning.py` | the translation read against its source: bilingual sheets, a verdict bound to the revision, and bounded repair |
+| `fluency.py` | the Persian read *without* its source: blind sheets, proposed edits, and a verdict that cannot pass until `meaning` has been re-run over the result |
 | `falint.py` | Persian typography lint and fix |
 | `famorph.py` | whether a Persian space may become a ZWNJ: verb-form and comparative evidence |
 | `findings.py` | a finding and the report that collects them — shared by every gate |
