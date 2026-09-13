@@ -19,7 +19,8 @@ and the cheapest to prevent.
   "policy": {
     "original_parenthetical": "first_mention",
     "lock_canonical": true,
-    "keep_aliases_distinct": true
+    "keep_aliases_distinct": true,
+    "book_voice": ""
   },
   "entries": [
     {
@@ -107,6 +108,35 @@ crowds out the entries that matter.
 
 The report from `scan` lists candidates by frequency. Working down from the top
 until the names stop mattering is usually the right amount of effort.
+
+## The book's own voice
+
+`policy.book_voice` is one or two sentences of Persian describing how the
+**narration** sounds: formal or plain, contemporary or period, spare or
+ornamented. It is rendered into every worksheet on both routes, above the
+character cards.
+
+```json
+"policy": {
+  "book_voice": "روایت رسمی اما ساده؛ جملات کوتاه، بدون آرایه‌های ادبی و بدون لحن محاوره‌ای."
+}
+```
+
+Empty by default, and deliberately: an invented house style is worse than none.
+Left empty, each chunk's translator picks a register from the prose in front of
+them — which is how a book turns administrative halfway through, the drift
+`meaning`'s `register` rubric and `fluency`'s consistency question keep finding.
+Filled in, the twentieth chunk is told what the first was told.
+
+Write it in Persian, for the same reason a voice card's `persian_policy` is in
+Persian: it is an instruction to the translator and it reads more precisely in
+the target language. Changing it changes every worksheet, so it moves the request
+token and the worksheets are rebuilt — decide it before translating, not halfway
+through.
+
+This is not a character card. `book_voice` is the prose around the dialogue;
+`voices` is who is speaking. A book with one narrator and six distinct characters
+needs both.
 
 ## Character voices
 

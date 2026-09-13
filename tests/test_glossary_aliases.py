@@ -29,6 +29,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import bookir as ir  # noqa: E402
 import glossary as gl  # noqa: E402
+import naming  # noqa: E402
 import qa  # noqa: E402
 
 
@@ -187,7 +188,7 @@ def test_the_resolver_answers_nothing_when_no_block_names_her():
     store = _glossary(_entry())
     book = _book([("Somebody else spoke.", "کس دیگری حرف زد.")])
 
-    assert gl.introduction_owner(store["entries"][0], book["blocks"]) == ""
+    assert naming.owner_of(store["entries"][0], book["blocks"]) == ""
 
 
 # --------------------------------------------------------------------------- #

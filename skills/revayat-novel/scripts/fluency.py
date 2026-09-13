@@ -44,81 +44,44 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any
 
 import bookir as ir
+import bookwrite
 import meaning as meaning_review
 import merge as merging
 import published
 import repairlog
 import reviewsheet
-
-SCHEMA = "revayat-novel/fluency@1"
-
-#: Which stage is asking, carried in every review token. A meaning reply filed
-#: here used to have its `??` findings ignored and the result reported clean.
-STAGE = "fluency"
-
-#: Tagged like every other digest here, so a reader that cannot recompute this
-#: formula refuses instead of guessing which side is stale.
-DIGEST_VERSION = "fluency2"
-
-#: What can honestly be asked of Persian with the source absent.
-#:
-#: Every rubric here is answerable by a Persian reader who has never seen the
-#: English — that is the entry requirement, and it is why faithfulness is not on
-#: the list. A blind reviewer who "restores" a missing connective may be deleting
-#: the author's abruptness; `meaning` is what decides, afterwards.
-RUBRICS: dict[str, dict[str, str]] = {
-    "calque": {
-        "ask": "Is this Persian word order, or English word order in Persian words?",
-        "why": "The one defect a bilingual reviewer is structurally unable to "
-               "see: they read the English behind it and the sentence parses.",
-        "bad": "«مردی که او را در ایستگاه دیده بود که کتاب می‌خواند رفت» — an "
-               "English relative chain kept intact.",
-        "good": "«مردی رفت که او را در ایستگاه، در حال کتاب خواندن، دیده بود.»",
-    },
-    "flow": {
-        "ask": "Do consecutive sentences connect the way Persian connects them?",
-        "why": "Unit-by-unit translation produces paragraphs of individually "
-               "correct sentences that do not follow one another.",
-        "bad": "three sentences in a row opening with the same subject pronoun.",
-        "good": "the subject carried, the connective doing the work.",
-    },
-    "opaque": {
-        "ask": "Is there a sentence a Persian reader cannot parse at all?",
-        "why": "The strongest signal available without the source, and the one "
-               "that most often means the translator lost the clause structure.",
-        "bad": "a sentence whose verb cannot be attached to any subject.",
-        "good": "a sentence that resolves on one reading.",
-    },
-    "register": {
-        "ask": "Does this passage sound like the passage before it?",
-        "why": "Asked *internally*, which is what makes it blind-answerable: not "
-               "'is this the source's voice' but 'is this one voice at all'. A "
-               "fresh-context translator drifts between chapters.",
-        "bad": "a chapter of plain narration turning administrative halfway.",
-        "good": "one voice, or a change the scene accounts for.",
-    },
-}
-
-#: ``++ b00012 calque`` — one proposed replacement. The lines after it are the
-#: Persian to put there; the reviewer's reason goes on the header line's own
-#: block only if they want it recorded, since the edit itself is the argument.
-EDIT = re.compile(r"^\+\+\s+(?P<id>[A-Za-z0-9_#-]+)\s+(?P<rubric>[a-z]+)\s*$")
-
-#: ``!! reviewed sheet_0001`` — the same claim `meaning` requires, for the same
-#: reason: a reply with no edits is silence until someone says they read it.
-REVIEWED = re.compile(r"^!!\s+reviewed\s+(?P<sheet>[A-Za-z0-9_-]+)\s*$")
+from fluencysheet import (  # noqa: F401  (this module's published surface)
+    CONTEXT_LINE,
+    EDIT,
+    ESCAPED_LINE,
+    REVIEWED,
+    RUBRICS,
+    STAGE,
+    escape_payload,
+    neighbour,
+    read_edits,
+    reserved_line,
+    rubric_table,
+    sheet,
+)
 
 #: Proposals about one unit and rubric before this stops asking. Counted per
 #: issue in `repairlog`, because a round counter reset whenever the Persian moved
 #: — and applying an edit is what moves it, so every applied pass came back as
 #: round 1 and a sixth blind rewrite of the same sentence was still permitted.
 MAX_ATTEMPTS = repairlog.MAX_ATTEMPTS
+
+SCHEMA = "revayat-novel/fluency@1"
+
+#: Tagged like every other digest here, so a reader that cannot recompute this
+#: formula refuses instead of guessing which side is stale.
+DIGEST_VERSION = "fluency2"
+
 
 #: Units per sheet, and the Persian neighbours each one is shown for context.
 #: `flow` and `register` are questions about adjacency, so a unit reviewed alone
@@ -159,79 +122,6 @@ def revision(units: list[dict[str, str]]) -> str:
     `unverified-digest` and one re-run settles it.
     """
     return published.digest_of(units, sides=("target",), tag=DIGEST_VERSION)
-
-
-def rubric_table() -> str:
-    lines = ["| Rubric | Ask | An edit looks like | Not an edit |",
-             "| --- | --- | --- | --- |"]
-    for name, rubric in RUBRICS.items():
-        lines.append(f"| `{name}` | {rubric['ask']} | {rubric['bad']} | "
-                     f"{rubric['good']} |")
-    return "\n".join(lines)
-
-
-def _neighbour(units: list[dict[str, str]], index: int,
-               edge: dict[str, str]) -> str:
-    """The adjacent unit's Persian, when it is genuinely adjacent prose.
-
-    ``flow`` and ``register`` ask whether consecutive sentences follow one
-    another, so the context has to be the sentence that actually precedes this
-    one on the page. Since the inventory widened to the whole published set, the
-    unit before the first paragraph is the byline — quoting it as the previous
-    line invites a reviewer to smooth a transition between a title page and a
-    chapter, which is not a transition. Context stays inside one ``part``.
-    """
-    if not 0 <= index < len(units):
-        return ""
-    neighbour = units[index]
-    if neighbour.get("part") != edge.get("part"):
-        return ""
-    return neighbour["target"]
-
-
-def sheet(units: list[dict[str, str]], *, sheet_id: str, rev: str,
-          request: str = "", before: str = "", after: str = "") -> str:
-    """One blind sheet: Persian, its neighbours, and no source anywhere."""
-    out = [
-        reviewsheet.request_line(STAGE, sheet_id, request) if request
-        else f"<!-- revayat-novel: {sheet_id}, revision {rev} -->",
-        "",
-        f"# Fluency pass — {sheet_id}",
-        "",
-        "**There is no source on this sheet, and that is deliberate.** You are "
-        "the Persian reader. Read this as Persian and say where it does not "
-        "read as Persian.",
-        "",
-        "Do not try to reconstruct the original, and do not repair what looks "
-        "like a gap: an abrupt sentence may be the author's. Every edit here is "
-        "a proposal, and the translation is compared against its source again "
-        "before any of them is accepted.",
-        "",
-        rubric_table(),
-        "",
-        "Propose a replacement like this — the header names the unit and the "
-        "rubric, the lines after it are the Persian to put there:",
-        "",
-        "    ++ b00012 calque",
-        "    مردی رفت که او را در ایستگاه، در حال کتاب خواندن، دیده بود.",
-        "",
-        "**Copy the `<!-- revayat-novel: review … -->` line above into your reply, "
-        "unchanged.** It says which sheet and which Persian you read.",
-        "",
-        "Leave a unit out if it reads well. Then, last line, claim the sheet:",
-        "",
-        f"    !! reviewed {sheet_id}",
-        "",
-        "---",
-        "",
-    ]
-    if before:
-        out += ["<!-- context, not under review -->", f"~ {before}", ""]
-    for unit in units:
-        out += [f"-- {unit['id']} {unit['kind']}", unit["target"], ""]
-    if after:
-        out += ["<!-- context, not under review -->", f"~ {after}", ""]
-    return "\n".join(out) + "\n"
 
 
 def write_sheets(book_path: Path, out_dir: Path, meaning_dir: Path, *,
@@ -285,8 +175,8 @@ def write_sheets(book_path: Path, out_dir: Path, meaning_dir: Path, *,
             policy=rubric_table())
         ir.write_text(out_dir / f"{sheet_id}.md", sheet(
             batch, sheet_id=sheet_id, rev=rev, request=request,
-            before=_neighbour(units, index - CONTEXT_UNITS, batch[0]),
-            after=_neighbour(units, tail, batch[-1])))
+            before=neighbour(units, index - CONTEXT_UNITS, batch[0]),
+            after=neighbour(units, tail, batch[-1])))
         written.append(sheet_id)
         owned[sheet_id] = unit_ids
         tokens[sheet_id] = request
@@ -305,57 +195,6 @@ def write_sheets(book_path: Path, out_dir: Path, meaning_dir: Path, *,
         ensure_ascii=False, indent=1) + "\n")
     return {"ok": True, "revision": rev, "sheets": written, "units": len(units),
             "superseded": superseded}
-
-
-def read_edits(text: str) -> tuple[list[dict[str, str]], list[str], list[str]]:
-    """``(edits, sheets claimed read, problems)``."""
-    edits: list[dict[str, str]] = []
-    claimed: list[str] = []
-    problems: list[str] = []
-    current: dict[str, str] | None = None
-    buffer: list[str] = []
-
-    def flush() -> None:
-        if current is not None:
-            current["target"] = "\n".join(buffer).strip()
-            edits.append(current)
-
-    for line in text.splitlines():
-        stripped = line.strip()
-        header = EDIT.match(stripped)
-        if header:
-            flush()
-            current = {"id": header.group("id"), "rubric": header.group("rubric")}
-            buffer = []
-            continue
-        reviewed = REVIEWED.match(stripped)
-        if reviewed:
-            flush()
-            current = None
-            buffer = []
-            claimed.append(reviewed.group("sheet"))
-            continue
-        if current is not None:
-            # A context line is quoted, never editable: it belongs to a
-            # neighbouring sheet and an edit filed against it would be applied
-            # to a unit this sheet did not show under review.
-            if stripped.startswith("~ ") or stripped.startswith("<!--"):
-                continue
-            buffer.append(line)
-    flush()
-
-    for edit in edits:
-        if edit["rubric"] not in RUBRICS:
-            problems.append(
-                f"{edit['id']}: `{edit['rubric']}` is not a rubric "
-                f"({', '.join(RUBRICS)}). An edit nobody can classify cannot be "
-                f"argued with")
-        if not edit.get("target"):
-            problems.append(
-                f"{edit['id']} / {edit['rubric']}: no replacement given. An edit "
-                f"with an empty body would delete the unit's Persian, which is "
-                f"never what a fluency note means")
-    return edits, claimed, problems
 
 
 def signature(edits: list[dict[str, str]]) -> list[str]:
@@ -524,8 +363,6 @@ def apply_edits(book_path: Path, out_dir: Path) -> dict[str, Any]:
                           f"its proposals were recorded as evidence, not as "
                           f"edits to write: {found.get('detail') or ''}"}
 
-    book = ir.load_book(book_path)
-    units = targets(book)
     # Order matters, and getting it wrong gives a true refusal the wrong reason.
     # A second `apply` finds the revision moved — because *this* pass moved it —
     # and reporting that as `stale-edits` tells the caller their book was changed
@@ -536,28 +373,52 @@ def apply_edits(book_path: Path, out_dir: Path) -> dict[str, Any]:
         return {"ok": False, "refused": "already-applied",
                 "detail": f"these edits were already written; the book is at "
                           f"{found['applied']}"}
-    if found.get("revision") != revision(units):
+    if found.get("revision") != revision(targets(ir.load_book(book_path))):
         return {"ok": False, "refused": "stale-edits",
                 "detail": "the Persian changed after these edits were recorded. "
                           "Applying them would overwrite text nobody reviewed."}
 
-    resolve = merging.addressing(book)
+    # One transaction for the book *and* the sidecar. The book used to be saved
+    # first and the sidecar after it, so a failure between the two left the
+    # Persian changed with nothing recording that it had been — and the next run
+    # applied the same edits again. It also validates the result whole before
+    # anything lands: a replacement carrying `[[fn:fn0099]]`, a note the book does
+    # not have, was written straight to disk.
     changed: list[dict[str, str]] = []
-    for edit in found.get("edits") or []:
-        slot = resolve(edit["id"])
-        if slot is None:
-            return {"ok": False, "refused": "unaddressable",
-                    "detail": f"{edit['id']} has no slot to write into any more"}
-        container, field = slot
-        changed.append({"id": edit["id"], "rubric": edit["rubric"],
-                        "before": str(container.get(field) or ""),
-                        "after": edit["target"]})
-        container[field] = edit["target"]
+    refusal: dict[str, Any] | None = None
+    try:
+        with bookwrite.transaction(book_path, actor="fluency.apply") as tx:
+            resolve = merging.addressing(tx.book)
+            for edit in found.get("edits") or []:
+                slot = resolve(edit["id"])
+                if slot is None:
+                    refusal = {
+                        "ok": False, "refused": "unaddressable",
+                        "detail": f"{edit['id']} has no slot to write into any "
+                                  f"more"}
+                    raise bookwrite.Refused("unaddressable", refusal["detail"])
+                container, field = slot
+                changed.append({"id": edit["id"], "rubric": edit["rubric"],
+                                "before": str(container.get(field) or ""),
+                                "after": edit["target"]})
+                container[field] = edit["target"]
+            found["changes"] = changed
+            found["applied"] = revision(targets(tx.book))
+            tx.side(path, json.dumps(found, ensure_ascii=False, indent=1) + "\n")
+    except bookwrite.Refused as stopped:
+        # Nothing was written — not the book, not the sidecar — so the pass is
+        # exactly where it was and can be run again once the cause is dealt with.
+        return refusal or {"ok": False, "refused": stopped.reason,
+                           "detail": stopped.detail}
+    except OSError as failure:
+        # A disk or permission failure mid-commit. The journal is on disk and the
+        # next writer resolves it; what must not happen is a traceback that leaves
+        # the caller guessing whether the edits landed.
+        return {"ok": False, "refused": "write-failed",
+                "detail": f"the commit failed ({failure}). The journal beside the "
+                          f"book records what was in progress and the next write "
+                          f"finishes or undoes it; nothing here is half applied."}
 
-    ir.save_book(book, book_path)
-    found["changes"] = changed
-    found["applied"] = revision(targets(book))
-    ir.write_text(path, json.dumps(found, ensure_ascii=False, indent=1) + "\n")
     return {"ok": True, "applied": found["applied"], "changed": len(changed),
             "units": [item["id"] for item in changed],
             "detail": "the Persian changed, so the meaning review of this book "

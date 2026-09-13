@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import bookir as ir
+import bookwrite
 import glossary as gl
 import published
 import segments
@@ -228,6 +229,11 @@ def merge(
     whose structure cannot be trusted". Either way ``ok`` reports honestly, and
     lenient is an exit code, not permission to corrupt.
     """
+    # The digest of the file this merge is about to reason from. Everything below
+    # is computed against this content, so committing over a *different* file
+    # would discard whatever the other writer put there — silently, because the
+    # book it wrote would be perfectly well-formed.
+    before = bookwrite.file_digest(Path(book_path))
     book = ir.load_book(book_path)
     manifest = json.loads((chunks_dir / "manifest.json").read_text(encoding="utf-8"))
     chunks = manifest.get("chunks") or []
@@ -497,7 +503,12 @@ def merge(
         # Lenient means "land the replies that validate", never "write a book the
         # validator rejects": an invalid IR blocks the write in both modes.
         if report["ok"] or (not strict and not invalid):
-            ir.save_book(book, book_path)
+            try:
+                bookwrite.replace(book_path, book, actor="merge", expect=before)
+            except bookwrite.Refused as stopped:
+                report["ok"] = False
+                report["refused"] = stopped.reason
+                report["detail"] = stopped.detail
 
     report["stats"] = book.get("stats", {})
     if not report["ok"] and strict:
