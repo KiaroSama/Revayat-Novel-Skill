@@ -50,7 +50,19 @@ jobs:
       - name: Run tests
         env:
           PYTHONIOENCODING: utf-8
-        run: python -m pytest tests -q --durations=10
+        run: python -m pytest tests -q --durations=10 --junitxml=results.xml
+
+      # A bare runner has no Word, no LibreOffice and no Tesseract, so the render
+      # and OCR tiers skip themselves here — by design; a missing external tool
+      # is not a defect. But `27 skipped` inside a green summary is invisible,
+      # and a *new* kind of skip looks exactly the same: a fixture that starts
+      # skipping because an import moved arrives as a slightly larger number in a
+      # line nobody reads. So every skip has to name a cause this project already
+      # knows about, read out of the run's own junit document rather than grepped
+      # from its console output.
+      - name: Only the skips this runner is allowed
+        if: always()
+        run: python tests/skip_budget.py --junit results.xml --profile bare
 
       - name: Smoke-test the CLI
         env:
@@ -148,7 +160,15 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r skills/revayat-novel/requirements.txt ocrmypdf -c constraints-ci.txt
+          # The optional set is a tracked manifest rather than a bare `ocrmypdf`
+          # argument, so the one tool that forks subprocesses over untrusted PDFs
+          # is declared somewhere `dependency-audit.yml` can also read it.
+          # `pywin32` carries a `sys_platform == "win32"` marker and is simply not
+          # selected here.
+          python -m pip install \
+            -r skills/revayat-novel/requirements.txt \
+            -r skills/revayat-novel/requirements-optional.txt \
+            -c constraints-ci.txt
 
       - name: Every one of them is really on PATH
         shell: bash
@@ -193,18 +213,22 @@ jobs:
       # `wordrender.unavailable_reason()` both name that, and every render
       # report records `laid_out_by`, so a reader can always tell which backend
       # produced a given result.
+      # Decided from the junit document, not from a grep over the summary line.
+      # The grep that used to live here matched `[0-9]+ skipped` in console
+      # output, so it could only ever see the number pytest chose to print: a run
+      # that collected nothing printed no skip count at all and passed the check,
+      # and the failure it did catch named no test. The document carries the
+      # reason per test, which is what `--profile full` reports.
       - name: The full suite, where a skip is a failure
         shell: bash
         env:
           PYTHONIOENCODING: utf-8
-        run: |
-          set -o pipefail
-          python -m pytest tests -q -rs | tee suite.log
-          if grep -qE '[0-9]+ skipped' suite.log; then
-            echo "::error::a test skipped on the job whose whole purpose is that none do"
-            grep -E '^SKIPPED' suite.log || true
-            exit 1
-          fi
+        run: python -m pytest tests -q -rs --junitxml=results.xml
+
+      - name: Nothing skipped, and the document says so
+        if: always()
+        shell: bash
+        run: python tests/skip_budget.py --junit results.xml --profile full
 
   install:
     name: installer (${{ matrix.os }})
