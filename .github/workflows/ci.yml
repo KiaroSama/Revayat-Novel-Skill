@@ -250,6 +250,37 @@ jobs:
         shell: bash
         run: python tests/skip_budget.py --junit results.xml --profile full
 
+      # The evidence for the one job that runs every tier. Without it the
+      # strongest run in CI left nothing behind: which backend laid the documents
+      # out, and at which versions, are exactly the two facts a later reader needs
+      # to know whether a result is comparable with theirs.
+      - name: Keep the junit document, the versions and the renderer identity
+        if: always()
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python -m pip freeze > resolved-versions.txt
+          python - > renderer.txt <<'PY'
+          import sys
+          sys.path.insert(0, "skills/revayat-novel/scripts")
+          import wordrender
+          print("backend:", wordrender.backend() or wordrender.unavailable_reason())
+          PY
+          cat renderer.txt
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: no-skips-${{ matrix.os }}
+          path: |
+            results.xml
+            resolved-versions.txt
+            renderer.txt
+          if-no-files-found: warn
+          retention-days: 14
+
   install:
     name: installer (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

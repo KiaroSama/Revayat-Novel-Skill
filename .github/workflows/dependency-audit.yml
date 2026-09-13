@@ -14,9 +14,16 @@ name: Dependency audit
 # But the answer changes when an advisory is **published**, not when somebody
 # pushes. Hence a schedule.
 #
-# There is no lockfile, so this audits the **floors** in requirements.txt — which
-# is the right question for a project people install fresh with
-# `pip install -r`.
+# There is no lockfile, so three different installed sets are audited, and the
+# labels say which is which. `pip-audit -r` on a manifest of `>=` ranges resolves
+# each requirement to the **latest** version that satisfies it — so auditing
+# `requirements.txt` directly answers "is today's resolution vulnerable", not
+# "are the floors vulnerable", and calling it floor coverage was wrong twice: it
+# duplicated the resolution audit below and left the oldest supported set — the
+# one a reader with a warm pip cache or an old constraint actually gets —
+# unexamined. The `floors` job does that, on the interpreter the oldest set
+# installs on, from the same `dependency-floors.json` the supported-range lane
+# pins from.
 #
 # The two optional wheels are audited too, below and in `windows-optional`. They used
 # to be excluded here, with this comment saying so: "ocrmypdf and pywin32 are not
@@ -39,6 +46,17 @@ on:
     # scheduled jobs do not start together.
     - cron: "41 5 * * 1"
   workflow_dispatch:
+  # And when the set being audited changes. A pin raised in a pull request used
+  # to be audited on the following Monday, which is a week of a version nobody
+  # had asked the advisory database about.
+  pull_request:
+    paths:
+      - "skills/revayat-novel/requirements.txt"
+      - "skills/revayat-novel/requirements-optional.txt"
+      - "constraints-ci.txt"
+      - "requirements-lint.txt"
+      - "dependency-floors.json"
+      - ".github/workflows/dependency-audit.yml"
 
 permissions:
   contents: read
@@ -64,7 +82,11 @@ jobs:
         # a build must not change under the build's feet. Raise it deliberately.
         run: python -m pip install pip-audit==2.10.1
 
-      - name: Audit the floors a reader installs against
+      - name: Audit the declared ranges as pip resolves them today
+        # Not the floors: `-r` on `pymupdf>=1.24.3` audits the newest release
+        # that satisfies it. Kept because it is the cheapest form of the
+        # resolution question and it reads the manifest's markers and extras
+        # rather than a freeze of them.
         run: pip-audit -r skills/revayat-novel/requirements.txt
 
       # Each resolution audit below builds its own virtualenv rather
@@ -109,6 +131,61 @@ jobs:
             -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
           /tmp/pinned-env/bin/python -m pip freeze > resolved-pinned.txt
           pip-audit -r resolved-pinned.txt
+
+  floors:
+    name: the exact oldest set a reader can install
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Which interpreter the oldest set installs on
+        id: floors
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib
+          record = json.loads(pathlib.Path("dependency-floors.json").read_text("utf-8"))
+          print(f"interpreter={record['interpreter']}")
+          PY
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "${{ steps.floors.outputs.interpreter }}"
+
+      - name: Install pip-audit
+        run: python -m pip install pip-audit==2.10.1
+
+      # The floors, pinned exactly, from the one tracked list — the same set
+      # `supported-range.yml` runs the suite against. This is the environment a
+      # reader gets from an old constraint or a warm cache, and it is the one the
+      # audit had never looked at.
+      - name: Audit the floors, pinned
+        shell: bash
+        run: |
+          python - <<'PY' > /tmp/constraints-floors.txt
+          import json, pathlib
+          record = json.loads(pathlib.Path("dependency-floors.json").read_text("utf-8"))
+          for name, pin in record["pins"].items():
+              print(f"{name}=={pin}")
+          PY
+          python -m venv /tmp/floor-env
+          /tmp/floor-env/bin/python -m pip install --quiet --upgrade pip
+          # Binary only, for the reason supported-range.yml gives: a floor that
+          # resolves to a source build is not a floor a reader can install.
+          /tmp/floor-env/bin/python -m pip install --quiet --only-binary=:all:             -r skills/revayat-novel/requirements.txt -c /tmp/constraints-floors.txt
+          /tmp/floor-env/bin/python -m pip freeze > resolved-oldest.txt
+          cat resolved-oldest.txt
+          pip-audit -r resolved-oldest.txt
+
+      - name: Keep the set that was audited
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: audited-floors
+          path: resolved-oldest.txt
+          if-no-files-found: warn
+          retention-days: 14
 
   windows-optional:
     name: the optional wheel only Windows selects

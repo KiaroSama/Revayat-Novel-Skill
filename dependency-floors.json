@@ -1,0 +1,40 @@
+{
+ "_why": [
+  "The exact oldest release of each dependency this skill claims to support.",
+  "requirements.txt states ranges (`pymupdf>=1.24.3`); a range is a claim, and",
+  "the only way to make it a tested one is to install precisely the bottom of",
+  "it. Two lanes need that same set — supported-range.yml runs the suite on it,",
+  "dependency-audit.yml asks whether it is vulnerable — and two copies of a pin",
+  "list is this project's most expensive recurring bug, so the list lives here",
+  "once and both workflows read it.",
+  "",
+  "A pin is not the floor with `.0` appended: there is no pytest-timeout 2.3.0",
+  "and pymupdf 1.24 is a series rather than a release. Each pin is the lowest",
+  "release inside its floor's own series, and tests/test_dependency_lanes.py",
+  "reads this file back and asserts exactly that.",
+  "",
+  "JSON, not .txt, on purpose. Dependabot's pip fetcher collects every `.txt`",
+  "or `.in` whose lines parse as requirements, from the configured directory",
+  "and each immediate subdirectory — so a tracked `constraints-floors.txt`",
+  "would join the `ci-constraints` group and the updater would dutifully",
+  "propose raising the floors to latest, which is the one change these lanes",
+  "exist to prevent. This file it does not read, and the workflows generate the",
+  "constraints file from it at run time.",
+  "",
+  "`interpreter` is not a preference. The lowest *installable* version of a",
+  "floor depends on the interpreter: on CPython 3.13 pymupdf==1.24.3 has no",
+  "wheel at all (the lowest is 1.24.11), and pillow 10.0.0 and lxml 5.0.0",
+  "shipped before cp313 existed. The declared range is only answerable where it",
+  "is oldest."
+ ],
+ "interpreter": "3.10",
+ "pins": {
+  "pymupdf": "1.24.3",
+  "python-docx": "1.1.0",
+  "beautifulsoup4": "4.12.0",
+  "lxml": "5.0.0",
+  "pillow": "10.0.0",
+  "pytest": "8.0.0",
+  "pytest-timeout": "2.3.1"
+ }
+}
