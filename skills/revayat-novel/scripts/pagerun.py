@@ -42,7 +42,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +68,15 @@ from pageidentity import (  # noqa: F401
     owners,
     page_of,
     translation_hash,
+)
+from pageprogress import (  # noqa: F401
+    _FRESHNESS_CHECKED,
+    answer,
+    jobs_for,
+    load_manifest,
+    next_page,
+    qa_report_path,
+    status,
 )
 from sourcepages import (  # noqa: F401
     PAGE_BOXES,
@@ -430,145 +438,6 @@ def build(
     # source hashes above, and writing a `chunk` entry here would make the
     # chunk stage's own staleness answer about a run it did not do.
     return manifest
-
-
-# --------------------------------------------------------------------------- #
-# Resume
-# --------------------------------------------------------------------------- #
-
-def load_manifest(out_dir: Path) -> dict[str, Any]:
-    return json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
-
-
-def jobs_for(manifest: dict[str, Any], page: int) -> list[dict[str, Any]]:
-    """Every sub-job of one source page, in reading order."""
-    return [entry for entry in manifest["chunks"] if entry["page"] == page]
-
-
-def answer(out_dir: Path, entry: dict[str, Any]) -> str:
-    """What the translator wrote back for one job, or ``""``."""
-    output = out_dir / entry["output"]
-    if not output.exists():
-        return ""
-    return output.read_text(encoding="utf-8").strip()
-
-
-def qa_report_path(work_dir: Path, page: int) -> Path:
-    """Where ``renderqa`` files a page's report.
-
-    Spelled out here rather than imported, because ``renderqa`` imports this
-    module; ``test_pagerun`` asserts the two agree so the copy cannot drift.
-    """
-    return work_dir / "qa" / "pages" / f"page-{page:04d}.json"
-
-
-#: States whose evidence a recorded digest can be compared against. Earlier
-#: states have no digest yet, so checking them would report every pending page as
-#: stale — a gate that fires on everything is as useless as one that fires on
-#: nothing.
-_FRESHNESS_CHECKED = frozenset({"merged", "qa_passed", "accepted"})
-
-
-def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
-    """Where every page stands, and which one to work on next.
-
-    Reported per source page, not per job: a page split into sub-jobs is still
-    one page to accept, and it is answered only when every one of them is.
-
-    ``next`` is the first page that is not accepted, in page order. A page is
-    finished when the run state says ``accepted`` and not before: a worksheet
-    with an answer in it is translated, which is three states short of done.
-
-    **``book_path`` is what makes ``accepted`` mean anything.** Without it this
-    function reports a stored label, and a label cannot notice that the page's
-    text moved underneath it — edit a paragraph, re-merge through the chunk
-    route, correct the source, and the page still reads ``accepted`` while its
-    rendered content no longer matches the evidence that was checked. `accept`
-    catches that at accept time, but by then the operator has already been told
-    the page is done and ``next`` has already skipped it. Given the book, each
-    accepted page's recorded digest is re-compared with
-    :func:`translation_hash` — the one formula, not a second opinion — and a page
-    whose content has moved is reported ``stale``, counted as unfinished, and
-    handed back by ``next``.
-
-    Without it the report says ``freshness: "unchecked"`` rather than implying a
-    verification nobody performed.
-    """
-    manifest = load_manifest(out_dir)
-    state = runstate.RunState(out_dir.parent)
-
-    pages: list[dict[str, Any]] = []
-    for number in dict.fromkeys(entry["page"] for entry in manifest["chunks"]):
-        entries = jobs_for(manifest, number)
-        record = state.page(number) or {}
-        reported = record.get("state", "pending")
-        stale = ""
-        if book_path is not None and reported in _FRESHNESS_CHECKED:
-            refusal, detail = _translation_moved(Path(book_path), number, record)
-            if refusal:
-                stale, reported = refusal, "stale"
-        pages.append({
-            "page": number,
-            "state": reported,
-            "stale": stale,
-            "recorded_state": record.get("state", "pending"),
-            "attempts": int(record.get("attempts", 0)),
-            "last_error": record.get("last_error", ""),
-            "answered": all(answer(out_dir, entry) for entry in entries),
-            "jobs": len(entries),
-            "payload_chars": max(entry["payload_chars"] for entry in entries),
-        })
-        if stale:
-            pages[-1]["last_error"] = detail
-
-    unfinished = [p for p in pages if p["state"] != "accepted"]
-    return {
-        "total": len(pages),
-        "accepted": len(pages) - len(unfinished),
-        "next": unfinished[0]["page"] if unfinished else None,
-        "by_state": dict(sorted(Counter(p["state"] for p in pages).items())),
-        "failed": [p["page"] for p in pages if p["state"] == "failed"],
-        "stale": [p["page"] for p in pages if p["stale"]],
-        "freshness": "checked" if book_path is not None else "unchecked",
-        "split": manifest.get("split", []),
-        "orphaned": manifest.get("orphaned", []),
-        "reference_pdf": manifest.get("reference_pdf", ""),
-        "pages": pages,
-    }
-
-
-def next_page(out_dir: Path) -> dict[str, Any] | None:
-    """The next job to do, and the page it belongs to.
-
-    One job at a time even when a page was split: answer it, ask again, and the
-    same page comes back with its next part until the page is complete.
-    """
-    progress = status(out_dir)
-    if progress["next"] is None:
-        return None
-    entries = jobs_for(load_manifest(out_dir), progress["next"])
-    entry = next((e for e in entries if not answer(out_dir, e)), entries[0])
-    record = next(p for p in progress["pages"] if p["page"] == entry["page"])
-    return {
-        "page": entry["page"],
-        "id": entry["id"],
-        "job": entry["part"],
-        "jobs": entry["parts"],
-        "worksheet": str(out_dir / entry["file"]),
-        "output": str(out_dir / entry["output"]),
-        "units": entry["units"],
-        "payload_chars": entry["payload_chars"],
-        # Two different files, and confusing them renders the wrong page:
-        # ``page_pdf`` is this one page alone, and ``reference_pdf`` is the
-        # whole book, which is what ``render-qa --source-pdf`` indexes into.
-        "page_pdf": (str(out_dir / entry["source_pdf"])
-                     if entry.get("source_pdf") else ""),
-        "reference_pdf": progress["reference_pdf"],
-        "state": record["state"],
-        "attempts": record["attempts"],
-        "last_error": record["last_error"],
-        "remaining": progress["total"] - progress["accepted"],
-    }
 
 
 # --------------------------------------------------------------------------- #
