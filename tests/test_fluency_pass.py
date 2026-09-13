@@ -34,6 +34,7 @@ import bookir as ir  # noqa: E402
 import fluency  # noqa: E402
 import meaning  # noqa: E402
 import merge as merging  # noqa: E402
+from tests_support import review_reply  # noqa: E402
 
 SOURCE = [
     "The man he had seen at the station reading a book left.",
@@ -63,6 +64,10 @@ def translated(tmp_path: Path) -> Path:
     for block, target in zip(book["blocks"], TARGET):
         container, field = resolve(block["id"])
         container[field] = target
+    # The title page is published prose too: a book whose metadata has no
+    # Persian is unfinished, and the inventory now says so.
+    book["meta"]["title_target"] = "کتابی کوچک"
+    book["meta"]["author_target"] = "نویسندهٔ آزمون"
     ir.save_book(book, path)
     return path
 
@@ -72,7 +77,7 @@ def settled(translated: Path, tmp_path: Path) -> Path:
     """A meaning review that passed, which is what licenses a fluency pass."""
     out = tmp_path / "meaning"
     for sheet_id in meaning.write_sheets(translated, out)["sheets"]:
-        ir.write_text(out / f"out_{sheet_id}.md", f"!! reviewed {sheet_id}\n")
+        _reply(out, sheet_id, f"!! reviewed {sheet_id}\n")
     assert meaning.record(out, translated)["ok"] is True
     return out
 
@@ -85,12 +90,14 @@ def _resettle(book_path: Path, meaning_dir: Path) -> dict:
     the source says" would be a second opinion nobody reconciles.
     """
     for sheet_id in meaning.write_sheets(book_path, meaning_dir)["sheets"]:
-        ir.write_text(meaning_dir / f"out_{sheet_id}.md", f"!! reviewed {sheet_id}\n")
+        _reply(meaning_dir, sheet_id, f"!! reviewed {sheet_id}\n")
     return meaning.record(meaning_dir, book_path)
 
 
 def _reply(out_dir: Path, sheet_id: str, body: str) -> None:
-    ir.write_text(out_dir / f"out_{sheet_id}.md", body)
+    """A reply echoing its sheet's review line, which the transport requires."""
+    ir.write_text(out_dir / f"out_{sheet_id}.md",
+                  review_reply(out_dir / f"{sheet_id}.md", body))
 
 
 # --------------------------------------------------------------------------- #
@@ -122,14 +129,24 @@ def test_the_sheet_carries_persian_neighbours_for_the_adjacency_rubrics(
     """`flow` and `register` are questions a unit shown alone cannot be asked."""
     out = tmp_path / "fluency"
     report = fluency.write_sheets(translated, out, settled, per_sheet=1)
-    assert len(report["sheets"]) == len(TARGET)
+    # The title and the byline are published units too, so one unit per sheet is
+    # five sheets: they come first, then the three paragraphs.
+    assert len(report["sheets"]) == len(TARGET) + 2
 
-    middle = (out / "sheet_0002.md").read_text(encoding="utf-8")
+    middle = (out / "sheet_0004.md").read_text(encoding="utf-8")
     assert TARGET[1] in middle
     assert TARGET[0] in middle and TARGET[2] in middle, (
         "neither neighbour is on the sheet, so flow cannot be judged")
     # And the context is marked as context, so it is not edited by mistake.
     assert "not under review" in middle
+
+    # Context stays inside one part: the unit before the first paragraph is the
+    # byline, and a transition from a title page to a chapter is not one.
+    first_prose = (out / "sheet_0003.md").read_text(encoding="utf-8")
+    assert TARGET[0] in first_prose
+    assert "نویسندهٔ آزمون" not in first_prose, (
+        "the byline is quoted as the previous line, so the reviewer is invited "
+        "to smooth a transition that does not exist")
 
 
 def test_an_edit_filed_against_a_context_line_is_not_read_as_its_body(
@@ -280,7 +297,10 @@ def test_silence_is_not_approval(translated, settled, tmp_path):
         _reply(out, sheet_id, "Looked at it, reads fine.\n")
     report = fluency.record(out, translated)
     assert report["ok"] is False
-    assert any("never claimed as read" in problem for problem in report["problems"])
+    # The refusal moved into the shared review transport, which names the sheet
+    # it is refusing rather than listing the unclaimed ones at the end.
+    assert any("nothing says this sheet was read" in problem
+               for problem in report["problems"]), report
 
 
 def test_an_edit_identical_to_what_is_there_is_refused(translated, settled, tmp_path):
@@ -376,7 +396,14 @@ def test_a_pass_does_not_survive_the_persian_changing(translated, settled, tmp_p
 
 
 def test_the_same_edits_proposed_twice_stop_the_loop(translated, settled, tmp_path):
-    """Two identical blind passes mean the sentence is not the problem."""
+    """Two identical blind passes mean the sentence is not the problem.
+
+    The second one is now the refusal, not the third: the episode records the
+    wording each proposal was made *from*, and the Persian has not moved between
+    the two, so nothing has been learned. The old counter needed a third pass
+    because it compared whole-round signatures and cleared them whenever the
+    revision moved — which applying an edit does.
+    """
     out = tmp_path / "fluency"
     fluency.write_sheets(translated, out, settled)
     proposal = f"++ b00001 calque\n{SMOOTHED}\n!! reviewed sheet_0001\n"
@@ -384,12 +411,17 @@ def test_the_same_edits_proposed_twice_stop_the_loop(translated, settled, tmp_pa
 
     first = fluency.record(out, translated)
     assert first["ok"] is True
-    # Filed again against the same unchanged Persian, twice more: the history
-    # repeats and the third attempt is refused with a reason, not a budget.
-    assert fluency.record(out, translated)["ok"] is True
-    third = fluency.record(out, translated)
-    assert third["ok"] is False
-    assert third["refused"] == "no-new-evidence"
+
+    second = fluency.record(out, translated)
+    assert second["ok"] is False
+    assert second["refused"] == "no-new-evidence"
+    # The proposals are kept where an escalation can read them, and out of the
+    # way of `apply`, which refuses a refused pass by name.
+    assert second["refused_edits"], second
+    assert second["edits"] == [], second
+    assert second["escalate"][0]["arguments"] == [SMOOTHED, SMOOTHED], second
+    refused = fluency.apply_edits(translated, out)
+    assert refused["ok"] is False and refused["refused"] == "no-new-evidence"
 
 
 def test_a_book_with_nothing_translated_is_a_translation_gap_not_a_fluency_one(
@@ -401,7 +433,7 @@ def test_a_book_with_nothing_translated_is_a_translation_gap_not_a_fluency_one(
 
     out = tmp_path / "meaning"
     for sheet_id in meaning.write_sheets(path, out)["sheets"]:
-        ir.write_text(out / f"out_{sheet_id}.md", f"!! reviewed {sheet_id}\n")
+        _reply(out, sheet_id, f"!! reviewed {sheet_id}\n")
     meaning.record(out, path)
 
     report = fluency.write_sheets(path, tmp_path / "fluency", out)

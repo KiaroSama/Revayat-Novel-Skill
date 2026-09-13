@@ -28,20 +28,21 @@ Three properties keep it from becoming a rewrite:
   construction, and this stage's own verdict stays false until that review has
   been redone. The final comparison against the source is not a step someone
   remembers to run — it is the only way this gate ever returns true.
-* **Rounds are capped**, and a round that repeats the previous round's edits
-  exactly is refused. Two identical blind passes mean the sentence is not
-  actually the problem.
+* **Proposals are capped per unit**, in `repairlog`: three about one unit and
+  rubric escalate, and a proposal that puts back a wording an earlier pass
+  replaced is refused as an oscillation. The cap counts proposals rather than
+  rounds because applying an edit moves the revision a round counter was keyed
+  to, so every applied pass used to come back as round 1.
 
 The grammar is `++`, which is neither a worksheet's `@@`, nor a fence, nor
 `meaning`'s `??`. A file of one kind handed to the wrong stage is refused by
-name rather than half-read, and the digest tags (`fluency1:` against
-`meaning1:`) refuse a swapped *directory* the same way.
+name rather than half-read, and the digest tags (`fluency2:` against
+`meaning2:`) refuse a swapped *directory* the same way.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import sys
@@ -49,15 +50,21 @@ from pathlib import Path
 from typing import Any
 
 import bookir as ir
-import chunk as chunking
 import meaning as meaning_review
 import merge as merging
+import published
+import repairlog
+import reviewsheet
 
 SCHEMA = "revayat-novel/fluency@1"
 
+#: Which stage is asking, carried in every review token. A meaning reply filed
+#: here used to have its `??` findings ignored and the result reported clean.
+STAGE = "fluency"
+
 #: Tagged like every other digest here, so a reader that cannot recompute this
 #: formula refuses instead of guessing which side is stale.
-DIGEST_VERSION = "fluency1"
+DIGEST_VERSION = "fluency2"
 
 #: What can honestly be asked of Persian with the source absent.
 #:
@@ -107,10 +114,11 @@ EDIT = re.compile(r"^\+\+\s+(?P<id>[A-Za-z0-9_#-]+)\s+(?P<rubric>[a-z]+)\s*$")
 #: reason: a reply with no edits is silence until someone says they read it.
 REVIEWED = re.compile(r"^!!\s+reviewed\s+(?P<sheet>[A-Za-z0-9_-]+)\s*$")
 
-#: Blind passes before this stops asking. Lower than `meaning`'s budget on
-#: purpose: a second blind opinion on the same Persian is worth having, a third
-#: is someone rewriting to taste.
-MAX_ROUNDS = 2
+#: Proposals about one unit and rubric before this stops asking. Counted per
+#: issue in `repairlog`, because a round counter reset whenever the Persian moved
+#: — and applying an edit is what moves it, so every applied pass came back as
+#: round 1 and a sixth blind rewrite of the same sentence was still permitted.
+MAX_ATTEMPTS = repairlog.MAX_ATTEMPTS
 
 #: Units per sheet, and the Persian neighbours each one is shown for context.
 #: `flow` and `register` are questions about adjacency, so a unit reviewed alone
@@ -121,27 +129,21 @@ CONTEXT_UNITS = 1
 
 
 def targets(book: dict[str, Any]) -> list[dict[str, str]]:
-    """``{id, kind, target}`` for every unit that has Persian in it.
+    """Every published unit that has Persian in it, source side dropped.
 
-    Source-free by construction: `chunk.translatable_units` decides *which*
-    units exist and `merge.addressing` decides where each one's Persian lives —
-    the same two functions the translation and the meaning review use, so all
-    three stages are talking about the same list. The source text those
-    functions also return is dropped here, deliberately and in one place.
+    Source-free by construction, in one place: `published.units` is the inventory
+    the translation, the bilingual review and the typography fixer all read, and
+    the source field is dropped here rather than never fetched — a second
+    inventory is how the title page came to be outside every one of them.
+
+    A unit with no Persian yet is **not** on a sheet: a reviewer with no source
+    cannot translate it, and showing it invites exactly that. It does not
+    disappear either — `published.pending` lists it, `record` writes it down and
+    `verdict` refuses while any of it is outstanding.
     """
-    ids = [block["id"] for block in book.get("blocks") or []]
-    resolve = merging.addressing(book)
-    found: list[dict[str, str]] = []
-    for unit_id, kind, _source in chunking.translatable_units(book, ids):
-        slot = resolve(unit_id)
-        target = "" if slot is None else str(slot[0].get(slot[1]) or "")
-        if not target.strip():
-            # Nothing to read. An untranslated unit is `qa`'s finding, not a
-            # fluency one, and putting it on the sheet invites the reviewer to
-            # translate it — from a source they were deliberately not given.
-            continue
-        found.append({"id": unit_id, "kind": kind, "target": target})
-    return found
+    return [{"id": unit["id"], "kind": unit["kind"], "part": unit["part"],
+             "origin": unit["origin"], "target": unit["target"]}
+            for unit in published.units(book) if unit["target"].strip()]
 
 
 def revision(units: list[dict[str, str]]) -> str:
@@ -150,14 +152,13 @@ def revision(units: list[dict[str, str]]) -> str:
     Not the source, unlike `meaning.revision`, and the asymmetry is the point.
     This review is a statement about how the Persian reads, which re-extracting
     the source does not change. Re-translating does, and that moves this digest.
+
+    ``fluency1:`` → ``fluency2:``: the formula now covers every published
+    target — the title, the byline and the translator's own notes included — and
+    each unit's type. A pass recorded under the old tag comes back
+    `unverified-digest` and one re-run settles it.
     """
-    digest = hashlib.sha256()
-    for unit in units:
-        digest.update(unit["id"].encode("utf-8"))
-        digest.update(b"\x00")
-        digest.update(unit["target"].encode("utf-8"))
-        digest.update(b"\x1e")
-    return f"{DIGEST_VERSION}:{digest.hexdigest()}"
+    return published.digest_of(units, sides=("target",), tag=DIGEST_VERSION)
 
 
 def rubric_table() -> str:
@@ -169,11 +170,31 @@ def rubric_table() -> str:
     return "\n".join(lines)
 
 
+def _neighbour(units: list[dict[str, str]], index: int,
+               edge: dict[str, str]) -> str:
+    """The adjacent unit's Persian, when it is genuinely adjacent prose.
+
+    ``flow`` and ``register`` ask whether consecutive sentences follow one
+    another, so the context has to be the sentence that actually precedes this
+    one on the page. Since the inventory widened to the whole published set, the
+    unit before the first paragraph is the byline — quoting it as the previous
+    line invites a reviewer to smooth a transition between a title page and a
+    chapter, which is not a transition. Context stays inside one ``part``.
+    """
+    if not 0 <= index < len(units):
+        return ""
+    neighbour = units[index]
+    if neighbour.get("part") != edge.get("part"):
+        return ""
+    return neighbour["target"]
+
+
 def sheet(units: list[dict[str, str]], *, sheet_id: str, rev: str,
-          before: str = "", after: str = "") -> str:
+          request: str = "", before: str = "", after: str = "") -> str:
     """One blind sheet: Persian, its neighbours, and no source anywhere."""
     out = [
-        f"<!-- revayat-novel: {sheet_id}, revision {rev} -->",
+        reviewsheet.request_line(STAGE, sheet_id, request) if request
+        else f"<!-- revayat-novel: {sheet_id}, revision {rev} -->",
         "",
         f"# Fluency pass — {sheet_id}",
         "",
@@ -193,6 +214,9 @@ def sheet(units: list[dict[str, str]], *, sheet_id: str, rev: str,
         "",
         "    ++ b00012 calque",
         "    مردی رفت که او را در ایستگاه، در حال کتاب خواندن، دیده بود.",
+        "",
+        "**Copy the `<!-- revayat-novel: review … -->` line above into your reply, "
+        "unchanged.** It says which sheet and which Persian you read.",
         "",
         "Leave a unit out if it reads well. Then, last line, claim the sheet:",
         "",
@@ -218,6 +242,10 @@ def write_sheets(book_path: Path, out_dir: Path, meaning_dir: Path, *,
     make "was the meaning settled first" a question about how the caller invoked
     this, which is the same as not asking it.
     """
+    trouble = reviewsheet.bounded("--per-sheet", per_sheet)
+    if trouble:
+        return {"ok": False, "refused": "bad-per-sheet", "detail": trouble}
+
     book = ir.load_book(book_path)
     pairs = meaning_review.pairs(book)
     settled = meaning_review.verdict(Path(meaning_dir),
@@ -239,25 +267,44 @@ def write_sheets(book_path: Path, out_dir: Path, meaning_dir: Path, *,
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Replies to the previous revision are filed rather than left in place, for
+    # the reason the meaning stage files them: a reply that survives a
+    # regeneration is an approval of text the sheet no longer shows.
+    superseded = reviewsheet.archive_replies(out_dir, rev)
+
     written: list[str] = []
+    owned: dict[str, list[str]] = {}
+    tokens: dict[str, str] = {}
     for index in range(0, len(units), per_sheet):
         sheet_id = f"sheet_{index // per_sheet + 1:04}"
         batch = units[index:index + per_sheet]
         tail = index + per_sheet
+        unit_ids = [unit["id"] for unit in batch]
+        request = reviewsheet.token(
+            stage=STAGE, sheet_id=sheet_id, revision=rev, unit_ids=unit_ids,
+            policy=rubric_table())
         ir.write_text(out_dir / f"{sheet_id}.md", sheet(
-            batch, sheet_id=sheet_id, rev=rev,
-            before=units[index - CONTEXT_UNITS]["target"] if index else "",
-            after=units[tail]["target"] if tail < len(units) else ""))
+            batch, sheet_id=sheet_id, rev=rev, request=request,
+            before=_neighbour(units, index - CONTEXT_UNITS, batch[0]),
+            after=_neighbour(units, tail, batch[-1])))
         written.append(sheet_id)
+        owned[sheet_id] = unit_ids
+        tokens[sheet_id] = request
+
+    gaps = reviewsheet.coverage_problems(owned, [unit["id"] for unit in units])
+    if gaps:
+        return {"ok": False, "refused": "incomplete-coverage", "problems": gaps}
 
     ir.write_text(out_dir / "manifest.json", json.dumps(
         {"schema": SCHEMA, "revision": rev, "sheets": written,
-         "units": len(units),
+         "units": len(units), "owned": owned, "requests": tokens,
+         "superseded": superseded,
          # Which meaning verdict licensed this pass. Recorded so a reader can
          # check the claim rather than trust that it was made.
          "meaning_revision": meaning_review.revision(pairs)},
         ensure_ascii=False, indent=1) + "\n")
-    return {"ok": True, "revision": rev, "sheets": written, "units": len(units)}
+    return {"ok": True, "revision": rev, "sheets": written, "units": len(units),
+            "superseded": superseded}
 
 
 def read_edits(text: str) -> tuple[list[dict[str, str]], list[str], list[str]]:
@@ -337,25 +384,47 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
                           "so the reviewer read text that is no longer there. "
                           "Write the sheets again."}
 
+    gaps = reviewsheet.coverage_problems(manifest.get("owned") or {},
+                                         [unit["id"] for unit in units])
+    if gaps:
+        return {"ok": False, "refused": "incomplete-coverage", "problems": gaps}
+
     edits: list[dict[str, str]] = []
-    claimed: set[str] = set()
     problems: list[str] = []
+    requests = manifest.get("requests") or {}
     for sheet_id in manifest.get("sheets") or []:
         reply = out_dir / f"out_{sheet_id}.md"
         if not reply.exists():
             problems.append(f"{sheet_id}: no out_{sheet_id}.md — nobody read "
                             f"this sheet")
             continue
-        found, said, trouble = read_edits(reply.read_text(encoding="utf-8"))
-        edits += found
-        claimed |= set(said)
+        text = reply.read_text(encoding="utf-8")
+        # Its own sheet, its own token, its own grammar. A meaning reply filed
+        # here had its `??` findings silently dropped and the sheet reported
+        # clean; a claim for another sheet used to discharge that sheet too.
+        problems += reviewsheet.reply_problems(
+            text, stage=STAGE, sheet_id=sheet_id,
+            expected=requests.get(sheet_id, ""), owns=STAGE)
+        found, _said, trouble = read_edits(text)
         problems += trouble
-    unclaimed = [sheet_id for sheet_id in manifest.get("sheets") or []
-                 if sheet_id not in claimed]
-    if unclaimed:
-        problems.append(
-            f"these sheets were never claimed as read: {unclaimed}. A reply with "
-            f"no `!! reviewed` line is silence, not approval")
+        owns = set((manifest.get("owned") or {}).get(sheet_id) or [])
+        for edit in found:
+            if owns and edit["id"] not in owns:
+                problems.append(
+                    f"{sheet_id}: the edit to {edit['id']} belongs to another "
+                    f"sheet — this one owns {sorted(owns)[:4]}")
+        edits += found
+
+    # Two replacements for one unit are a conflict, not a last-write-wins.
+    proposed: dict[str, list[str]] = {}
+    for edit in edits:
+        proposed.setdefault(edit["id"], []).append(edit["target"])
+    for unit_id, bodies in sorted(proposed.items()):
+        if len({body for body in bodies}) > 1:
+            problems.append(
+                f"{unit_id}: {len(bodies)} different replacements were proposed "
+                f"for one unit. Taking the last would silently discard a "
+                f"reviewer's judgement; decide which one is right")
 
     known = {unit["id"]: unit["target"] for unit in units}
     for edit in edits:
@@ -376,35 +445,58 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
             previous = json.loads(sidecar_path(out_dir).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             previous = {}
+    # Never reset, for the reason `repairlog` exists: applying an edit moves this
+    # revision, so clearing the history on a revision change cleared it after
+    # every pass that did anything.
     history = list(previous.get("history") or [])
-    if previous.get("revision") != rev:
-        history = []
-
     proposed = signature(edits)
-    if len(history) >= 2 and history[-1] == history[-2] == proposed:
-        return {"ok": False, "refused": "no-new-evidence",
-                "detail": "two blind passes proposed exactly these edits and the "
-                          "text is still under review. The sentence is not the "
-                          "problem — look at the glossary entry, the voice card "
-                          "or the source extraction."}
-    if len(history) >= MAX_ROUNDS:
-        return {"ok": False, "refused": "rounds-exhausted",
-                "detail": f"{len(history)} blind passes have been applied. A "
-                          f"third is taste, not fluency."}
 
-    written = {
+    # One episode per ``(unit, rubric)``, recorded at the wording the edit was
+    # proposed *from*. Applying the edit moves that wording, so a pass that keeps
+    # rewriting the same unit accumulates attempts, and a pass that puts back a
+    # wording already rejected is an oscillation rather than a third opinion.
+    sources = {unit["id"]: unit["source"]
+               for unit in meaning_review.pairs(ir.load_book(book_path))}
+    episodes = dict(previous.get("episodes") or {})
+    seen: set[str] = set()
+    for edit in edits:
+        key = repairlog.issue_key(edit["id"], edit["rubric"])
+        seen.add(key)
+        repairlog.attempt(
+            episodes, key=key,
+            source=repairlog.wording(sources.get(edit["id"], "")),
+            text=known.get(edit["id"], ""),
+            # The replacement *is* the argument in this stage's grammar, so it is
+            # what an escalation has to be able to read.
+            argument=edit["target"], revision=rev)
+    resolved = repairlog.close_absent(episodes, seen=seen, revision=rev)
+
+    written: dict[str, Any] = {
         "schema": SCHEMA,
         "revision": rev,
         "round": len(history) + 1,
         "edits": edits,
         "proposed": proposed,
         "history": history + [proposed],
+        "episodes": episodes,
+        "resolved": resolved,
         # Set by `apply_edits`, and the reason this stage's verdict is not
         # simply "were the sheets read": an edit that was filed and never
         # applied must not read as a finished pass.
         "applied": None,
         "ok": True,
     }
+
+    # Refused *after* the evidence is assembled, and the evidence is written
+    # either way: a refusal that throws the proposals away leaves an operator
+    # told to look at the glossary with nothing to look at. The edits are filed
+    # under a different key so `apply_edits` cannot mistake a refused pass for an
+    # accepted one, and it refuses such a sidecar by name as well.
+    stop = repairlog.blocked(episodes, cap=MAX_ATTEMPTS)
+    if stop:
+        written.update({"ok": False, "refused": stop[0]["refused"],
+                        "detail": stop[0]["detail"], "escalate": stop,
+                        "refused_edits": edits, "edits": []})
     ir.write_text(sidecar_path(out_dir),
                   json.dumps(written, ensure_ascii=False, indent=1) + "\n")
     return written
@@ -423,6 +515,14 @@ def apply_edits(book_path: Path, out_dir: Path) -> dict[str, Any]:
         return {"ok": False, "refused": "not-recorded",
                 "detail": f"there is no {path}; record the edits first"}
     found = json.loads(path.read_text(encoding="utf-8"))
+    if not found.get("ok", True):
+        # A refused pass is filed for its evidence, not for its edits. Writing it
+        # is what makes an escalation readable; applying it would be the loop the
+        # refusal exists to stop.
+        return {"ok": False, "refused": found.get("refused") or "not-recorded",
+                "detail": f"this pass was refused ({found.get('refused')}) and "
+                          f"its proposals were recorded as evidence, not as "
+                          f"edits to write: {found.get('detail') or ''}"}
 
     book = ir.load_book(book_path)
     units = targets(book)
@@ -496,6 +596,19 @@ def verdict(out_dir: Path, book_path: Path, meaning_dir: Path) -> dict[str, Any]
                           f"rather than assume either answer"}
 
     book = ir.load_book(Path(book_path))
+    # A unit with no Persian is deliberately kept off the sheets, so the pass can
+    # be complete over the sheets while published prose is still missing. Named
+    # here rather than inferred from a count: a unit that is pending must not be
+    # able to disappear from the set anything asks about.
+    owing = published.pending(book)
+    if owing:
+        return {"ok": False, "refused": "pending-units",
+                "pending": [unit["id"] for unit in owing],
+                "detail": f"{len(owing)} published unit(s) have no Persian yet — "
+                          f"{', '.join(unit['id'] for unit in owing[:6])} — so this "
+                          f"pass read a book that is not finished. They are kept "
+                          f"off the blind sheets on purpose; translate them "
+                          f"first."}
     now = revision(targets(book))
     applied = found.get("applied")
     if applied is None:

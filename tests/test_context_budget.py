@@ -24,6 +24,7 @@ import glossary as gl
 import merge as merging
 import pagerun
 import runstate
+from tests_support import reply_text
 
 
 def _paged_book(pages: int, *, sentences: int = 4) -> dict:
@@ -169,10 +170,18 @@ def test_a_split_page_is_offered_one_job_at_a_time(tmp_path):
     assert (first["page"], first["job"], first["jobs"]) == (1, 1, len(entries))
     assert first["id"] == entries[0]["id"]
 
-    ir.write_text(Path(first["output"]), "@@ x para\nمتن\n")
+    # A real answer to *this* job: the ids it asked for, and the request line it
+    # asks to have echoed. A reply merge would refuse — an invented unit id, no
+    # request line — leaves this part outstanding, which is the scheduler
+    # agreeing with merge rather than moving on from a refusal.
+    ir.write_text(Path(first["output"]), reply_text(
+        Path(first["worksheet"]),
+        "".join(f"@@ {unit_id} para\nمتن\n"
+                for unit_id in entries[0]["unit_ids"])))
     second = pagerun.next_page(pages)
     assert (second["page"], second["job"]) == (1, 2)
     assert second["id"] == entries[1]["id"]
+    assert second["reason"] == "", second
 
 
 def test_a_split_page_is_visible_from_the_resume_view(tmp_path):

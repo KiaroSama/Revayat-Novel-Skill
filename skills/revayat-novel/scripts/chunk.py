@@ -18,10 +18,20 @@ from pathlib import Path
 from typing import Any
 
 import bookir as ir
+import eligible
 import glossary as gl
 import runstate
 import segments
 import worksheet
+# Re-exported because `chunk` is the name the stage dispatcher, `merge`, the two
+# review stages and the tests all reach through, and moving code should not also
+# be a rename. The dependency points one way: `provenance` knows nothing about
+# cutting or building, so it cannot cycle back here.
+from provenance import (  # noqa: F401  (this module's published surface)
+    CONTEXT_CHARS, REQUEST_CHARS, REQUEST_LINE_CHARS, REQUEST_VERSION,
+    dependency_facet, kind_of, request_token, source_fingerprint, span_problems,
+    translatable_units, unit_fingerprint, unit_records,
+)
 from worksheet import (  # noqa: F401  (this module's published surface)
     HEADER, SCAFFOLD_COMMENT, TRANSLATOR_NOTE, classify, comment,
     escape_payload, request_line, request_of,
@@ -32,22 +42,6 @@ from worksheet import (  # noqa: F401  (this module's published surface)
 DEFAULT_BUDGET = 6000
 #: A chunk may overshoot the budget by this much to finish the current scene.
 OVERSHOOT = 0.35
-#: Characters of neighbouring source shown for pronoun/entity resolution.
-CONTEXT_CHARS = 450
-
-_KIND_BY_TYPE = {
-    "paragraph": "para",
-    "blockquote": "quote",
-    "listitem": "list",
-    "caption": "caption",
-    "verse": "verse",
-}
-
-
-def kind_of(block: dict[str, Any]) -> str:
-    if block["type"] == "heading":
-        return f"heading{int(block.get('level', 1))}"
-    return _KIND_BY_TYPE.get(block["type"], block["type"])
 
 
 # --------------------------------------------------------------------------- #
@@ -102,154 +96,7 @@ def _has_prose(book: dict[str, Any], ids: list[str]) -> bool:
 # Worksheet rendering
 # --------------------------------------------------------------------------- #
 
-def translatable_units(book: dict[str, Any], ids: list[str]) -> list[tuple[str, str, str]]:
-    """``(unit_id, kind, source_text)`` for everything in the chunk to translate."""
-    lookup = ir.blocks_by_id(book)
-    units: list[tuple[str, str, str]] = []
-    for block_id in ids:
-        block = lookup.get(block_id)
-        if block is None:
-            continue
-        if block["type"] in ir.TEXT_TYPES and (block.get("text") or "").strip():
-            units.append((block_id, kind_of(block), block["text"]))
-        elif block["type"] == "image" and (block.get("alt") or "").strip():
-            units.append((f"{block_id}#alt", "alt", block["alt"]))
 
-    referenced = {
-        ref
-        for _, _, text in units
-        for ref in ir.footnote_refs(text)
-    }
-    for note in book.get("footnotes", []):
-        if note["id"] in referenced and (note.get("text") or "").strip():
-            units.append((note["id"], "footnote", note["text"]))
-
-    # A section's running heads ride with the chunk that opens the section, so
-    # the translator settles the head of a chapter while looking at the chapter.
-    # A section holding no blocks of its own has nowhere else to go than the
-    # first chunk, and an unreachable unit is one nobody can ever translate.
-    opening = book["blocks"][0]["id"] if book.get("blocks") else None
-    for unit_id, kind, piece, section in ir.iter_running_pieces(book):
-        anchor = section.get("start_block") or opening
-        if anchor in ids and (piece.get("text") or "").strip():
-            units.append((unit_id, kind, piece["text"]))
-    return units
-
-
-def unit_fingerprint(book: dict[str, Any], ids: list[str]) -> str:
-    """Identity of the source a worksheet for ``ids`` is cut from.
-
-    One definition, recorded by :func:`build` and re-checked by ``merge``. Two
-    copies of this formula would drift, and the direction it drifts in is
-    "merge believes a stale reply is fresh" — so it lives here, once, and both
-    sides call it.
-
-    Source text only. A translation, a translator's footnote or an accepted page
-    must not change it, or every successful merge would report the worksheets it
-    came from as stale.
-
-    Tagged with the formula that produced it, because the page route writes a
-    *different* digest under the same manifest key — its own covers the page
-    raster and the page geometry as well, which merge cannot recompute from
-    block ids. Untagged, merge recomputed this formula against that value and
-    declared every page-route worksheet stale.
-    """
-    units = translatable_units(book, ids)
-    return "units:" + ir.sha256_bytes(
-        "\n".join(f"{unit_id}\x00{text}" for unit_id, _, text in units)
-        .encode("utf-8"))
-
-
-#: Version tag on a request token, so a reader that cannot recompute a form says
-#: so instead of guessing. See invariant 9 in AGENTS.md.
-REQUEST_VERSION = "req1"
-
-#: How many hex characters of the request digest travel in the worksheet. 64 bits
-#: is far more than enough to tell two generations of one job apart, and a token a
-#: person has to copy should fit on the line with the rest of the comment.
-REQUEST_CHARS = 16
-
-#: What the request line costs a worksheet, reserved out of the budget before the
-#: splitter measures anything. A constant, because the token is a fixed-width
-#: digest behind a fixed tag.
-REQUEST_LINE_CHARS = len(request_line(f"{REQUEST_VERSION}:{'0' * REQUEST_CHARS}")) + 1
-
-
-def unit_records(units: list[tuple[str, str, str]]) -> list[dict[str, Any]]:
-    """Per unit: its id, kind, owner, and the slice of the owner it covers.
-
-    This is what makes a cut *recomputable* later. `split_text` guarantees the
-    pieces of a unit rejoin exactly, so their offsets are the running sum of their
-    lengths — and with the offsets written down, merge can take the owner's live
-    text, slice it the same way and ask whether the book still says what the
-    worksheet asked about. Without them it could only hash the parent block, which
-    is identical for every cut of it, so a recut of one paragraph was invisible.
-
-    An image's alt text (`b00042#alt`) is its own owner, not a segment of the
-    block: `segments.SEGMENT` is numeric on purpose.
-    """
-    seen: dict[str, int] = {}
-    records: list[dict[str, Any]] = []
-    for unit_id, kind, text in units:
-        owner = segments.base_of(unit_id)
-        start = seen.get(owner, 0)
-        records.append({"id": unit_id, "kind": kind, "owner": owner,
-                        "offset": start, "length": len(text)})
-        seen[owner] = start + len(text)
-    return records
-
-
-def source_fingerprint(book: dict[str, Any], block_ids: list[str],
-                       records: list[dict[str, Any]]) -> str:
-    """Identity of the source these exact units were cut from, recomputable.
-
-    Replaces a digest over the parent blocks' whole text. That one could not tell
-    two cuts of one paragraph apart — every segment of a block shared it — so a
-    rebuild at a different budget left merge comparing a value against itself.
-
-    The trailing length record catches the case the slices cannot: an owner whose
-    text grew after the cut still matches every recorded slice.
-    """
-    whole = {unit_id: text
-             for unit_id, _, text in translatable_units(book, block_ids)}
-    parts: list[str] = []
-    for record in records:
-        text = whole.get(record["owner"])
-        piece = ("\x00absent" if text is None
-                 else text[record["offset"]:record["offset"] + record["length"]])
-        parts.append(f"{record['id']}\x00{record['kind']}\x00{piece}")
-    covered: dict[str, int] = {}
-    for record in records:
-        end = record["offset"] + record["length"]
-        covered[record["owner"]] = max(covered.get(record["owner"], 0), end)
-    for owner, end in sorted(covered.items()):
-        parts.append(f"{owner}\x00span\x00{end}\x00{len(whole.get(owner) or '')}")
-    return "units2:" + ir.sha256_bytes("\n".join(parts).encode("utf-8"))
-
-
-def request_token(worksheet: str) -> str:
-    """The identity of one question, over the worksheet as it will be sent.
-
-    Everything that decides what a translator is being asked is in that text: the
-    ordered headers and kinds, the exact segment boundaries, the neighbouring
-    context, the term table this chunk's own units called for and the voice cards
-    that came with them. Hashing the rendered worksheet covers all of it without a
-    second formula that could drift from what was actually sent.
-
-    Our own scaffolding comments are left out, and that is not a detail: one of
-    them counts the jobs ("worksheet 0001/0006"). Hashing it meant that raising
-    the budget invalidated the answer to a unit whose question had not changed by
-    a character, because the *other* jobs renumbered — and "valid unchanged
-    replies remain reusable" is half of what this identity is for. What stays in
-    the hash is the question: the ordered headers and kinds, the exact segment
-    texts, the neighbouring context, the term table and the voice cards.
-
-    Computed before the request line exists, so the value does not contain itself.
-    """
-    question = "\n".join(line for line in worksheet.splitlines()
-                         if not SCAFFOLD_COMMENT.match(line.strip()))
-    return (f"{REQUEST_VERSION}:"
-            + ir.sha256_bytes(question.encode("utf-8"))[:REQUEST_CHARS])
 
 
 def render_worksheet(
@@ -549,9 +396,17 @@ def build(
     # renders over the budget is split into several — both measured by rendering,
     # never estimated. `total` is only knowable once that settles, so the final
     # render happens afterwards and is checked again.
-    jobs: list[tuple[list[str], list[tuple[str, str, str]], str, str]] = []
+    jobs: list[tuple[list[str], list[tuple[str, str, str]], str, str,
+                     dict[str, dict[str, Any]], dict[str, list[str]]]] = []
     for position, ids in enumerate(chunks):
         previous_tail, next_head = neighbour_context(book, chunks, position)
+        # The blocks the context window was taken from, so merge can recompute
+        # what the worker was shown without re-deriving the whole cut — and so an
+        # edit to the paragraph next door is visible to freshness.
+        neighbours = {
+            "before": chunks[position - 1] if position > 0 else [],
+            "after": chunks[position + 1] if position + 1 < len(chunks) else [],
+        }
 
         def render(subset: list[tuple[str, str, str]],
                    ids: list[str] = ids,
@@ -566,14 +421,36 @@ def build(
         # prepended. It is a constant: the version tag plus a fixed-width digest.
         room = budget - REQUEST_LINE_CHARS
         units = segments.fit_units(translatable_units(book, ids), render, room)
+
+        # Spans over **every** segment of this block group, computed here rather
+        # than inside the loop below. `unit_records` accumulates offsets per
+        # owner, so computing it per worksheet restarted the running sum and a
+        # paragraph cut across three worksheets recorded `offset: 0` three times
+        # — see that function for the measurement. Each job takes its own records
+        # out of this map, so the offsets stay absolute within the owner.
+        spans = {record["id"]: record for record in unit_records(units)}
+        coverage = span_problems(
+            list(spans.values()),
+            {unit_id: text for unit_id, _, text in translatable_units(book, ids)})
+        if coverage:
+            # Refused rather than recorded: a digest over an incoherent cut
+            # compares slices that do not describe the source, which reads as
+            # "unchanged" for every edit it failed to cover.
+            raise OverBudget(
+                "the units cut from "
+                f"{ids[0] if ids else '?'} do not cover their source exactly, so "
+                "no worksheet was written and nothing can be verified against "
+                "them:\n  " + "\n  ".join(coverage))
+
         for group, _ in segments.fit_jobs(render, units, room):
-            jobs.append((ids, group, previous_tail, next_head))
+            jobs.append((ids, group, previous_tail, next_head, spans, neighbours))
 
     # Rendered in full before anything is written, so the refusal below can
     # honestly say nothing was written: a half-written set of worksheets with no
     # manifest beside them is a working directory no later stage can read.
     written: list[tuple[str, str]] = []
-    for index, (ids, units, previous_tail, next_head) in enumerate(jobs, start=1):
+    for index, (ids, units, previous_tail, next_head, spans,
+                neighbours) in enumerate(jobs, start=1):
         worksheet = render_worksheet(
             book, glossary, ids,
             index=index, total=len(jobs),
@@ -589,7 +466,8 @@ def build(
         # Assembled **before** the budget check, because the request line is part
         # of the text a model receives. Added after it, every full worksheet came
         # out one character over the budget it had just been measured against.
-        records = unit_records(units)
+        # This job's share of the group's spans, in the order the worksheet asks.
+        records = [spans[unit_id] for unit_id, _, _ in units]
         token = request_token(worksheet)
         worksheet = request_line(token) + "\n" + worksheet
 
@@ -627,7 +505,19 @@ def build(
             # units **as cut**, not over the parent blocks: the old form was the
             # same value for every segment of a paragraph, so a rebuild at another
             # budget compared a digest against itself and passed.
-            "source_sha256": source_fingerprint(book, ids, records),
+            # The neighbouring blocks, so merge can recompute the context window
+            # the worker was shown rather than assume it has not moved.
+            "neighbour_ids": neighbours,
+            "source_sha256": source_fingerprint(
+                book, ids, records,
+                # `None` when no glossary was named, which is what merge can
+                # observe. Passing the empty `new_glossary()` object here instead
+                # made the two sides hash different things for the same state —
+                # an empty term table against the word "none" — so every
+                # worksheet came back stale on an untouched book. The presence of
+                # the file is the dependency; the object cannot report it.
+                glossary=glossary if glossary_path else None,
+                neighbours=neighbours),
         })
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -692,14 +582,13 @@ def _staleness(out_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def _state_of(out_dir: Path, entry: dict[str, Any]) -> str:
-    """How far this one worksheet has got, by the same rules merge applies.
+    """How far this one worksheet has got — the transport half only.
 
-    The verdict is :func:`worksheet.classify`, shared with merge, because the two
-    sides disagreeing is the defect. This built a dict of the replies and counted
-    the populated expected ids — and a dict keyed by id has already dropped the
-    duplicate and the order by the time it exists, so a reply merge refuses came
-    back ``answered`` here, ``status`` reported nothing left to do, and the job
-    was never offered again.
+    Kept for callers that have no book to check against. `eligible.eligibility` is
+    the full answer and the one `status` uses: `classify` covers the syntax, the
+    ids and the kinds, and agreed with merge on all three, but it knows nothing
+    about the request token, the source digest or the note graph — so a reply merge
+    refused for any of those came back `answered` here and was never offered again.
     """
     output = out_dir / entry["output"]
     text = output.read_text(encoding="utf-8") if output.exists() else None
@@ -720,18 +609,24 @@ def status(out_dir: Path) -> dict[str, Any]:
     """
     manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
     order = [entry["id"] for entry in manifest["chunks"]]
-    states = {entry["id"]: _state_of(out_dir, entry)
-              for entry in manifest["chunks"]}
+    # One read-only eligibility answer per worksheet, the same one merge acts on.
+    # `classify` alone agreed with merge about the syntax and disagreed about
+    # everything around it — the request token, the source digest, the note graph
+    # — so a reply merge refused was reported here as translated and `next`
+    # returned nothing outstanding.
+    verdicts = {record["id"]: record
+                for record in eligible.every(out_dir, manifest)}
+    states = {chunk_id: verdicts[chunk_id]["state"] for chunk_id in order}
 
     def listed(*names: str) -> list[str]:
         return [chunk_id for chunk_id in order if states[chunk_id] in names]
 
-    # ``invalid`` belongs here: a reply merge will refuse is work still to do,
-    # and leaving it out is what let ``next`` report nothing outstanding while a
-    # repairable ingestion failure sat on disk. ``nothing-to-translate`` is the
-    # opposite — finished the moment it was cut, and asking for prose it does not
-    # contain is how an invented sentence gets into a book.
-    unfinished = listed("missing", "empty", "malformed", "partial", "invalid")
+    # Every repairable refusal belongs here: a reply merge will refuse is work
+    # still to do, and leaving one out is what let ``next`` report nothing
+    # outstanding while a fixable failure sat on disk. ``nothing-to-translate`` is
+    # the opposite — finished the moment it was cut, and asking for prose it does
+    # not contain is how an invented sentence gets into a book.
+    unfinished = listed(*eligible.RETRYABLE)
     return {
         "total": len(order),
         "translated": len(listed("answered", worksheet.NOTHING_TO_TRANSLATE)),
@@ -740,8 +635,16 @@ def status(out_dir: Path) -> dict[str, Any]:
         "malformed": listed("malformed"),
         "partial": listed("partial"),
         "invalid": listed("invalid"),
+        # The three the scheduler used to be blind to, each named so the operator
+        # knows whether to re-translate, rebuild or re-extract.
+        "wrong_request": listed("wrong-request"),
+        "unbound": listed("unbound"),
+        "stale_source": listed("stale-source"),
+        "unverified": listed("unverified"),
         "nothing_to_translate": listed(worksheet.NOTHING_TO_TRANSLATE),
         "next": unfinished[0] if unfinished else None,
+        "next_reason": (verdicts[unfinished[0]]["detail"] or
+                        f"state {states[unfinished[0]]}") if unfinished else "",
         **_staleness(out_dir, manifest),
     }
 

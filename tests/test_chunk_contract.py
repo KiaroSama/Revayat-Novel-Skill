@@ -18,6 +18,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import bookir as ir  # noqa: E402
 import chunk as chunking  # noqa: E402
+from tests_support import reply_text  # noqa: E402
 
 
 def _book(tmp_path: Path, texts: list[str]) -> Path:
@@ -48,9 +49,17 @@ def _two_chunks(tmp_path: Path) -> tuple[Path, Path, dict]:
 
 
 def _answer(chunks: Path, entry: dict) -> None:
-    ir.write_text(chunks / entry["output"], "\n".join(
+    """A reply carrying the request line its worksheet asks for.
+
+    Without the echo, ``status`` reports the job ``unbound`` and offers it again —
+    correctly, because ``merge`` refuses it — so a fixture that omits the line is
+    measuring that refusal rather than whatever it meant to measure.
+    """
+    body = "\n".join(
         f"@@ {unit_id} {entry['unit_kinds'][unit_id]}\nترجمه.\n"
-        for unit_id in entry["unit_ids"]))
+        for unit_id in entry["unit_ids"])
+    ir.write_text(chunks / entry["output"],
+                  reply_text(chunks / entry["file"], body))
 
 
 # --------------------------------------------------------------------------- #

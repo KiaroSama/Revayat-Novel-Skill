@@ -29,8 +29,9 @@ from typing import Any, Callable
 
 import bookir as ir
 import glossary as gl
+import published
 import segments
-from chunk import source_fingerprint, unit_fingerprint
+from chunk import source_fingerprint
 from worksheet import (  # noqa: F401  (this module's published surface)
     ESCAPED_HEADER, FENCE, HEADER, NOTE_KINDS, TRANSLATOR_NOTE,
     parse_worksheet, read_reply, read_worksheet, request_of,
@@ -168,25 +169,17 @@ def addressing(book: dict[str, Any]) -> Callable[[str], tuple[dict[str, Any], st
 
     Built once rather than resolved per call: the indexes are O(book), and a
     review walks every unit.
+
+    The map itself comes from `published.slots`, which is also what the review
+    stages, the typography fixer and the delivery gate enumerate. This module
+    used to build its own — body blocks, alt text, notes and running heads — and
+    it was right about all four, which is exactly why nothing noticed that the
+    title page was in none of them.
     """
-    blocks = ir.blocks_by_id(book)
-    notes = {note["id"]: note for note in book.get("footnotes", [])}
-    running = ir.running_heads(book)
+    addressable = published.slots(book)
 
     def resolve(unit_id: str) -> tuple[dict[str, Any], str] | None:
-        if unit_id.endswith("#alt"):
-            block = blocks.get(unit_id[: -len("#alt")])
-            if block is None or block["type"] != "image":
-                return None
-            return block, "target_alt"
-        if unit_id in notes:
-            return notes[unit_id], "target"
-        if unit_id in running:
-            return running[unit_id], "target"
-        block = blocks.get(unit_id)
-        if block is not None and block["type"] in ir.TEXT_TYPES:
-            return block, "target"
-        return None
+        return addressable.get(unit_id)
 
     return resolve
 
@@ -260,6 +253,10 @@ def merge(
     # introduced in thirty places and the command that was supposed to settle it
     # reporting success. Unreadable and unparseable are the same failure: the
     # caller pointed at something and it is not usable.
+    # Kept for the freshness recomputation below, which has to ask the *live*
+    # glossary what this worksheet would be told today. `None` means no glossary
+    # was named, which is a different answer from an empty one.
+    glossary_for_freshness: dict[str, Any] | None = None
     if glossary_path is not None:
         named = Path(glossary_path)
         trouble = ""
@@ -270,6 +267,8 @@ def merge(
                 loaded = gl.load(named)
                 if not isinstance(loaded.get("entries"), list):
                     trouble = f"{named} has no entries list; it is not a glossary"
+                else:
+                    glossary_for_freshness = loaded
             except (OSError, json.JSONDecodeError) as failure:
                 trouble = f"{named} could not be read: {failure}"
         if trouble:
@@ -361,15 +360,34 @@ def merge(
         form = recorded.partition(":")[0]
         if not recorded:
             report["unverified_freshness"].append(entry["id"])
-        elif form == "units2":
+        elif form == "units3":
             # Over the units **as cut**, recomputed from the spans the manifest
-            # records. The previous form hashed the parent blocks, so every
-            # segment of one paragraph shared a value and a recut was invisible.
+            # records, plus the live kind and everything else the worker was told.
+            # The `units2` form hashed the recorded kind and nothing about the
+            # glossary or the neighbouring text, so turning a paragraph into a
+            # heading or approving an alias left it unchanged; `units:` before it
+            # hashed the parent blocks, so every segment of one paragraph shared a
+            # value and a recut was invisible.
             spans = entry.get("unit_spans") or []
+            built_with_glossary = bool(manifest.get("glossary"))
             if not spans:
                 report["unverified_freshness"].append(entry["id"])
+            elif built_with_glossary and glossary_for_freshness is None:
+                # The worksheets were built with a glossary and this merge was
+                # given none, so the term table cannot be recomputed. Reporting
+                # `stale` here would be a false accusation that sends a correct
+                # translation back to be redone; the honest answer is that the
+                # dependency could not be checked.
+                report["unverified_freshness"].append(entry["id"])
+                problems.append(
+                    f"these worksheets were built against "
+                    f"{manifest['glossary']} and no --glossary was given, so the "
+                    f"names the translator was shown cannot be re-checked. Pass "
+                    f"the glossary to verify freshness.")
             elif recorded != source_fingerprint(
-                    book, entry.get("block_ids") or [], spans):
+                    book, entry.get("block_ids") or [], spans,
+                    glossary=glossary_for_freshness,
+                    neighbours=entry.get("neighbour_ids")):
                 report["stale"].append(entry["id"])
                 problems.append(
                     "the source these units were cut from has changed since the "
@@ -383,12 +401,17 @@ def merge(
             # formula this module cannot see, which is how the two came to
             # disagree in the first place.
             pass
-        elif recorded != unit_fingerprint(book, entry.get("block_ids") or []):
-            report["stale"].append(entry["id"])
-            problems.append(
-                "the source these units were cut from has changed since the "
-                "worksheet was written, so this reply answers text the book no "
-                "longer contains")
+        elif form == "units":
+            # The oldest form, and it cannot answer the question: one value for
+            # every segment of a paragraph. Recomputing it would pass a recut that
+            # this project has measured merging the wrong generation's answers, so
+            # it is reported unverifiable and one rebuild clears it.
+            report["unverified_freshness"].append(entry["id"])
+        else:
+            # An unknown tag — a newer build, a hand-edited manifest, a form this
+            # version predates. Neither stale nor fresh: not comparable. Guessing
+            # either way is how a stale reply passes, so it says so instead.
+            report["unverified_freshness"].append(entry["id"])
 
         answered = say["answered"]
         missing, extra = say["missing"], say["extra"]

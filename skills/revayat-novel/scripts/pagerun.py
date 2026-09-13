@@ -509,10 +509,21 @@ def merge_page(book_path: Path, out_dir: Path, page: int, *,
 
 
 def _merge_problem(report: dict[str, Any]) -> str:
-    for name in ("missing_outputs", "missing_units", "unknown_units"):
+    """Why merge refused, in the record an operator reads next.
+
+    Three keys were consulted and the rest fell through to the bare words
+    ``merge failed`` — which is every refusal that lands in ``malformed``: a
+    reply bound to the previous cut, a reply carrying no request line at all, an
+    unresolved footnote, a source that moved. The page state said ``failed`` and
+    the reason for it was gone, so the operator had nothing to act on and the
+    scheduler's own reason had to be re-derived from the files.
+    """
+    for name in ("missing_outputs", "missing_units", "unknown_units",
+                 "malformed", "stale", "coverage", "unverified_kinds",
+                 "blank_units"):
         if report.get(name):
             return f"{name}: {json.dumps(report[name], ensure_ascii=False)}"
-    return "merge failed"
+    return report.get("detail") or report.get("refused") or "merge failed"
 
 
 def needs_source_page(manifest: dict[str, Any]) -> bool:

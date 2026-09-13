@@ -85,3 +85,25 @@ def reply_text(worksheet_path: Path, body: str) -> str:
         return body
     token = worksheet.request_of(path.read_text(encoding="utf-8"))
     return f"{worksheet.request_line(token)}\n{body}" if token else body
+
+
+def review_reply(sheet_path: Path, body: str) -> str:
+    """A review reply that echoes the sheet's own review line, as the stage asks.
+
+    The counterpart of :func:`reply_text` for the two review stages. A reply that
+    echoes nothing cannot say which sheet or which revision it answers, and the
+    transport refuses it — so a fixture that omits the line is testing the refusal
+    rather than whatever it meant to test.
+
+    Returns ``body`` unchanged when the sheet is absent or carries no review line,
+    which is what a test deliberately building a token-less reply wants.
+    """
+    import reviewsheet
+
+    path = Path(sheet_path)
+    if not path.is_file():
+        return body
+    stage, sheet_id, value = reviewsheet.request_of(path.read_text(encoding="utf-8"))
+    if not value:
+        return body
+    return reviewsheet.request_line(stage, sheet_id, value) + "\n" + body
