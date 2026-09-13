@@ -25,6 +25,7 @@ skills/revayat-novel/
   requirements.txt  the single dependency manifest
 commands/           slash commands for plugin hosts
 install/            install.ps1, install.sh — copy the skill into agents
+evaluation/         the bilingual benchmark: cases.json + score.py
 tests/              pytest; fixtures are generated, never committed
 ```
 
@@ -32,7 +33,8 @@ tests/              pytest; fixtures are generated, never committed
 
 | Module | Role |
 | --- | --- |
-| `bookir.py` | Book IR schema, inline markup, atomic UTF-8 IO |
+| `bookir.py` | Book IR schema, blocks, footnotes, atomic UTF-8 IO |
+| `markup.py` | the inline language — `**bold**`, `` `verbatim` ``, `[[fn:…]]` — and the one parsed traversal that tells a real marker from an example of one |
 | `read_pdf.py` | PDF via PyMuPDF: text, geometry, original image bytes |
 | `read_epub.py` | EPUB via zipfile + BeautifulSoup: footnotes and link targets |
 | `read_docx.py` | DOCX via python-docx, plus raw XML for what it cannot reach: footnotes *and* endnotes, hyperlink targets, section breaks, running heads |
