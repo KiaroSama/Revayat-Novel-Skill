@@ -157,9 +157,41 @@ def test_a_note_with_no_text_at_all_is_an_error():
     assert _codes(book).get("footnote-body-empty") == qa.ERROR
 
 
-def test_an_untranslated_body_is_advice():
+def test_an_untranslated_body_blocks_a_complete_run():
+    """Changed contract, and the reason it changed.
+
+    This was advice. But a *referenced* note with no Persian is missing content,
+    not a stylistic doubt: the marker prints and the reader finds the source
+    language at the foot of the page. A complete strict run therefore passed a
+    book with an untranslated footnote in it — which is the one thing
+    `require_complete` exists to refuse.
+    """
     book = _book(target=f"{PERSIAN}[[fn:fn0001]]", note_target="")
-    assert _codes(book).get("footnote-untranslated") == qa.WARNING
+    assert _codes(book).get("footnote-untranslated") == qa.ERROR
+
+
+def test_an_untranslated_body_is_still_advice_mid_translation():
+    """The other half: while the book is being translated it is not an error.
+
+    `require_complete=False` is the mode the pipeline uses between chunks, and
+    reporting every unfinished note as a failure there would bury the findings
+    that matter.
+    """
+    book = _book(target=f"{PERSIAN}[[fn:fn0001]]", note_target="")
+    assert _codes(book, require_complete=False).get(
+        "footnote-untranslated") == qa.WARNING
+
+
+def test_a_verbatim_only_note_is_not_owed_a_translation():
+    """The exemption is specific, not global.
+
+    A note whose every span is `` `verbatim` `` — a bare citation key, a command —
+    is meant to survive byte for byte, so demanding Persian for it would be
+    demanding that it be corrupted.
+    """
+    book = _book(target=f"{PERSIAN}[[fn:fn0001]]", note_target="")
+    book["footnotes"][0]["text"] = "`ISBN-0-000-00000-0`"
+    assert "footnote-untranslated" not in _codes(book)
 
 
 def test_a_marker_pointing_at_no_note_is_an_error():
