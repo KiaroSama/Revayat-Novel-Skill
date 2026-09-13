@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import struct
 import zlib
+from pathlib import Path
 
 
 def png_bytes(width: int, height: int, rgb: tuple[int, int, int] = (200, 60, 60)) -> bytes:
@@ -60,3 +61,27 @@ def building(what: str, path):
             f"test that requested it reports a setup error from this one cause — "
             f"fix this, not them."
         ) from error
+
+
+def reply_text(worksheet_path: Path, body: str) -> str:
+    """``body`` carrying the request line its worksheet asked for.
+
+    What a translator actually does: copy the `request` line out of the worksheet
+    into the reply. Merge compares it with the live request, which is the only
+    thing that can tell an answer to *this* cut from an answer to the cut this one
+    replaced — the filename, the id list and the parent block's text are identical
+    across a recut.
+
+    A worksheet with no request line (an older working directory, or the page
+    route before it carried one) yields the body unchanged, so a test about
+    something else does not have to care.
+    """
+    import worksheet  # noqa: PLC0415 — the scripts directory is on sys.path
+
+    path = Path(worksheet_path)
+    if not path.is_file():
+        # A test that writes its own manifest has no worksheet on disk, and its
+        # entries carry no request either, so there is nothing to echo.
+        return body
+    token = worksheet.request_of(path.read_text(encoding="utf-8"))
+    return f"{worksheet.request_line(token)}\n{body}" if token else body

@@ -17,10 +17,16 @@ from pathlib import Path
 import pytest
 
 import bookir as ir
+from tests_support import reply_text
 import pagerun
 import renderqa
 import runstate
 from test_pagerun import TARGET, _one_page_book, _rendered, _reviewed
+
+#: This whole module is the `render` tier: it drives a real renderer and costs
+#: minutes. CI runs it on every push; a local run can deselect it with
+#: `-m "not render and not ocr"`. See pytest.ini.
+pytestmark = pytest.mark.render
 
 pytest.importorskip("pymupdf")
 
@@ -31,7 +37,9 @@ def _translated_page(tmp_path: Path, text: str = TARGET) -> tuple[Path, Path]:
     pages = tmp_path / "pages"
     pagerun.build(book_path, pages)
     upcoming = pagerun.next_page(pages)
-    ir.write_text(Path(upcoming["output"]), f"@@ b00001 para\n{text}\n")
+    ir.write_text(Path(upcoming["output"]),
+                  reply_text(Path(upcoming["worksheet"]),
+                             f"@@ b00001 para\n{text}\n"))
     merged = pagerun.merge_page(book_path, pages, 1)
     assert merged["ok"], merged
     return book_path, pages
@@ -163,8 +171,9 @@ def test_a_corrected_reply_earns_another_attempt(tmp_path):
     # Arabic script back faithfully, so a Persian reply here would *pass* the
     # text check against the wrong render and the retry would prove nothing.
     upcoming = pagerun.jobs_for(pagerun.load_manifest(pages), 1)[0]
-    ir.write_text(pages / upcoming["output"],
-                  "@@ b00001 para\nA corrected line, and a different one.\n")
+    ir.write_text(pages / upcoming["output"], reply_text(
+        pages / upcoming["file"],
+        "@@ b00001 para\nA corrected line, and a different one.\n"))
     assert pagerun.merge_page(book_path, pages, 1)["ok"]
 
     assert runstate.RunState(tmp_path).page(1)["attempts"] == 0, (
