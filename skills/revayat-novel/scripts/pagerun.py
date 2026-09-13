@@ -292,10 +292,14 @@ def build(
         # A unit longer than the whole budget is cut into segments before the
         # page is grouped, so the answer is "here is part one of the
         # paragraph", never "raise the ceiling the budget exists to enforce".
-        units = segments.fit_units(units, render, budget)
-        fitted = segments.fit_jobs(render, units, budget)
+        # The request line is part of the text the model receives, so its fixed
+        # length is reserved before anything is measured — added afterwards, it
+        # pushed a worksheet sized exactly to the budget one line over it.
+        room = budget - chunking.REQUEST_LINE_CHARS
+        units = segments.fit_units(units, render, room)
+        fitted = segments.fit_jobs(render, units, room)
         for group, worksheet in fitted:
-            if len(worksheet) <= budget:
+            if len(worksheet) <= room:
                 continue
             prose = sum(len(text) for _, _, text in group)
             raise OverBudget(
@@ -370,9 +374,17 @@ def build(
             job_id = (f"page{page:04d}" if len(fitted) == 1
                       else f"page{page:04d}-{part:02d}")
             name = f"{job_id}.md"
+            # The same request binding the chunk route uses, for the same reason:
+            # a rebuild writes `page0007.md` again and an answer to the previous
+            # cut of that page sits at exactly the path the new one expects. The
+            # page digest answers "has the page moved"; only the echoed token
+            # answers "was this written before the rebuild".
+            token = chunking.request_token(worksheet)
+            worksheet = chunking.request_line(token) + "\n" + worksheet
             ir.write_text(out_dir / name, worksheet)
             manifest["chunks"].append({
                 "id": job_id,
+                "request": token,
                 "page": page,
                 "part": part,
                 "parts": len(fitted),

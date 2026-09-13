@@ -23,7 +23,8 @@ import runstate
 import segments
 import worksheet
 from worksheet import (  # noqa: F401  (this module's published surface)
-    HEADER, TRANSLATOR_NOTE, classify, comment, escape_payload,
+    HEADER, SCAFFOLD_COMMENT, TRANSLATOR_NOTE, classify, comment,
+    escape_payload, request_line, request_of,
 )
 
 #: Target source characters per chunk. Small enough for one focused context,
@@ -159,6 +160,98 @@ def unit_fingerprint(book: dict[str, Any], ids: list[str]) -> str:
         .encode("utf-8"))
 
 
+#: Version tag on a request token, so a reader that cannot recompute a form says
+#: so instead of guessing. See invariant 9 in AGENTS.md.
+REQUEST_VERSION = "req1"
+
+#: How many hex characters of the request digest travel in the worksheet. 64 bits
+#: is far more than enough to tell two generations of one job apart, and a token a
+#: person has to copy should fit on the line with the rest of the comment.
+REQUEST_CHARS = 16
+
+#: What the request line costs a worksheet, reserved out of the budget before the
+#: splitter measures anything. A constant, because the token is a fixed-width
+#: digest behind a fixed tag.
+REQUEST_LINE_CHARS = len(request_line(f"{REQUEST_VERSION}:{'0' * REQUEST_CHARS}")) + 1
+
+
+def unit_records(units: list[tuple[str, str, str]]) -> list[dict[str, Any]]:
+    """Per unit: its id, kind, owner, and the slice of the owner it covers.
+
+    This is what makes a cut *recomputable* later. `split_text` guarantees the
+    pieces of a unit rejoin exactly, so their offsets are the running sum of their
+    lengths — and with the offsets written down, merge can take the owner's live
+    text, slice it the same way and ask whether the book still says what the
+    worksheet asked about. Without them it could only hash the parent block, which
+    is identical for every cut of it, so a recut of one paragraph was invisible.
+
+    An image's alt text (`b00042#alt`) is its own owner, not a segment of the
+    block: `segments.SEGMENT` is numeric on purpose.
+    """
+    seen: dict[str, int] = {}
+    records: list[dict[str, Any]] = []
+    for unit_id, kind, text in units:
+        owner = segments.base_of(unit_id)
+        start = seen.get(owner, 0)
+        records.append({"id": unit_id, "kind": kind, "owner": owner,
+                        "offset": start, "length": len(text)})
+        seen[owner] = start + len(text)
+    return records
+
+
+def source_fingerprint(book: dict[str, Any], block_ids: list[str],
+                       records: list[dict[str, Any]]) -> str:
+    """Identity of the source these exact units were cut from, recomputable.
+
+    Replaces a digest over the parent blocks' whole text. That one could not tell
+    two cuts of one paragraph apart — every segment of a block shared it — so a
+    rebuild at a different budget left merge comparing a value against itself.
+
+    The trailing length record catches the case the slices cannot: an owner whose
+    text grew after the cut still matches every recorded slice.
+    """
+    whole = {unit_id: text
+             for unit_id, _, text in translatable_units(book, block_ids)}
+    parts: list[str] = []
+    for record in records:
+        text = whole.get(record["owner"])
+        piece = ("\x00absent" if text is None
+                 else text[record["offset"]:record["offset"] + record["length"]])
+        parts.append(f"{record['id']}\x00{record['kind']}\x00{piece}")
+    covered: dict[str, int] = {}
+    for record in records:
+        end = record["offset"] + record["length"]
+        covered[record["owner"]] = max(covered.get(record["owner"], 0), end)
+    for owner, end in sorted(covered.items()):
+        parts.append(f"{owner}\x00span\x00{end}\x00{len(whole.get(owner) or '')}")
+    return "units2:" + ir.sha256_bytes("\n".join(parts).encode("utf-8"))
+
+
+def request_token(worksheet: str) -> str:
+    """The identity of one question, over the worksheet as it will be sent.
+
+    Everything that decides what a translator is being asked is in that text: the
+    ordered headers and kinds, the exact segment boundaries, the neighbouring
+    context, the term table this chunk's own units called for and the voice cards
+    that came with them. Hashing the rendered worksheet covers all of it without a
+    second formula that could drift from what was actually sent.
+
+    Our own scaffolding comments are left out, and that is not a detail: one of
+    them counts the jobs ("worksheet 0001/0006"). Hashing it meant that raising
+    the budget invalidated the answer to a unit whose question had not changed by
+    a character, because the *other* jobs renumbered — and "valid unchanged
+    replies remain reusable" is half of what this identity is for. What stays in
+    the hash is the question: the ordered headers and kinds, the exact segment
+    texts, the neighbouring context, the term table and the voice cards.
+
+    Computed before the request line exists, so the value does not contain itself.
+    """
+    question = "\n".join(line for line in worksheet.splitlines()
+                         if not SCAFFOLD_COMMENT.match(line.strip()))
+    return (f"{REQUEST_VERSION}:"
+            + ir.sha256_bytes(question.encode("utf-8"))[:REQUEST_CHARS])
+
+
 def render_worksheet(
     book: dict[str, Any],
     glossary: dict[str, Any],
@@ -187,6 +280,9 @@ def render_worksheet(
         comment("Reply with the same @@ headers, in the same order, Persian "
                 "text underneath each. Do not add, drop, merge or reorder "
                 "headers."),
+        # Kept to one line on purpose: every worksheet pays for it out of the
+        # budget, and a small job pays proportionally most.
+        comment("Copy the `request` line above into your reply, unchanged."),
         "",
     ]
 
@@ -372,7 +468,10 @@ def _supersede_stale_answers(out_dir: Path,
     except (OSError, json.JSONDecodeError):
         return []        # unreadable: the build is about to replace it anyway
 
-    fresh = {entry["id"]: entry.get("source_sha256") or ""
+    # Keyed on the request token rather than the source digest: the token covers
+    # the cut, the context and the policy as well, so a rebuild that changed only
+    # the budget or the glossary moves its answers aside too.
+    fresh = {entry["id"]: entry.get("request") or ""
              for entry in manifest["chunks"]}
     filed: list[dict[str, str]] = []
     for entry in old.get("chunks") or ():
@@ -381,7 +480,7 @@ def _supersede_stale_answers(out_dir: Path,
             continue
         if not answer.read_text(encoding="utf-8").strip():
             continue     # an empty placeholder is not work
-        was = entry.get("source_sha256") or ""
+        was = entry.get("request") or ""
         now = fresh.get(entry["id"])
         # No recorded identity on either side is not evidence of sameness, so an
         # unverifiable pair is filed rather than assumed good.
@@ -437,6 +536,13 @@ def build(
         "chunks": [],
     }
 
+    # A voice card that cannot be resolved to one character is reported where
+    # somebody is looking: the cards are injected into worksheets from here, and
+    # a card attached to the wrong character is worse than no card.
+    trouble = gl.voice_problems(glossary)
+    if trouble:
+        manifest["voice_problems"] = trouble
+
     # Two passes, because the budget is about the *rendered* worksheet and not
     # the length of the prose in it. A unit longer than the whole allowance is
     # cut into segments that rejoin exactly, and a run whose worksheet still
@@ -455,8 +561,12 @@ def build(
                                     previous_tail=tail, next_head=head,
                                     units=subset)
 
-        units = segments.fit_units(translatable_units(book, ids), render, budget)
-        for group, _ in segments.fit_jobs(render, units, budget):
+        # The request line's length is reserved while the splitter measures, so a
+        # segment sized exactly to the budget does not overflow once the line is
+        # prepended. It is a constant: the version tag plus a fixed-width digest.
+        room = budget - REQUEST_LINE_CHARS
+        units = segments.fit_units(translatable_units(book, ids), render, room)
+        for group, _ in segments.fit_jobs(render, units, room):
             jobs.append((ids, group, previous_tail, next_head))
 
     # Rendered in full before anything is written, so the refusal below can
@@ -470,6 +580,19 @@ def build(
             previous_tail=previous_tail, next_head=next_head,
             units=units,
         )
+        # The question's identity, stamped into the question. The reply echoes the
+        # line back and merge compares it with the live request, which is the only
+        # thing that can tell "an answer to this cut" from "an answer to the cut
+        # this one replaced" — the filenames, the id list and the parent block's
+        # text are all identical across a recut.
+        #
+        # Assembled **before** the budget check, because the request line is part
+        # of the text a model receives. Added after it, every full worksheet came
+        # out one character over the budget it had just been measured against.
+        records = unit_records(units)
+        token = request_token(worksheet)
+        worksheet = request_line(token) + "\n" + worksheet
+
         if len(worksheet) > budget:
             prose = sum(len(text) for _, _, text in units)
             raise OverBudget(
@@ -484,6 +607,10 @@ def build(
         written.append((name, worksheet))
 
         manifest["chunks"].append({
+            "request": token,
+            # The cut itself, so merge can slice the owner's live text the same
+            # way and recompute what was asked without re-cutting.
+            "unit_spans": records,
             "id": f"chunk{index:04d}",
             "file": name,
             "output": f"out_chunk{index:04d}.md",
@@ -496,8 +623,11 @@ def build(
             "units": len(units),
             "source_chars": sum(len(text) for _, _, text in units),
             # Identity of the source this worksheet was built from, so a later
-            # run can tell "already translated" from "source changed".
-            "source_sha256": unit_fingerprint(book, ids),
+            # run can tell "already translated" from "source changed". Over the
+            # units **as cut**, not over the parent blocks: the old form was the
+            # same value for every segment of a paragraph, so a rebuild at another
+            # budget compared a digest against itself and passed.
+            "source_sha256": source_fingerprint(book, ids, records),
         })
 
     out_dir.mkdir(parents=True, exist_ok=True)

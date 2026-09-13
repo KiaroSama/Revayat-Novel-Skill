@@ -14,6 +14,7 @@ import chunk as chunking
 import falint
 import glossary as gl
 import merge as merging
+from tests_support import reply_text
 
 
 # --------------------------------------------------------------------------- #
@@ -134,7 +135,8 @@ def test_worksheet_round_trip_including_image_captions(translated_book, tmp_path
             f"@@ {unit_id} {entry['unit_kinds'][unit_id]}\nترجمهٔ {unit_id}\n"
             for unit_id in entry["unit_ids"]
         )
-        (chunks / entry["output"]).write_text(body, encoding="utf-8", newline="")
+        ir.write_text(chunks / entry["output"],
+                      reply_text(chunks / entry["file"], body))
 
     report = merging.merge(book_path, chunks)
     assert report["ok"], report
