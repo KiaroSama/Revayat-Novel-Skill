@@ -1,11 +1,16 @@
 """Every dependency manifest is in a lane that actually reaches it.
 
-Three files describe what this project installs, and each answers a different
+Four files describe what this project installs, and each answers a different
 question: `requirements.txt` the range a reader may have, `constraints-ci.txt`
 the exact set the build was checked against, `requirements-optional.txt` the two
-wheels two stages need. A manifest outside every automated lane is worse than no
-manifest: `dependabot.yml` and `dependency-audit.yml` both read as though they
-cover it, and nothing says otherwise.
+wheels two stages need, `requirements-lint.txt` the linter the build gates on. A
+manifest outside every automated lane is worse than no manifest: `dependabot.yml`
+and `dependency-audit.yml` both read as though they cover it, and nothing says
+otherwise.
+
+The manifests are **discovered**, not listed. A hard-coded list is the shape that
+stops covering what it exists to cover: `requirements-lint.txt` was added and
+every test here would have kept passing while saying nothing about it.
 
 The non-obvious part is which filenames Dependabot's pip updater actually
 collects, because it is not the filename the dependency graph recognises.
@@ -34,8 +39,32 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "skills" / "revayat-novel" / "requirements.txt"
 OPTIONAL = ROOT / "skills" / "revayat-novel" / "requirements-optional.txt"
 PINS = ROOT / "constraints-ci.txt"
+LINT = ROOT / "requirements-lint.txt"
 SUPPORTED_RANGE = ROOT / ".github" / "workflows" / "supported-range.yml"
 DEPENDABOT = ROOT / ".github" / "dependabot.yml"
+
+
+def tracked_manifests() -> list[Path]:
+    """Every pip manifest in the repository, found rather than listed.
+
+    This was a hard-coded list of three, which is the shape that stops covering
+    the thing it exists to cover: a fourth manifest — `requirements-lint.txt`
+    was exactly that — joins the repository and every test here keeps passing
+    while saying nothing about it. Discovery is the whole point, since the
+    failure being guarded against is *a manifest outside every lane*.
+
+    Scoped the way Dependabot's fetcher is scoped: the configured directory and
+    one level below it. Anything deeper would not be collected anyway, so
+    reporting it would be a finding nobody can act on.
+    """
+    found = {PINS, MANIFEST, OPTIONAL, LINT}
+    for pattern in ("*.txt", "*/*.txt", "*/*/*.txt"):
+        for path in ROOT.glob(pattern):
+            name = path.name.lower()
+            if "requirement" in name or "constraint" in name:
+                found.add(path)
+    return sorted(path for path in found if path.is_file())
+
 
 #: `name>=1.24`, `name==1.24.0`, `name ; marker`, with a trailing comment.
 _REQUIREMENT = re.compile(
@@ -75,7 +104,7 @@ def test_every_pip_manifest_sits_in_a_dependabot_directory():
     """One level, because that is how far the fetcher walks."""
     directories = dependabot_pip_directories()
     assert directories, "dependabot.yml configures no pip ecosystem at all"
-    for manifest in (MANIFEST, OPTIONAL, PINS):
+    for manifest in tracked_manifests():
         relative = manifest.relative_to(ROOT).as_posix()
         parent = "/" + relative.rsplit("/", 1)[0] if "/" in relative else "/"
         covered = [
@@ -90,8 +119,7 @@ def test_every_pip_manifest_sits_in_a_dependabot_directory():
             f"no security update will ever be proposed for it")
 
 
-@pytest.mark.parametrize("manifest", [MANIFEST, OPTIONAL, PINS],
-                         ids=lambda p: p.name)
+@pytest.mark.parametrize("manifest", tracked_manifests(), ids=lambda p: p.name)
 def test_every_pip_manifest_has_a_name_the_updater_collects(manifest: Path):
     """`.txt`/`.in`, and every line has to parse — or the file drops out silently.
 

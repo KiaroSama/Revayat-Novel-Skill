@@ -503,6 +503,21 @@ def _pip_install_commands(text: str):
             yield first, command
 
 
+def _fully_pinned(manifest: Path) -> bool:
+    """Does every requirement in this file name one exact version?
+
+    Such a manifest needs no constraints file: it already *is* the recorded set.
+    A file that does not exist is not pinned — better to demand a constraint for a
+    path nobody can read than to wave a typo through.
+    """
+    if not manifest.is_file():
+        return False
+    requirements = [line.strip() for line in
+                    manifest.read_text(encoding="utf-8").splitlines()
+                    if line.strip() and not line.strip().startswith(("#", "-"))]
+    return bool(requirements) and all("==" in line for line in requirements)
+
+
 def test_every_ci_install_step_uses_the_recorded_dependency_set():
     """An unconstrained install step resolves whatever PyPI serves that morning.
 
@@ -524,6 +539,15 @@ def test_every_ci_install_step_uses_the_recorded_dependency_set():
             # `--upgrade pip`, and a step installing one separately pinned tool
             # (`ruff==`, `pip-audit==`), are not installs of this project's set.
             if "--upgrade pip" in command or "-r " not in command:
+                continue
+            # A manifest that pins every version itself IS a recorded set, so a
+            # constraints file would add nothing — and `constraints-ci.txt` does
+            # not name these tools, so passing it would only look like a check.
+            # This used to be read off the *shape of the command* (`ruff==` on the
+            # line), which stopped being true the moment that pin moved into a
+            # tracked manifest so Dependabot could see it. Read it off the file.
+            if all(_fully_pinned(root / name)
+                   for name in re.findall(r"-r\s+(\S+)", command)):
                 continue
             if "-c constraints-ci.txt" not in command:
                 unconstrained.append(f"{workflow.name}:{number}: {command}")
