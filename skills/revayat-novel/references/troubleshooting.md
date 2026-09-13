@@ -11,6 +11,12 @@ The worksheet protocol was broken. The report tells you which way:
   sub-agent invented one, or continued numbering past the end. Re-run.
 - **`missing_outputs`** — no `out_chunkNNNN.md` at all. The sub-agent failed or
   was never launched. `chunk status` lists what is still pending.
+- **`malformed`** — the reply broke the protocol: an id answered twice, answered
+  under the wrong kind, the headers reordered, a footnote graph that does not
+  resolve — or the **transport itself** is wrong. A reply that opens a code fence
+  and never closes it is the shape of a truncated answer, and merge now refuses
+  it instead of merging whatever arrived before the cut. Ask for the reply again
+  rather than repairing the file: the missing part is missing.
 
 Never patch `book.json` by hand to work around this. Merge is idempotent, so
 fixing the worksheet and re-running is always safe and keeps the run
