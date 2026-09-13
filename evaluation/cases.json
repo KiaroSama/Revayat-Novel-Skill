@@ -1,0 +1,149 @@
+{
+  "schema": "revayat-novel/benchmark@1",
+  "about": [
+    "An original bilingual benchmark: English written for this file, with several",
+    "acceptable Persian renderings each. Rights-clean on purpose — no published",
+    "translation is quoted — which is also its limit: it measures translation, not",
+    "extraction from a real book.",
+    "",
+    "Each case names the one thing it is about. A translation that gets that thing",
+    "right passes, in any of the accepted forms; the variants exist because there",
+    "is never one correct Persian sentence, and a benchmark that demands one is",
+    "measuring agreement with its author instead of fidelity.",
+    "",
+    "`fails` is the other half and the reason the file is useful: a plausible,",
+    "fluent rendering that changes the meaning. Those are the ones structural QA",
+    "cannot see — they have the right length, the right markers and the right",
+    "names."
+  ],
+  "cases": [
+    {
+      "id": "neg-01",
+      "axis": "negation",
+      "source": "She did not refuse the invitation, though she waited a day to answer.",
+      "accepts": [
+        "او دعوت را رد نکرد، هرچند یک روز برای پاسخ صبر کرد.",
+        "دعوت را رد نکرد، اگرچه یک روز تا جواب دادن صبر کرد."
+      ],
+      "fails": [
+        {
+          "text": "او دعوت را نپذیرفت، هرچند یک روز برای پاسخ صبر کرد.",
+          "why": "«نپذیرفت» is *did not accept*; the source says she did not refuse. Same length, same register, opposite fact."
+        }
+      ],
+      "rationale": "Double negation is the commonest silent inversion, and nothing downstream can see it: the sentence is fluent and the length ratio is perfect."
+    },
+    {
+      "id": "role-01",
+      "axis": "participant roles",
+      "source": "The lawyer paid the clerk, and neither of them mentioned the letter.",
+      "accepts": [
+        "وکیل به منشی پول داد و هیچ‌یک از آن دو به نامه اشاره نکرد.",
+        "وکیل پول را به منشی پرداخت و هیچ‌کدام نامی از نامه نبردند."
+      ],
+      "fails": [
+        {
+          "text": "منشی به وکیل پول داد و هیچ‌یک از آن دو به نامه اشاره نکرد.",
+          "why": "Payer and payee are swapped. Persian word order makes this easy to do and invisible to every count."
+        }
+      ],
+      "rationale": "Who did what to whom survives no structural check at all."
+    },
+    {
+      "id": "scope-01",
+      "axis": "restrictive scope",
+      "source": "The men who had signed the petition were dismissed.",
+      "accepts": [
+        "مردانی که طومار را امضا کرده بودند اخراج شدند.",
+        "آن مردانی که پای طومار را امضا کرده بودند از کار برکنار شدند."
+      ],
+      "fails": [
+        {
+          "text": "مردان، که طومار را امضا کرده بودند، اخراج شدند.",
+          "why": "The comma turns a restrictive clause into a parenthetical: now *all* the men were dismissed, and the signing is an aside. One punctuation mark, a different fact."
+        }
+      ],
+      "rationale": "Restrictive versus non-restrictive is carried by punctuation in both languages and is the easiest thing to normalise away while tidying."
+    },
+    {
+      "id": "time-01",
+      "axis": "chronology",
+      "source": "By the time the letter arrived, she had already left the house.",
+      "accepts": [
+        "وقتی نامه رسید، او پیش‌تر از خانه رفته بود.",
+        "تا نامه برسد، او دیگر خانه را ترک کرده بود."
+      ],
+      "fails": [
+        {
+          "text": "وقتی نامه رسید، او از خانه رفت.",
+          "why": "The past perfect is flattened to a simple past, so the departure now happens *after* the letter arrives. The whole point of the sentence is the order."
+        }
+      ],
+      "rationale": "Persian marks the pluperfect with «بود»; dropping it is grammatical and reverses the sequence."
+    },
+    {
+      "id": "quant-01",
+      "axis": "quantities",
+      "source": "Fewer than half the houses on the street still had their old doors.",
+      "accepts": [
+        "کمتر از نیمی از خانه‌های آن خیابان هنوز درهای قدیمی خود را داشتند.",
+        "در کمتر از نصف خانه‌های خیابان، درهای قدیمی هنوز سر جایشان بود."
+      ],
+      "fails": [
+        {
+          "text": "بیش از نیمی از خانه‌های آن خیابان هنوز درهای قدیمی خود را داشتند.",
+          "why": "«بیش از» is *more than*. A number that reads naturally is not a number that is right."
+        }
+      ],
+      "rationale": "Quantities and comparatives invert without changing length, register or vocabulary."
+    },
+    {
+      "id": "idiom-01",
+      "axis": "idiom",
+      "source": "He let the matter drop, which cost him nothing and bought him a year.",
+      "accepts": [
+        "موضوع را رها کرد؛ کاری که برایش هیچ هزینه‌ای نداشت و یک سال برایش خرید.",
+        "قضیه را کنار گذاشت — چیزی از او کم نکرد و یک سال به او داد."
+      ],
+      "fails": [
+        {
+          "text": "او موضوع را انداخت، که برایش هیچ هزینه‌ای نداشت و یک سال خرید.",
+          "why": "«انداخت» translates *drop* literally: he threw the matter. The English idiom means he stopped pursuing it."
+        }
+      ],
+      "rationale": "A literal rendering of an idiom is the failure that most looks like diligence."
+    },
+    {
+      "id": "voice-01",
+      "axis": "voice and register",
+      "source": "— Charming, said the colonel, who had never once been charmed.",
+      "accepts": [
+        "— دلرباست، سرهنگ گفت؛ سرهنگی که یک بار هم دلش نرفته بود.",
+        "— چه دلپذیر، سرهنگ گفت، که هرگز از چیزی خوشش نیامده بود."
+      ],
+      "fails": [
+        {
+          "text": "سرهنگ با خوشحالی گفت: بسیار جذاب است! او همیشه از این چیزها لذت می‌برد.",
+          "why": "The irony is removed and replaced with its opposite. Fluent, warm, and the character is gone."
+        }
+      ],
+      "rationale": "Irony is the thing a smoothing pass destroys first, and no count can see it."
+    },
+    {
+      "id": "omit-01",
+      "axis": "omission",
+      "source": "He smiled, then left without a word, closing the door behind him.",
+      "accepts": [
+        "لبخند زد و بی‌آنکه چیزی بگوید رفت و در را پشت سرش بست.",
+        "لبخندی زد، بعد بی هیچ حرفی رفت و در را بست."
+      ],
+      "fails": [
+        {
+          "text": "لبخند زد و رفت و در را بست.",
+          "why": "«بی‌آنکه چیزی بگوید» is gone. The sentence is shorter, fluent, and the silence — the point — has been deleted."
+        }
+      ],
+      "rationale": "A dropped subordinate clause and a terser style look identical to a length ratio."
+    }
+  ]
+}
