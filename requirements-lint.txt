@@ -6,7 +6,7 @@
 # handle. An unpinned linter turns a green build red on someone else's release
 # schedule, on a commit that changed nothing.
 #
-# It used to be pinned inline in `ci.yml` (`pip install ruff==0.15.14`), which
+# It used to be pinned inline in `ci.yml` (`pip install ruff==0.16.8`), which
 # was correct and invisible: `dependabot.yml` watches `github-actions` for action
 # versions and the `/` pip directory for `constraints-ci.txt`, and an inline
 # `pip install X==Y` inside a workflow step is in neither. So the pin could not
@@ -25,4 +25,4 @@
 # rules, run `ruff check skills/revayat-novel/scripts tests evaluation` locally
 # at the candidate version, and only then raise it.
 
-ruff==0.15.14
+ruff==0.16.8
