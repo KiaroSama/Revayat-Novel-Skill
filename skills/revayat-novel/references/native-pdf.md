@@ -1,7 +1,7 @@
 # Native PDF Book Workflow
 
 Use this bundled route for digital, scanned or mixed PDF books. It integrates the
-book-relevant PDF Processing Pro workflow principles through Revayat's own tools:
+book-relevant PDF Processing Pro workflow principles through Revayat Novel's own tools:
 validate first, retain originals, bound processing and inspect actual results.
 No separately installed PDF skill or unshipped upstream helper is required.
 

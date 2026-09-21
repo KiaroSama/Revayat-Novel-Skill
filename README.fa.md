@@ -207,7 +207,7 @@ book.pdf / .epub / .docx
         ▼
    chapter-aware worksheets ── term table + neighbouring context per chunk
         │
-        ▼  translated in parallel, one fresh context each
+        ▼  translated serially, or in parallel with user consent
    merge ── every @@ id must return exactly once, or it is a named error
         │
         ▼

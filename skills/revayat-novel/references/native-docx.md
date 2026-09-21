@@ -1,6 +1,6 @@
 # Native DOCX Book Workflow
 
-This guide ships with Revayat. Use it for Word book intake, translated Word
+This guide ships with Revayat Novel. Use it for Word book intake, translated Word
 production and verification. It requires no separate document skill installation.
 The supported scope is book translation, not general form or Track Changes editing.
 
