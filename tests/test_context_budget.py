@@ -150,9 +150,9 @@ def test_every_sub_job_still_belongs_to_the_one_source_page(tmp_path):
         assert [entry["part"] for entry in entries] == list(
             range(1, len(entries) + 1))
         assert {entry["parts"] for entry in entries} == {len(entries)}
-        # One source hash for the page, shared by its parts: a corrected page
-        # still invalidates as one page.
-        assert len({entry["source_sha256"] for entry in entries}) == 1
+        # Ownership is page-wide; request digests distinguish each exact cut.
+        assert all(entry["source_sha256"].startswith("page-request1:") for entry in entries)
+        assert len({entry["source_sha256"] for entry in entries}) == len(entries)
 
     # …and acceptance is still counted in pages, not in jobs.
     progress = pagerun.status(pages)

@@ -36,6 +36,7 @@ from worksheet import SCAFFOLD_COMMENT, request_line
 #: Characters of neighbouring source a worker is shown, and therefore the width
 #: of the window the dependency facet has to hash.
 CONTEXT_CHARS = 450
+SOURCE_DIGEST_VERSION = "units4"
 
 #: The worksheet's name for each block type, and the kind a heading's level is
 #: built into. Defined in `published`, because the same name has to appear on the
@@ -227,6 +228,7 @@ def dependency_facet(book: dict[str, Any], units: list[tuple[str, str, str]],
             gl.entries_for_text(glossary, blob), glossary.get("policy", {}),
             block_ids=[unit_id for unit_id, _, _ in units]))
         parts.append("voices\x00" + gl.render_voice_cards(glossary, blob))
+        parts.append("book-voice\x00" + str((glossary.get("policy") or {}).get("book_voice") or ""))
 
     lookup = ir.blocks_by_id(book)
 
@@ -297,7 +299,7 @@ def source_fingerprint(book: dict[str, Any], block_ids: list[str],
     # neither the live kind nor the dependencies, so comparing the two forms
     # would report every older worksheet as changed. Merge routes an unknown or
     # superseded tag to `unverified_freshness` instead of guessing either way.
-    return "units3:" + ir.sha256_bytes("\n".join(parts).encode("utf-8"))
+    return SOURCE_DIGEST_VERSION + ":" + ir.sha256_bytes("\n".join(parts).encode("utf-8"))
 
 
 def request_token(worksheet: str) -> str:

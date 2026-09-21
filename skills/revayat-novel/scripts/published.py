@@ -96,6 +96,8 @@ def _record(unit_id: str, *, kind: str, part: str, origin: str,
             source: str | None, container: dict[str, Any], field: str,
             ) -> dict[str, Any]:
     target = container.get(field)
+    if part == "note" and origin == "translator" and not target:
+        target = container.get("text")  # The production builder prints this fallback.
     return {
         "id": unit_id,
         "kind": kind,
@@ -159,6 +161,7 @@ def _everything(book: dict[str, Any]) -> list[dict[str, Any]]:
                 source=block.get("alt") or None,
                 container=block, field="target_alt"))
 
+    lookup = ir.blocks_by_id(book)
     for note in book.get("footnotes") or []:
         found.append(_record(
             note["id"], kind="footnote", part="note",
@@ -166,9 +169,22 @@ def _everything(book: dict[str, Any]) -> list[dict[str, Any]]:
             # already recorded: `origin: translator` is a note this translation
             # added, which has no English original by definition.
             origin=str(note.get("origin") or "source"),
-            source=note.get("text") or None,
+            source=None if note.get("origin") == "translator" else note.get("text") or None,
             container=note, field="target"))
+        anchor = str(note.get("anchor_block") or "")
+        found[-1].update({"anchor": anchor,
+                          "context": str((lookup.get(anchor) or {}).get("text") or ""),
+                          "submitted": note.get("submitted", note.get("text"))
+                          if note.get("origin") == "translator" else None})
     return found
+
+
+def repair_source(unit: dict[str, Any]) -> str:
+    """Translator additions are reviewed against their anchor, never themselves."""
+    if unit.get("source") is not None:
+        return str(unit["source"])
+    return "\x00".join(("translator", unit["id"], str(unit.get("anchor") or ""),
+                         str(unit.get("context") or "")))
 
 
 def units(book: dict[str, Any]) -> list[dict[str, Any]]:
@@ -207,7 +223,9 @@ def pending(book: dict[str, Any]) -> list[dict[str, Any]]:
     anything asked about.
     """
     return [unit for unit in units(book)
-            if unit["source"] and not unit["literal"] and not unit["target"].strip()]
+            if (unit["source"] and not unit["literal"] and not unit["target"].strip())
+            or (unit["part"] == "note" and not str(unit["container"].get("target") or "").strip()
+                and not unit["literal"])]
 
 
 def digest_of(records: list[dict[str, Any]], *,
@@ -226,7 +244,8 @@ def digest_of(records: list[dict[str, Any]], *,
     review of it as the other thing is not a review of this.
     """
     lines = ["\x00".join([record["id"], record["kind"], record["part"],
-                          record["origin"]]
+                          record["origin"], str(record.get("anchor") or "")]
+                         + ([str(record.get("context") or "")] if "source" in sides else [])
                          + [str(record.get(side) or "") for side in sides])
              for record in records]
     return f"{tag}:" + ir.sha256_bytes("\x1e".join(lines).encode("utf-8"))

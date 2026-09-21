@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 import qa
+import opc
 
 
 def document_text(docx: Path) -> str:
@@ -47,10 +48,16 @@ def document_text(docx: Path) -> str:
     because that is the question a file cannot answer.
     """
     with zipfile.ZipFile(docx) as archive:
-        body = archive.read("word/document.xml").decode("utf-8")
+        body = opc.Package(archive).xml("word/document.xml")
     paragraphs = []
-    for block in re.findall(r"<w:p[ >].*?</w:p>", body, re.S):
-        pieces = re.findall(r"<w:t[^>]*>(.*?)</w:t>", block, re.S)
+    for block in body.iter(opc.qname("w", "p")):
+        style = block.find("w:pPr/w:pStyle", opc.NS)
+        if style is not None and style.get(opc.qname("w", "val"), "").startswith("TOC"):
+            continue
+        if any((part.text or "").strip().startswith("TOC ")
+               for part in block.iter(opc.qname("w", "instrText"))):
+            continue
+        pieces = [part.text or "" for part in block.iter(opc.qname("w", "t"))]
         if pieces:
             paragraphs.append("".join(pieces))
     return " ".join(paragraphs)
@@ -117,4 +124,3 @@ def check_direction_in_document(docx: Path) -> list[dict[str, Any]]:
                       f"Word will set them left-to-right",
         })
     return findings
-

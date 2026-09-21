@@ -21,18 +21,18 @@ page whose content has moved comes back `stale`.
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import eligible
+import reviewstate
 import runstate
 from pageidentity import _translation_moved
 
 
 def load_manifest(out_dir: Path) -> dict[str, Any]:
-    return json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+    return eligible.read_manifest(out_dir)
 
 
 def jobs_for(manifest: dict[str, Any], page: int) -> list[dict[str, Any]]:
@@ -65,6 +65,7 @@ def qa_report_path(work_dir: Path, page: int) -> Path:
 _FRESHNESS_CHECKED = frozenset({"merged", "qa_passed", "accepted"})
 
 
+@reviewstate.guarded
 def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
     """Where every page stands, and which one to work on next.
 
@@ -75,23 +76,15 @@ def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
     finished when the run state says ``accepted`` and not before: a worksheet
     with an answer in it is translated, which is three states short of done.
 
-    **``book_path`` is what makes ``accepted`` mean anything.** Without it this
-    function reports a stored label, and a label cannot notice that the page's
-    text moved underneath it — edit a paragraph, re-merge through the chunk
-    route, correct the source, and the page still reads ``accepted`` while its
-    rendered content no longer matches the evidence that was checked. `accept`
-    catches that at accept time, but by then the operator has already been told
-    the page is done and ``next`` has already skipped it. Given the book, each
-    accepted page's recorded digest is re-compared with
-    :func:`translation_hash` — the one formula, not a second opinion — and a page
-    whose content has moved is reported ``stale``, counted as unfinished, and
-    handed back by ``next``.
-
-    Without it the report says ``freshness: "unchecked"`` rather than implying a
-    verification nobody performed.
+    Resolve the recorded book when no override is supplied. A stored accepted
+    label cannot bypass current translation/dependency checks. Changed or unknown
+    evidence returns the page to the unfinished queue without modifying its record.
     """
     manifest = load_manifest(out_dir)
     state = runstate.RunState(out_dir.parent)
+    proofs = {proof["id"]: proof for proof in eligible.every(out_dir, manifest, book_path=book_path)}
+    if book_path is None:
+        book_path = eligible._book_and_glossary(out_dir, manifest)[0]
 
     pages: list[dict[str, Any]] = []
     for number in dict.fromkeys(entry["page"] for entry in manifest["chunks"]):
@@ -103,6 +96,11 @@ def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
             refusal, detail = _translation_moved(Path(book_path), number, record)
             if refusal:
                 stale, reported = refusal, "stale"
+        dependencies = [proofs[entry["id"]] for entry in entries
+                        if proofs[entry["id"]]["state"] in ("stale-source", "unverified")]
+        if dependencies and reported in _FRESHNESS_CHECKED:
+            stale, reported = dependencies[0]["state"], "stale"
+            detail = dependencies[0]["detail"]
         pages.append({
             "page": number,
             "state": reported,
@@ -110,7 +108,7 @@ def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
             "recorded_state": record.get("state", "pending"),
             "attempts": int(record.get("attempts", 0)),
             "last_error": record.get("last_error", ""),
-            "answered": all(answer(out_dir, entry) for entry in entries),
+            "answered": all(proofs[entry["id"]]["usable"] for entry in entries),
             "jobs": len(entries),
             "payload_chars": max(entry["payload_chars"] for entry in entries),
         })
@@ -147,12 +145,12 @@ def _job_to_do(out_dir: Path,
     was never named.
 
     :mod:`eligible` is the same read-only resolver the chunk scheduler and merge
-    share, which is what keeps the two from drifting apart again. Without the
-    book it cannot recheck freshness, and reports ``unverified`` — usable, so a
-    correct job is never mistaken for an unfinished one here.
+    share. Missing dependencies remain unverified and unusable, so they cannot
+    silently disappear from the unfinished queue.
     """
+    proofs = {proof["id"]: proof for proof in eligible.every(out_dir)}
     for entry in entries:
-        verdict = eligible.eligibility(out_dir, entry)
+        verdict = proofs[entry["id"]]
         if not verdict["usable"]:
             # A reason names what is wrong with the reply **on disk**. "Nobody has
             # answered this yet" is the ordinary state of an unanswered job, and
@@ -163,6 +161,7 @@ def _job_to_do(out_dir: Path,
     return entries[0], ""
 
 
+@reviewstate.guarded
 def next_page(out_dir: Path) -> dict[str, Any] | None:
     """The next job to do, and the page it belongs to.
 
@@ -171,6 +170,8 @@ def next_page(out_dir: Path) -> dict[str, Any] | None:
     when one part's reply is the problem, that part is the one handed back.
     """
     progress = status(out_dir)
+    if progress.get("ok") is False:
+        return progress
     if progress["next"] is None:
         return None
     entries = jobs_for(load_manifest(out_dir), progress["next"])
@@ -199,5 +200,3 @@ def next_page(out_dir: Path) -> dict[str, Any] | None:
         "reason": reason,
         "remaining": progress["total"] - progress["accepted"],
     }
-
-

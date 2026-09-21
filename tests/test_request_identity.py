@@ -546,19 +546,15 @@ def test_approving_an_alias_after_the_build_makes_the_answer_stale(tmp_path):
         "was never told the form the book now requires")
 
 
-def test_merging_without_the_glossary_the_build_used_is_unverified(tmp_path):
-    """Not stale: nothing says the answer is wrong, only that it cannot be checked.
-
-    Reporting `stale` here would send a correct translation back to be redone
-    because of how the *command* was invoked.
-    """
+def test_merging_resolves_the_glossary_recorded_by_the_build(tmp_path):
+    """Omitting an argument does not discard an available recorded dependency."""
     glossary_path = tmp_path / "glossary.json"
     ir.write_text(glossary_path,
                   json.dumps(gl.new_glossary(), ensure_ascii=False, indent=1))
     book_path, chunks = _built(tmp_path, glossary_path=glossary_path)
 
     blind = merging.merge(book_path, chunks)
-    assert blind["unverified_freshness"], blind
+    assert blind["ok"] and not blind["unverified_freshness"], blind
     assert blind["stale"] == [], (
         "a merge that could not recompute the term table accused the reply of "
         "being stale")

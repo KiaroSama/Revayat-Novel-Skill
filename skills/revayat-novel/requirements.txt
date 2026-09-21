@@ -34,5 +34,7 @@ lxml>=5.0                # OOXML manipulation (also a python-docx dependency)
 pillow>=10.0             # removing a colour watermark from scanned pages
 
 # Development only.
-pytest>=8.0
+# 9.0.3 fixes GHSA-6w46-j5rx-g56g and still supports Python 3.10.
+# This is a security floor, separate from CI's routine version pin.
+pytest>=9.0.3
 pytest-timeout>=2.3

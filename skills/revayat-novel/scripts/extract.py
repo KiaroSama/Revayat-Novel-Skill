@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 import bookir as ir
+import bookwrite
 import runstate
 
 # The side doors live in their own module now. Re-exported here because
@@ -531,6 +532,7 @@ def run_ocr(
 
 def extract(args: argparse.Namespace) -> dict[str, Any]:
     out_dir = Path(args.out)
+    before = bookwrite.file_digest(out_dir / "book.json")
     asset_dir = out_dir / "assets"
     out_dir.mkdir(parents=True, exist_ok=True)
     report: dict[str, Any] = {}
@@ -545,10 +547,7 @@ def extract(args: argparse.Namespace) -> dict[str, Any]:
                 f"re-run with --figures-from-mineru"
             )
         book = ir.load_book(book_path)
-        # The *original* file, deliberately: the watermark cleaner and OCR both
-        # rewrite page rasters, and a plate cut from the original keeps the
-        # pixels the book was scanned at rather than the ones a preprocessing
-        # step left behind.
+        # Cut from original pixels, before watermark cleaning and OCR.
         report["figures"] = merge_mineru_figures(
             book, Path(args.figures_from_mineru), asset_dir,
             page_offset=args.figures_page_offset,
@@ -573,7 +572,7 @@ def extract(args: argparse.Namespace) -> dict[str, Any]:
         raise ExtractError("extraction produced an invalid book:\n  " + "\n  ".join(problems))
 
     book_path = out_dir / "book.json"
-    ir.save_book(book, book_path)
+    bookwrite.replace(book_path, book, actor="extract", expect=before)
 
     # What this extraction was run against, so a later stage can tell whether
     # the book it is reading came from the file and settings it thinks it did.
@@ -583,7 +582,7 @@ def extract(args: argparse.Namespace) -> dict[str, Any]:
     report.update({
         "book": str(book_path),
         "assets": str(asset_dir),
-        "stats": book["stats"],
+        "stats": ir.book_stats(book),
         "title": book["meta"]["title"],
         "author": book["meta"]["author"],
     })

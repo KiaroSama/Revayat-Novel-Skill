@@ -77,6 +77,23 @@ def _visible_page_parts(document: Any, sheet: Any) -> list[bytes]:
     return parts
 
 
+def page_artifact_problem(out_dir: Path, entry: dict[str, Any]) -> str:
+    """Verify the split page a worker was given, independently of its source PDF."""
+    name, expected = entry.get("source_pdf"), entry.get("source_pdf_sha256")
+    if not isinstance(name, str) or not name or not isinstance(expected, str) or not expected:
+        return "the source page artifact has no verifiable identity; rebuild"
+    root = Path(out_dir).resolve()
+    path = (root / name).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        return "the source page artifact is missing or outside the work directory; rebuild"
+    try:
+        if ir.sha256_file(path) != expected:
+            return "the source page artifact changed; rebuild"
+    except OSError:
+        return "the source page artifact is unreadable; restore it or rebuild"
+    return ""
+
+
 def page_fingerprints(pdf_path: Path, pages: Iterable[int]) -> dict[int, str]:
     """Many pages' fingerprints, opening the document once.
 

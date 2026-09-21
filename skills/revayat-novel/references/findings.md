@@ -73,6 +73,10 @@ documents.
 | `publication-pending` | published prose has no Persian — often the title page or a translator's note | translate it; it prints either way |
 | `note-graph` | a footnote edge does not resolve: a marker naming a note the book does not define, a note referring to another note or to itself, a marker in a running head or a caption's alt text where Word cannot place one, or a note whose anchor is not the paragraph that points at it | the detail names the unit; the same list refuses the write, so a book on disk should never carry one |
 
+`text-unverified` is a render-check warning: Arabic-script text could not be
+reliably recovered from a rendered PDF. Supply the actual DOCX for completeness
+checking and inspect its render; PDF extraction alone cannot prove missing text.
+
 `--strict` is for publication work, and it promotes exactly these warnings to
 errors: `emphasis-parity`, `verbatim-content-changed`, `glossary-drift`,
 `ocr-low-confidence`, `ocr-disputed-text` and `semantic-unverified`. Every other

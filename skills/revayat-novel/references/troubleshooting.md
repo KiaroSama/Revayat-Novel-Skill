@@ -389,23 +389,33 @@ that is the same answer the pipeline will get.
 
 ## A command refused to write: `locked`, `lost-update`, `invalid-book`, `write-failed`
 
-Every command that changes `book.json` — `merge`, `fluency apply`, `falint fix` —
-goes through one transaction, and these are its four refusals. All of them mean
-**nothing was written**, so the file you would fix against is the file you had.
+Book writes, review recording and fluency application share one transaction.
+Validation refusals occur before commit. I/O failures can leave a recoverable
+partial write; inspect the journal and result before deciding what changed.
 
 | Refusal | What happened | What to do |
 | --- | --- | --- |
-| `locked` | another command is writing the book right now; the detail names the actor and its pid | wait for it and run again. A lock left by a process that died is taken over automatically after two minutes |
+| `locked` | another command owns the OS lock | retry after it finishes. The OS releases a crashed process's lock; file age is irrelevant |
 | `lost-update` | the book changed between this command reading it and writing it, so the decision it made may no longer hold | run it again. Nothing was discarded — refusing is how the other writer's work survives |
 | `invalid-book` | the change would leave the book invalid: a duplicate id, or a footnote edge that does not resolve | the detail names the unit. A `[[fn:…]]` naming a note the book does not define is the usual cause |
-| `write-failed` | the commit itself failed — disk, permissions, antivirus | the journal beside the book (`book.json.journal.json`) records what was in progress, and the next write finishes or undoes it. Nothing is half applied |
+| `write-failed` | journal, side file, book replacement or cleanup failed | files may have changed. Preserve `book.json.journal.json` and recover before relying on approval |
+| `review-changed` / `sidecar-changed` | proposal evidence changed after it was read | the competing evidence is retained; inspect it and run against the current proposal |
+| `unresolved-sidecar` / `unresolved-journal` | a file matches neither recorded state | preserve the independent edit and journal; choose a state from evidence before recovery |
+| `invalid-journal` / `unsupported-journal` | recovery cannot validate the journal | keep the evidence; never substitute an empty successful transaction |
 
-A journal left behind is normal after an interrupted run and needs no action: the
-next write reads it and either rolls forward or rolls back, decided by the book's
-own digest. The one case it cannot decide is a book at neither the before nor the
-after state — something else changed it mid-transaction — and then it refuses with
-`unresolved-journal` and keeps the file, because either guess could destroy
-somebody's work.
+A journal is recovered under the same OS lock as a normal write. Absolute paths
+stay rooted in the book's work directory. Recovery checks every side file before
+changing any; interrupted recovery is resumable. Side-only transactions have an
+explicit commit marker because their book digest stays unchanged.
+
+The diagnostic `.lock` file persists after release: do not delete it. All
+cooperating project writers use its OS lock. Snapshot checks detect many external
+writes, but an external program ignoring the lock can still write in the interval
+between a check and replacement; this is not filesystem compare-and-swap.
+
+From Python with the scripts directory on its import path, explicit recovery is
+`bookwrite.recover(Path("work/book.json"))`. An ordinary write also recovers first.
+`recovery-pending` cannot authorize delivery. See [review-contracts.md](review-contracts.md).
 
 ## `qa check` says `semantic-unverified` or `semantic-rejected`
 
@@ -418,9 +428,25 @@ The gate enforces the two semantic verdicts; it does not judge meaning itself.
   for the book as it stands: absent, stale (the text moved after the review), or
   its repair loop still open. The detail names the stage and the refusal.
 - **`publication-pending`** — published prose has no Persian yet, most often the
-  title page. `meta.title_target` and `meta.author_target` are the one expected
-  hand-edit, and they print whether or not they are translated.
+  title page. Set `meta.title_target` and `meta.author_target` through
+  `bookwrite.transaction`, as shown in the skill, then settle typography.
 
 If the reviews were green and are now stale, look at what moved the text: `falint
-fix` and the metadata hand-edit both belong **before** step 6b for exactly this
+fix` and metadata updates both belong **before** step 6b for exactly this
 reason, and `falint lint` at step 7 is what proves nothing is left to fix.
+
+## CLI execution logs
+
+CLI calls write a unique UTF-8 `revayat-novel_YYYY-MM-DD_HH-mm-ss_UTC.log`, with
+a collision suffix when necessary. Logs contain UTC levels, startup/runtime,
+exit status and sanitized exception locations; manuscript text, arguments and
+exception payloads are not recorded. Handles close on success and failure.
+
+Set `REVAYAT_NOVEL_LOG_DIR` to the translated file's parent directory. Without
+it, the CLI does not select a global log location. Every using agent must also
+write the workflow log required by [preservation-and-logging.md](preservation-and-logging.md)
+in that same output directory. If CLI logging cannot start, the console reports
+that limitation and retains the command's real result; the agent must resolve
+the logging failure before continuing translation.
+Logs are local diagnostic evidence; review them before sharing and remove old
+runs when no longer needed.

@@ -40,7 +40,7 @@ Fidelity is to meaning and effect, not to syntax.
 - Do not editorialise, moralise or comment on the content.
 - Do not translate the "Surrounding text" context section, or copy it into your
   output.
-- Do not output anything but the `@@` headers and their Persian text.
+- Output the exact worksheet request line, the requested `@@` headers and their Persian text.
 
 ## Names
 
@@ -108,8 +108,9 @@ three.
 
 ## When you are unsure
 
-Translate it, and say so briefly in your final message. A flagged uncertainty is
-useful; a silently skipped sentence is not.
+Translate the complete unit and report the uncertainty with its source unit id
+to the orchestrator outside the worksheet reply. Resolve it against the source
+before final approval; preserve deliberate source ambiguity.
 
 ## What the review afterwards will and will not ask of you
 
@@ -139,12 +140,10 @@ If you believe a clumsy sentence genuinely changes the meaning, that is a
 There *is* a stage that edits Persian for how it reads — but it happens after
 your work, without the source in front of it, and it is not a request to you.
 
-The reason it is separate is worth knowing, because it is also the reason your
-own polish matters: **a reviewer who can see the English cannot judge whether
-the Persian reads as Persian.** They recognise the sentence behind it, so
-English clause order parses effortlessly and passes. The later stage therefore
-gets your Persian and nothing else — no source, not one English word — and is
-asked only whether a Persian reader would believe a person wrote it.
+An independent Persian reading complements the bilingual review and can expose
+calques it overlooked. A bilingual reviewer can also assess fluency. The later
+stage receives Persian without its source and focuses on natural phrasing,
+continuity and the intended narrator/character voices.
 
 What that means for you:
 
