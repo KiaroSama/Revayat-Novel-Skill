@@ -22,6 +22,7 @@ import bookir as ir
 import pagerun
 import preview as page_preview
 import review as page_review
+import reviewstate
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="action", required=True)
@@ -40,12 +41,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     p_status = sub.add_parser("status", help="where every page stands")
     p_status.add_argument("--pages", required=True)
     p_status.add_argument("--book", default=None,
-                          help="check that each finished page's recorded "
-                               "evidence still matches the book. Without it the "
-                               "report is a stored label, which cannot notice "
-                               "that a page's text moved; it then says "
-                               "`freshness: unchecked` rather than implying a "
-                               "check nobody ran")
+                          help="override the manifest's book path when checking "
+                               "finished-page evidence; omission still resolves "
+                               "and checks the recorded book")
 
     p_next = sub.add_parser("next", help="the first page that is not accepted")
     p_next.add_argument("--pages", required=True)
@@ -84,6 +82,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     p_accept.add_argument("--page", type=int, required=True)
 
 
+@reviewstate.cli
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     parser = argparse.ArgumentParser(prog="revayat-novel pages",
@@ -132,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
                          ensure_ascii=False, indent=1))
         # A stale page is not a failure to report and exit 0 on: it is a page
         # the operator has already been told is finished.
-        return 2 if progress["stale"] else 0
+        return 2 if progress.get("ok") is False or progress.get("stale") else 0
 
     if args.action == "merge":
         report = pagerun.merge_page(
@@ -181,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     upcoming = pagerun.next_page(Path(args.pages))
     print(json.dumps(upcoming or {"next": None, "detail": "every page accepted"},
                      ensure_ascii=False, indent=1))
-    return 0
+    return 2 if upcoming and upcoming.get("ok") is False else 0
 
 
 if __name__ == "__main__":

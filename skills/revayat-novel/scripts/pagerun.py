@@ -67,6 +67,7 @@ from pageidentity import (  # noqa: F401
     ocr_state,
     owners,
     page_of,
+    request_fingerprint,
     translation_hash,
 )
 from pagesheet import (  # noqa: F401  (re-exported: pagecli and the tests)
@@ -250,7 +251,7 @@ def build(
 
     manifest: dict[str, Any] = {
         "schema": SCHEMA,
-        "book": str(book_path),
+        "book": str(Path(book_path).resolve()),
         "book_sha256": book["source"].get("sha256", ""),
         # What the book was read *from*, recorded on the manifest itself so the
         # requirement for source evidence survives a lost path. An empty
@@ -260,7 +261,7 @@ def build(
         # Recorded rather than assumed, so a consumer never has to guess which
         # of the original, the cleaned copy and the OCR copy a page came from.
         "reference_pdf": str(reference) if reference is not None else "",
-        "glossary": str(glossary_path) if glossary_path else "",
+        "glossary": str(Path(glossary_path).resolve()) if glossary_path else "",
         "budget": budget,
         "neighbour_chars": neighbour_chars,
         "pages": len(jobs),
@@ -286,6 +287,7 @@ def build(
             manifest["split"].append(page)
 
         source_pdf = source_pdfs.get(page, {})
+        spans = {record["id"]: record for record in chunking.unit_records(units)}
         for part, (group, worksheet) in enumerate(fitted, start=1):
             job_id = (f"page{page:04d}" if len(fitted) == 1
                       else f"page{page:04d}-{part:02d}")
@@ -315,6 +317,8 @@ def build(
                 "geometry": job["geometry"],
                 "ocr": job["ocr"],
                 "unit_ids": [unit_id for unit_id, _, _ in group],
+                "unit_kinds": {unit_id: kind for unit_id, kind, _ in group},
+                "unit_spans": [spans[unit_id] for unit_id, _, _ in group],
                 "units": len(group),
                 "source_chars": sum(len(text) for _, _, text in group),
                 "payload_chars": len(worksheet),
@@ -327,9 +331,12 @@ def build(
                 # handed to `note_page_source` above is compared with what is
                 # already stored per page, and prefixing that would invalidate
                 # every page on disk for no reason.
-                "source_sha256": f"page:{digest}",
+                "source_sha256": "",
                 "status": (state.page(page) or {}).get("state", "pending"),
             })
+            manifest["chunks"][-1]["source_sha256"] = request_fingerprint(
+                book, manifest["chunks"][-1], glossary=glossary if glossary_path else None,
+                book_path=book_path, neighbour_chars=neighbour_chars, source_prints=prints, out_dir=out_dir)
 
     # A rebuild at a different budget cuts a page in different places, so the
     # answers to the old cut are still on disk under names the new manifest

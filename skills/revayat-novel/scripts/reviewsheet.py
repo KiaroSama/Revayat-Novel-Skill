@@ -33,11 +33,13 @@ the worksheet route keeps it: nobody's review is deleted to make a gate pass.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
-import shutil
+import uuid
 from pathlib import Path
 
 import bookir as ir
+import reviewstate
 from worksheet import SCAFFOLD_COMMENT, comment  # noqa: F401  (the stages read it)
 
 #: Version tag, so a reader that cannot recompute a token says so rather than
@@ -68,7 +70,69 @@ SIGILS = {
     "@@": "worksheet",
 }
 
-_CONTROL = re.compile(r"^(?P<sigil>\?\?|\+\+|!!|@@)(?:\s|$)")
+_CONTROL = re.compile(r"^(?P<sigil>\?\?|\+\+|!!|@@)")
+PAYLOAD_ESCAPE = re.compile(r"^(\s*)\\(\\*(?:\?\?|\+\+|!!|@@|~\s|<!--\s*revayat-novel\b))")
+
+
+def escape_payload(text: str) -> str:
+    lines = []
+    for line in text.split("\n"):
+        bare = line.lstrip().lstrip("\\")
+        if _CONTROL.match(bare) or bare.startswith("~ ") or bare.startswith("<!-- revayat-novel"):
+            indent = line[:len(line) - len(line.lstrip())]
+            line = indent + "\\" + line[len(indent):]
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def parse_records(text, *, stage, header, rubrics, payload):
+    """Every control line is parsed or rejected; one escape layer is reversible."""
+    records, claimed, problems, buffer = [], [], [], []
+    current = None
+    ended = False
+
+    def flush():
+        if current is not None:
+            current[payload] = "\n".join(buffer).strip()
+            records.append(current)
+
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if PAYLOAD_ESCAPE.match(line):
+            if current is not None:
+                buffer.append(PAYLOAD_ESCAPE.sub(r"\1\2", line))
+            continue
+        control = _CONTROL.match(stripped)
+        if control:
+            match, claim = header.fullmatch(stripped), REVIEWED.fullmatch(stripped)
+            if ended:
+                problems.append(f"line {number}: trailing control after the review claim")
+            flush()
+            current, buffer = None, []
+            if match and not ended:
+                current = {"id": match.group("id"), "rubric": match.group("rubric")}
+            elif claim and not ended:
+                claimed.append(claim.group("sheet"))
+                ended = True
+            else:
+                problems.append(f"line {number}: malformed or foreign {stage} control: {stripped[:80]}")
+            continue
+        if SCAFFOLD_COMMENT.match(stripped):
+            if ended:
+                problems.append(f"line {number}: trailing request/control record")
+            if not REQUEST.fullmatch(stripped) and not (
+                    stage == "fluency" and stripped == comment("context, not under review")):
+                problems.append(f"line {number}: unrecognized control comment")
+            continue
+        if current is not None and not (stage == "fluency" and re.match(r"^~\s", stripped)):
+            buffer.append(line)
+    flush()
+    for item in records:
+        if item["rubric"] not in rubrics:
+            problems.append(f"{item['id']}: {item['rubric']} is not a rubric")
+        if not item[payload]:
+            problems.append(f"{item['id']}: no {'argument' if payload == 'detail' else 'replacement'} given")
+    return records, claimed, problems
 
 
 def bounded(name: str, value: int) -> str:
@@ -164,6 +228,11 @@ def reply_problems(text: str, *, stage: str, sheet_id: str,
             f"nothing")
         return problems
 
+    request_lines = [line.strip() for line in text.splitlines()
+                     if line.strip().startswith("<!--") and "revayat-novel:" in line
+                     and re.search(r"\breview\b", line)]
+    if len(request_lines) != 1 or not all(REQUEST.fullmatch(line) for line in request_lines):
+        problems.append(f"{sheet_id}: expected exactly one valid review request line")
     said_stage, said_sheet, said_token = request_of(text)
     if not said_token:
         problems.append(
@@ -197,6 +266,8 @@ def reply_problems(text: str, *, stage: str, sheet_id: str,
         problems.append(
             f"{sheet_id}: no `!! reviewed {sheet_id}` line, so nothing says this "
             f"sheet was read")
+    if len(mine) > 1:
+        problems.append(f"{sheet_id}: duplicate review claims")
 
     foreign = foreign_controls(text, owns=owns)
     if foreign:
@@ -208,25 +279,90 @@ def reply_problems(text: str, *, stage: str, sheet_id: str,
 
 
 def archive_replies(out_dir: Path, revision: str) -> list[str]:
-    """Move the replies a regeneration supersedes into ``superseded/<revision>/``.
-
-    Kept, never deleted: a reviewer's argument about the previous text is the
-    evidence for what changed and why, and the next reviewer reads it. The
-    directory is named for the revision the replies answered, so two generations
-    do not land on top of each other.
-    """
+    """Archive each response under its own request identity, without overwrites."""
     out_dir = Path(out_dir)
+    previous = reviewstate.object_file(out_dir / "manifest.json", optional=True)
+    if previous is not None:
+        manifest_shape(previous)
     existing = sorted(out_dir.glob("out_*.md"))
     if not existing:
         return []
-    tag = revision.partition(":")[2][:16] or "unknown"
-    home = out_dir / "superseded" / tag
-    home.mkdir(parents=True, exist_ok=True)
     moved: list[str] = []
     for path in existing:
-        shutil.move(str(path), str(home / path.name))
+        body = path.read_bytes()
+        stage, sheet_id, request = request_of(body.decode("utf-8"))
+        tag = re.sub(r"[^A-Za-z0-9_.-]", "_", request) or "unbound"
+        home = out_dir / "superseded" / tag / uuid.uuid4().hex
+        home.mkdir(parents=True, exist_ok=False)
+        with (home / path.name).open("xb") as target:
+            target.write(body)
+        own_revision = None
+        if previous and previous["requests"].get(sheet_id) == request:
+            own_revision = previous["revision"]
+        ir.write_text(home / "identity.json", json.dumps({
+            "stage": stage, "sheet": sheet_id, "request": request,
+            "revision": own_revision, "sha256": hashlib.sha256(body).hexdigest()}, indent=1))
+        if path.read_bytes() != body:
+            raise reviewstate.Refused("response-changed", "response changed while it was being archived; both retained")
+        path.unlink()
         moved.append(path.name)
     return moved
+
+
+def manifest_shape(manifest):
+    """Validate the old manifest before regeneration can move any evidence."""
+    reviewstate.require(isinstance(manifest, dict), "manifest must be an object")
+    reviewstate.require(manifest.get("schema") in {
+        f"revayat-novel/{stage}@{version}" for stage in ("meaning", "fluency") for version in (1, 2)},
+        "unsupported review manifest schema")
+    reviewstate.require(reviewstate.strings(manifest.get("sheets")), "invalid sheet enumeration")
+    sheets = manifest["sheets"]
+    reviewstate.require(len(sheets) == len(set(sheets)) and all(re.fullmatch(r"sheet_[0-9]+", s) for s in sheets),
+                        "duplicate or unsafe sheet id")
+    reviewstate.require(isinstance(manifest.get("owned"), dict) and isinstance(manifest.get("requests"), dict),
+                        "invalid ownership or request map")
+    reviewstate.require(set(sheets) == set(manifest["owned"]) == set(manifest["requests"]),
+                        "sheet enumeration, ownership and request keys disagree")
+    reviewstate.require(all(reviewstate.strings(manifest["owned"][s]) and bool(manifest["owned"][s])
+                            and isinstance(manifest["requests"][s], str) for s in sheets), "invalid sheet members")
+    reviewstate.require(isinstance(manifest.get("revision"), str) and type(manifest.get("units")) is int,
+                        "invalid manifest revision or count")
+
+
+def manifest_problems(manifest, *, stage, revision, inventory, policy, out_dir, render=None):
+    try:
+        manifest_shape(manifest)
+    except reviewstate.Refused as error:
+        return [error.detail]
+    problems = coverage_problems(manifest["owned"], inventory)
+    ordered = [unit for sheet_id in manifest["sheets"] for unit in manifest["owned"][sheet_id]]
+    if ordered != inventory or manifest["units"] != len(inventory):
+        problems.append("ordered ownership and expected unit count disagree with the live inventory")
+    if manifest["schema"] not in (f"revayat-novel/{stage}@1", f"revayat-novel/{stage}@2"):
+        problems.append("foreign-stage manifest")
+    if problems:
+        return problems
+    for sheet_id in manifest["sheets"]:
+        expected = token(stage=stage, sheet_id=sheet_id, revision=revision,
+                         unit_ids=manifest["owned"][sheet_id], policy=policy)
+        if manifest["requests"][sheet_id] != expected:
+            problems.append(f"{sheet_id}: request does not match the live stage, revision, rubric and owned payload")
+        try:
+            question = (Path(out_dir) / f"{sheet_id}.md").read_text(encoding="utf-8")
+            if request_of(question) != (stage, sheet_id, expected):
+                problems.append(f"{sheet_id}: worksheet and manifest requests disagree")
+            if render is not None and question != render(sheet_id, manifest["owned"][sheet_id], expected):
+                problems.append(f"{sheet_id}: worksheet payload does not match the live request")
+        except (OSError, UnicodeError):
+            problems.append(f"{sheet_id}: worksheet is unreadable")
+    return problems
+
+
+def event_identity(manifest, responses):
+    body = json.dumps([manifest["schema"], manifest["revision"],
+                       [(sheet, manifest["requests"][sheet], responses[sheet])
+                        for sheet in manifest["sheets"]]], ensure_ascii=False, separators=(",", ":"))
+    return "review-event1:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 def coverage_problems(sheets: dict[str, list[str]],

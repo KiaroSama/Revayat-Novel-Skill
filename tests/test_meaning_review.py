@@ -270,8 +270,8 @@ def test_a_finding_with_no_argument_or_an_unknown_rubric_is_refused(translated,
     for sheet_id in sheets:
         _reply(out, sheet_id,
                "?? b00001 sense\n"
-               f"!! reviewed {sheet_id}\n"
-               "?? b00002 vibes\nSomething feels off.\n")
+               "?? b00002 vibes\nSomething feels off.\n"
+               f"!! reviewed {sheet_id}\n")
     report = meaning.record(out, translated)
     assert report["ok"] is False
     assert any("no argument given" in problem for problem in report["problems"])
@@ -314,7 +314,7 @@ def _round(out: Path, translated: Path, body: str) -> dict:
     return meaning.record(out, translated)
 
 
-def test_the_same_finding_twice_escalates_instead_of_asking_again(translated,
+def test_distinct_review_events_without_progress_escalate(translated,
                                                                  tmp_path):
     out = tmp_path / "review"
     meaning.write_sheets(translated, out)
@@ -324,7 +324,7 @@ def test_the_same_finding_twice_escalates_instead_of_asking_again(translated,
     assert first["round"] == 1
     assert meaning.repair_requests(out)["ok"] is True
 
-    second = _round(out, translated, body)
+    second = _round(out, translated, body + "A new reading found the same unchanged reversal.\n")
     assert second["round"] == 2
     assert second["history"] == [["b00002/sense"], ["b00002/sense"]]
     request = meaning.repair_requests(out)

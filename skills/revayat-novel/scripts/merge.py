@@ -29,10 +29,12 @@ from typing import Any, Callable
 
 import bookir as ir
 import bookwrite
+import eligible
+import reviewstate
 import glossary as gl
 import published
 import segments
-from chunk import source_fingerprint
+from chunk import source_fingerprint  # noqa: F401 (public re-export)
 from worksheet import (  # noqa: F401  (this module's published surface)
     ESCAPED_HEADER, FENCE, HEADER, NOTE_KINDS, TRANSLATOR_NOTE,
     parse_worksheet, read_reply, read_worksheet, request_of,
@@ -96,13 +98,14 @@ def adopt_translator_notes(
         existing = owned.get(local_id)
         if existing is not None:
             # A corrected reply rewrites its own note rather than adding one.
-            existing["text"] = ir.normalise_source(body)
+            existing.setdefault("submitted", existing.get("text") or body)
             existing["target"] = body
             mapping[local_id] = existing["id"]
             continue
         note = ir.make_footnote(next_index, anchor_block="", text=body,
                                origin="translator")
         note["target"] = body
+        note["submitted"] = body
         note["reply"] = reply
         note["local_id"] = local_id
         new_notes.append(note)
@@ -211,6 +214,7 @@ def apply_units(book: dict[str, Any], units: dict[str, str]) -> dict[str, Any]:
     return {"applied": applied, "unknown": unknown, "blank": blank}
 
 
+@reviewstate.guarded
 def merge(
     book_path: Path,
     chunks_dir: Path,
@@ -235,7 +239,7 @@ def merge(
     # book it wrote would be perfectly well-formed.
     before = bookwrite.file_digest(Path(book_path))
     book = ir.load_book(book_path)
-    manifest = json.loads((chunks_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest = eligible.read_manifest(chunks_dir)
     chunks = manifest.get("chunks") or []
 
     report: dict[str, Any] = {
@@ -252,39 +256,24 @@ def merge(
         "unverified_kinds": [],
     }
 
-    # A dependency the caller *named* is not an optional one. Omitting
-    # `--glossary` says "this book has no locked names"; naming a file that is
-    # not there means the run is about to skip the pass that settles every first
-    # mention, and merge said nothing at all — so a book could ship with one name
-    # introduced in thirty places and the command that was supposed to settle it
-    # reporting success. Unreadable and unparseable are the same failure: the
-    # caller pointed at something and it is not usable.
-    # Kept for the freshness recomputation below, which has to ask the *live*
-    # glossary what this worksheet would be told today. `None` means no glossary
-    # was named, which is a different answer from an empty one.
-    glossary_for_freshness: dict[str, Any] | None = None
-    if glossary_path is not None:
-        named = Path(glossary_path)
-        trouble = ""
-        if not named.exists():
-            trouble = f"{named} does not exist"
-        else:
-            try:
-                loaded = gl.load(named)
-                if not isinstance(loaded.get("entries"), list):
-                    trouble = f"{named} has no entries list; it is not a glossary"
-                else:
-                    glossary_for_freshness = loaded
-            except (OSError, json.JSONDecodeError) as failure:
-                trouble = f"{named} could not be read: {failure}"
-        if trouble:
-            report["ok"] = False
-            report["refused"] = "named-glossary-unusable"
-            report["detail"] = (
-                f"--glossary was given and {trouble}. Nothing was written: the "
-                f"first-mention pass cannot run, and merging without it leaves "
-                f"every chunk's own guess about where to introduce a name.")
-            return report
+    if glossary_path is None and manifest.get("glossary"):
+        glossary_path = eligible._book_and_glossary(chunks_dir, manifest)[1]
+        if glossary_path is None:
+            glossary_path = Path(manifest["glossary"])
+    glossary_for_freshness = None
+    if glossary_path is not None and Path(glossary_path).is_file():
+        try:
+            glossary_for_freshness = gl.load(Path(glossary_path))
+        except (OSError, ValueError, UnicodeError):
+            pass
+    proofs = {proof["id"]: proof for proof in eligible.every(
+        chunks_dir, manifest, book_path=book_path, book=book,
+        glossary=glossary_for_freshness, glossary_path=glossary_path,
+        revalidate_unbound=revalidate_unbound)}
+    if glossary_path is not None and glossary_for_freshness is None:
+        report.update({"ok": False, "refused": "named-glossary-unusable",
+                       "detail": "the named glossary is missing or unreadable; restore it or rebuild"})
+        return report
 
     # Every segment the manifest knows of, from *all* chunks and not only the
     # selected ones: a block split between two worksheets with one of them
@@ -303,17 +292,17 @@ def merge(
             continue
         expected = list(entry.get("unit_ids") or [])
         kinds = entry.get("unit_kinds") or {}
-        output = chunks_dir / entry["output"]
+        proof = proofs[entry["id"]]
 
         # Zero-unit completion, defined once in `worksheet.verdict`: a job that
         # asks for nothing — an image-only page, a blank verso — is finished the
         # moment it is cut, and no reply file is expected. Demanding one here
         # while `status` counted it translated left a run with nothing to offer
         # and a merge that could never pass.
-        if not expected:
+        if not expected and proof["usable"]:
             report["chunks_merged"] += 1
             continue
-        if not output.exists():
+        if proof["state"] == "missing":
             report["missing_outputs"].append(entry["id"])
             continue
 
@@ -331,93 +320,23 @@ def merge(
         # ids and kinds, completeness and the note graph are all decided in
         # `worksheet.verdict`; freshness is appended below because it is a
         # question about the book, which that module cannot see.
-        say = verdict(output.read_text(encoding="utf-8"), expected, kinds)
+        say = proof.get("transport", verdict(None, expected, kinds))
         entries = say["entries"]
         expected_set = set(expected)
         problems = list(say["problems"])
 
-        # Which request this answer answers. The filename cannot say: a rebuild
-        # writes `chunk0002.md` again and an answer to the previous cut sits at
-        # exactly the path the new one expects, with the same ids and the same
-        # count. So the worksheet carries a token and the reply echoes it.
-        wanted_request = str(entry.get("request") or "")
-        echoed = request_of(output.read_text(encoding="utf-8"))
-        if wanted_request and echoed and echoed != wanted_request:
-            problems.append(
-                f"this reply answers request {echoed}, and the worksheet now asks "
-                f"{wanted_request}. The job was rebuilt after the reply was "
-                f"written — the earlier answer is in superseded/ to copy from, but "
-                f"it answers text this worksheet no longer contains")
-        elif wanted_request and not echoed:
-            # Never silent trust. A reply with no token predates the binding, so
-            # the only honest options are "refuse" and "revalidate explicitly".
-            if revalidate_unbound:
-                report.setdefault("revalidated", []).append(entry["id"])
-            else:
-                problems.append(
-                    "this reply carries no request line, so nothing says which "
-                    "version of the worksheet it answers. Re-translate it, or "
-                    "pass --revalidate-unbound to accept it on the strength of "
-                    "the source digest alone")
-
-        # The manifest says which formula produced its digest, because the two
-        # routes record different ones under the same key.
-        recorded = str(entry.get("source_sha256") or "")
-        form = recorded.partition(":")[0]
-        if not recorded:
+        if not proof["usable"]:
+            problems.append(proof["detail"] or f"reply state {proof['state']}")
+        if proof["state"] == "unverified":
             report["unverified_freshness"].append(entry["id"])
-        elif form == "units3":
-            # Over the units **as cut**, recomputed from the spans the manifest
-            # records, plus the live kind and everything else the worker was told.
-            # The `units2` form hashed the recorded kind and nothing about the
-            # glossary or the neighbouring text, so turning a paragraph into a
-            # heading or approving an alias left it unchanged; `units:` before it
-            # hashed the parent blocks, so every segment of one paragraph shared a
-            # value and a recut was invisible.
-            spans = entry.get("unit_spans") or []
-            built_with_glossary = bool(manifest.get("glossary"))
-            if not spans:
-                report["unverified_freshness"].append(entry["id"])
-            elif built_with_glossary and glossary_for_freshness is None:
-                # The worksheets were built with a glossary and this merge was
-                # given none, so the term table cannot be recomputed. Reporting
-                # `stale` here would be a false accusation that sends a correct
-                # translation back to be redone; the honest answer is that the
-                # dependency could not be checked.
-                report["unverified_freshness"].append(entry["id"])
-                problems.append(
-                    f"these worksheets were built against "
-                    f"{manifest['glossary']} and no --glossary was given, so the "
-                    f"names the translator was shown cannot be re-checked. Pass "
-                    f"the glossary to verify freshness.")
-            elif recorded != source_fingerprint(
-                    book, entry.get("block_ids") or [], spans,
-                    glossary=glossary_for_freshness,
-                    neighbours=entry.get("neighbour_ids")):
-                report["stale"].append(entry["id"])
-                problems.append(
-                    "the source these units were cut from has changed since the "
-                    "worksheet was written, so this reply answers text the book no "
-                    "longer contains")
-        elif form == "page":
-            # The page run checks this itself, at build time, against a digest
-            # that also covers the page raster and the page geometry — richer
-            # than anything recomputable here from block ids — and invalidates
-            # the page when it moves. Re-deriving it here would mean copying a
-            # formula this module cannot see, which is how the two came to
-            # disagree in the first place.
-            pass
-        elif form == "units":
-            # The oldest form, and it cannot answer the question: one value for
-            # every segment of a paragraph. Recomputing it would pass a recut that
-            # this project has measured merging the wrong generation's answers, so
-            # it is reported unverifiable and one rebuild clears it.
-            report["unverified_freshness"].append(entry["id"])
-        else:
-            # An unknown tag — a newer build, a hand-edited manifest, a form this
-            # version predates. Neither stale nor fresh: not comparable. Guessing
-            # either way is how a stale reply passes, so it says so instead.
-            report["unverified_freshness"].append(entry["id"])
+        if proof["state"] == "stale-source":
+            report["stale"].append(entry["id"])
+        if proof.get("revalidated") and proof["usable"]:
+            report.setdefault("revalidated", []).append(entry["id"])
+        if proof.get("candidate_problems"):
+            report["refused"] = "invalid-book"
+            report["detail"] = "; ".join(proof["candidate_problems"])
+            report.setdefault("invalid_ir", []).extend(proof["candidate_problems"])
 
         answered = say["answered"]
         missing, extra = say["missing"], say["extra"]
@@ -498,7 +417,7 @@ def merge(
         # complying.
         if glossary_path is not None:
             report["first_mentions"] = gl.enforce_first_mentions(
-                gl.load(Path(glossary_path)), book)
+                glossary_for_freshness, book)
 
         # Lenient means "land the replies that validate", never "write a book the
         # validator rejects": an invalid IR blocks the write in both modes.
@@ -520,6 +439,7 @@ def merge(
     return report
 
 
+@reviewstate.cli
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     parser = argparse.ArgumentParser(prog="revayat-novel merge", description=__doc__)

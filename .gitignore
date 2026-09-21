@@ -3,6 +3,8 @@
 
 # --- Local-only agent / tooling state ---
 /.ai/
+/.specify/
+/specs/
 /.agents/
 /.claude/
 /.kiro/

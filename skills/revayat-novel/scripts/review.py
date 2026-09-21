@@ -27,6 +27,7 @@ from typing import Any, Iterable
 
 import bookir as ir
 import runstate
+import reviewstate
 
 SCHEMA = "revayat-novel/review@1"
 
@@ -125,10 +126,35 @@ def current_render(work_dir: Path, page: int | str, *, render: str = "") -> str:
             .get("hashes", {}).get("render", ""))
 
 
+def _read_review(path: Path, page: int | str) -> dict[str, Any]:
+    try:
+        found = reviewstate.object_file(path)
+    except reviewstate.Refused as error:
+        if error.reason == "unreadable-state":
+            raise reviewstate.Refused("unreadable-review", error.detail) from None
+        raise
+    if found.get("schema") != SCHEMA:
+        raise reviewstate.Refused("unsupported-version", "unsupported visual-review schema")
+    answers = found.get("answers")
+    reviewstate.require(isinstance(answers, dict) and set(answers) == set(QUESTIONS)
+                        and all(type(value) is bool for value in answers.values()), "invalid visual-review answers")
+    failed = sorted(key for key, value in answers.items() if not value)
+    reviewstate.require(type(found.get("ok")) is bool and found["ok"] is (not failed)
+                        and found.get("failed") == failed, "visual-review status disagrees with its answers")
+    reviewstate.require(found.get("page") == page and isinstance(found.get("render_sha256"), str)
+                        and bool(found["render_sha256"]) and isinstance(found.get("note"), str), "invalid visual-review identity")
+    return found
+
+
+@reviewstate.guarded
 def record(work_dir: Path, page: int | str, answers: dict[str, bool],
            *, note: str = "", render: str = "") -> dict[str, Any]:
     """File one reviewer's answers against the render they were made from."""
     work_dir = Path(work_dir)
+    if review_path(work_dir, page).exists():
+        _read_review(review_path(work_dir, page), page)
+    reviewstate.require(isinstance(answers, dict) and set(answers) <= set(QUESTIONS)
+                        and all(type(value) is bool for value in answers.values()), "review answers must be known booleans")
     render = current_render(work_dir, page, render=render)
     if not render:
         subject = "the document" if isinstance(page, str) else f"page {page}"
@@ -160,6 +186,7 @@ def record(work_dir: Path, page: int | str, answers: dict[str, bool],
     return written
 
 
+@reviewstate.guarded
 def verdict(work_dir: Path, page: int | str, *,
             render: str = "") -> dict[str, Any]:
     """What a gate should make of this subject's review. Never raises."""
@@ -170,13 +197,11 @@ def verdict(work_dir: Path, page: int | str, *,
                 "detail": f"nobody has looked at {subject}: there is no "
                           f"{path}. Deterministic checks do not answer "
                           f"{', '.join(sorted(QUESTIONS))}."}
-    try:
-        found = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as failure:
-        return {"ok": False, "refused": "unreadable-review",
-                "detail": f"{path} could not be read: {failure}"}
+    found = _read_review(path, page)
 
     render = current_render(Path(work_dir), page, render=render)
+    if not render:
+        return {"ok": False, "refused": "not-rendered", "detail": "the current render identity is unavailable"}
     if render and found.get("render_sha256") != render:
         return {"ok": False, "refused": "stale-review",
                 "detail": f"{subject} was reviewed, then rendered again. The "

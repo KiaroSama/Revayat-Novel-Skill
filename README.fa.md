@@ -2,9 +2,18 @@
 
 # روایت — Revayat Novel
 
+[![وضعیت CI](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml)
+[![پایتون ۳٫۱۰ به بالا](https://img.shields.io/badge/Python-3.10%2B-blue)](skills/revayat-novel/requirements.txt)
+[![مجوز GPL نسخهٔ ۳ یا بالاتر](https://img.shields.io/badge/License-GPL--3.0--or--later-blue)](LICENSE)
+
 **ترجمهٔ کامل یک کتاب به فارسیِ در حد چاپ، و تحویل یک فایل ورد که یک ناشر بتواند رویش کار کند.**
 
 یک Agent Skill برای Claude Code، Kiro، Codex، Cursor، Cline و هر ایجنت کدنویسی دیگری که بتواند یک `SKILL.md` را بخواند. کارهایی را انجام می‌دهد که ترجمهٔ کتاب را واقعاً سخت می‌کنند: صفحه‌های اسکن‌شده، تصویرهایی که باید اندازه و جایشان حفظ شود، نام‌هایی که نباید در طول چهل فصل تغییر کنند، و تایپوگرافی فارسی‌ای که باید درست باشد، نه تقریباً درست.
+
+وب‌ناول از لینک سایت یا فصل‌های ذخیره‌شدهٔ HTML و متن وارد می‌شود؛
+[راهنمای ورودی وب‌ناول](skills/revayat-novel/references/web-novels.md) ترتیب فصل‌ها و ادامهٔ امن کار را توضیح می‌دهد.
+راهنماهای بومی Word و PDF داخل اسکیل قرار دارند. ترجمه و ویرایش موازی با چند ساب‌ایجنت
+اختیاری است و اسکیل ابتدا از کاربر می‌پرسد؛ ادغام و کنترل نهایی با هماهنگ‌کننده می‌ماند.
 
 <div align="right"><a href="LICENSE">مجوز GPL-3.0</a></div>
 <div align="left"><a href="README.md">English</a></div>
@@ -143,8 +152,8 @@ $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pag
 # متنِ منتشرشدنی را *پیش از* آنکه کسی بخواندش تمام کنید: تایپوگرافی مکانیکی است
 # و صفحهٔ عنوان هم متنِ منتشرشدنی است. هر دو شناسهٔ بازنگری‌ای را جابه‌جا می‌کنند
 # که تأییدهای پایین به آن بسته‌اند، پس اجرای آن‌ها بعد از تأیید، تأیید را کهنه می‌کند.
+#   … ابتدا meta.title_target و meta.author_target را با bookwrite.transaction ثبت کنید …
 $PY $S/revayat-novel.py falint fix --book work/book.json
-#   … و meta.title_target و meta.author_target را در work/book.json ترجمه کنید …
 
 # فارسی را کنار انگلیسی بخوانید. سه rubric دربارهٔ معنا هستند و جلو را
 # می‌گیرند؛ دو تای دیگر دربارهٔ سبک‌اند و عمداً چیزی نمی‌خواهند.
@@ -153,13 +162,12 @@ $PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
 $PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
 $PY $S/revayat-novel.py meaning status --book work/book.json --out work/review
 
-# بعد فارسی را بدون انگلیسی بخوانید؛ همان پرسشی که بازبینِ دوزبانه نمی‌تواند
-# پاسخ دهد، چون انگلیسیِ پشت جمله را می‌خواند و جمله برایش روان به نظر می‌رسد.
+# سپس فارسی را مستقل بخوانید؛ این مرحله مکمل بازبینی دوزبانه است.
 $PY $S/revayat-novel.py fluency sheets --book work/book.json --out work/fluency --meaning work/review
 #   … work/fluency/sheet_NNNN.md را بخوانید و جانشین‌ها را در out_sheet_NNNN.md بنویسید …
 $PY $S/revayat-novel.py fluency record --book work/book.json --out work/fluency
 $PY $S/revayat-novel.py fluency apply  --book work/book.json --out work/fluency
-#   … کتاب تغییر کرد، پس چهار فرمان `meaning` بالا را دوباره اجرا کنید: همان
+#   … کتاب تغییر کرد، پس بازبینی کامل `meaning` بالا را دوباره انجام دهید: همان
 #       اجرای دوباره، مقایسه با متن اصلی است و بی آن هیچ چیز سبز نمی‌شود …
 $PY $S/revayat-novel.py fluency status --book work/book.json --out work/fluency --meaning work/review
 
@@ -203,10 +211,9 @@ book.pdf / .epub / .docx
    merge ── every @@ id must return exactly once, or it is a named error
         │
         ▼
-   bilingual review ── does the Persian say what the English said? meaning
-        │               blocks, style is recorded and never sent back
+   metadata + Persian typography ── settle the published text first
         ▼
-   Persian typography ── ZWNJ, punctuation, digits; protected regions untouched
+   bilingual review → independent Persian review → renewed source confirmation
         │
         ▼
    quality gates ── coverage, footnote parity, omissions, image hashes, glossary
@@ -283,6 +290,14 @@ python -m pytest tests -q
 | Polygon (POL) | Polygon | `0x0Bd0BA443a8B9cf15922bf7f0Bb0a4b495fD06Ef` |
 
 <div dir="rtl">
+
+## قواعد ترجمه و حفظ کیفیت
+
+هر ایجنتی که از اسکیل استفاده می‌کند باید لاگ روند ترجمه، اصلاح و بررسی را با
+کدگذاری UTF-8 کنار فایل ترجمه ذخیره کند. [قواعد حفظ کیفیت و لاگ](skills/revayat-novel/references/preservation-and-logging.md)
+حفظ ابعاد اصلی صفحه، رزولوشن تصویر و نسخهٔ اصلی هنگام بهبود کیفیت را توضیح می‌دهد.
+[راهنمای زبان مبدأ](skills/revayat-novel/references/source-languages.md) نیز برای
+ژاپنی، کره‌ای، چینی، فرانسوی، اسپانیایی و انگلیسی به فارسی در روند اسکیل استفاده می‌شود.
 
 ## نویسنده
 

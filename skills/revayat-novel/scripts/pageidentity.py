@@ -15,10 +15,54 @@ rather than at the top because it imports the lifecycle, which imports this.
 from __future__ import annotations
 
 from collections import Counter
+import json
 from pathlib import Path
 from typing import Any
 
 import bookir as ir
+
+REQUEST_DIGEST_VERSION = "page-request1"
+
+
+def request_fingerprint(book, entry, *, glossary, book_path, neighbour_chars=600,
+                        source_prints=None, out_dir=None):
+    """Live page source, geometry, OCR, policy and context; never cached across uses."""
+    import pagesheet
+    import provenance
+    import sourcepages
+
+    jobs = owners(book)
+    index = next((i for i, job in enumerate(jobs) if job["page"] == entry["page"]), None)
+    if index is None:
+        raise ValueError("the source page no longer exists; rebuild")
+    job = jobs[index]
+    if job["block_ids"] != entry["block_ids"]:
+        raise ValueError("the page ownership changed; rebuild")
+    lookup = ir.blocks_by_id(book)
+    visual = ""
+    if (book.get("source") or {}).get("format") == "pdf":
+        if out_dir is not None:
+            problem = sourcepages.page_artifact_problem(out_dir, entry)
+            if problem:
+                raise ValueError(problem)
+        reference = sourcepages.reference_pdf(book, Path(book_path))
+        if reference is None:
+            raise ValueError("the source PDF is unavailable; restore it or re-extract")
+        visual = (source_prints.get(job["page"], "") if source_prints is not None
+                  else sourcepages.page_fingerprint(reference, job["page"]))
+        if not visual:
+            raise ValueError("the source page could not be fingerprinted")
+    data = {
+        "page": job["page"], "blocks": job["block_ids"],
+        "units": provenance.translatable_units(book, job["block_ids"]),
+        "cut": provenance.source_fingerprint(book, job["block_ids"], entry["unit_spans"], glossary=glossary),
+        "geometry": geometry(book, job["block_ids"], lookup, job["page"]),
+        "ocr": ocr_state(job["block_ids"], lookup), "source_pdf": visual,
+        "glossary": glossary,
+        "context": pagesheet.neighbour_context(book, jobs, index, neighbour_chars),
+    }
+    return REQUEST_DIGEST_VERSION + ":" + ir.sha256_bytes(
+        json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
 
 #: Ceilings on the OCR-uncertainty payload a page carries. Both grow with the
 #: page's worst text rather than with the page, so each needs its own bound: an
@@ -286,5 +330,3 @@ def _translation_moved(book_path: Path, page: int,
     return ("translation-changed",
             f"the page's rendered content now hashes {current[:16]} against the "
             f"{recorded[:16]} that was checked")
-
-

@@ -1,15 +1,8 @@
 """Stage 4c — the Persian is read on its own, and edited as Persian.
 
-`meaning.py` reads the translation *against its source*, and that is the only
-way to ask whether it says the same thing. It is also exactly why it cannot ask
-whether the Persian reads as Persian.
-
-A reviewer holding the English sees the English behind every sentence. Calque
-word order parses effortlessly, because they already know what it is trying to
-say — so the sentence "makes sense" and passes. That is this repository's
-recurring defect in its literary form: **a check that can see the answer it is
-checking against.** `meaning`'s `fluency` rubric is a style note for precisely
-this reason; it cannot be more than that while the source is on the sheet.
+`meaning.py` reads the translation against its source. A separate Persian
+reading complements that review and can catch awkwardness the bilingual reader
+overlooked. Neither review alone certifies every aspect of translation quality.
 
 So this stage takes the source away. The sheets carry Persian and nothing else —
 no English, no glossary source forms, not even the unit's source length — and
@@ -55,6 +48,7 @@ import merge as merging
 import published
 import repairlog
 import reviewsheet
+import reviewstate
 from fluencysheet import (  # noqa: F401  (this module's published surface)
     CONTEXT_LINE,
     EDIT,
@@ -76,11 +70,11 @@ from fluencysheet import (  # noqa: F401  (this module's published surface)
 #: round 1 and a sixth blind rewrite of the same sentence was still permitted.
 MAX_ATTEMPTS = repairlog.MAX_ATTEMPTS
 
-SCHEMA = "revayat-novel/fluency@1"
+SCHEMA = "revayat-novel/fluency@2"
 
 #: Tagged like every other digest here, so a reader that cannot recompute this
 #: formula refuses instead of guessing which side is stale.
-DIGEST_VERSION = "fluency2"
+DIGEST_VERSION = "fluency3"
 
 
 #: Units per sheet, and the Persian neighbours each one is shown for context.
@@ -105,8 +99,10 @@ def targets(book: dict[str, Any]) -> list[dict[str, str]]:
     `verdict` refuses while any of it is outstanding.
     """
     return [{"id": unit["id"], "kind": unit["kind"], "part": unit["part"],
-             "origin": unit["origin"], "target": unit["target"]}
-            for unit in published.units(book) if unit["target"].strip()]
+             "origin": unit["origin"], "target": unit["target"],
+             "anchor": unit.get("anchor", "")}
+            for unit in published.units(book) if unit["target"].strip()
+            and not (unit["part"] == "note" and not unit["container"].get("target"))]
 
 
 def revision(units: list[dict[str, str]]) -> str:
@@ -124,6 +120,7 @@ def revision(units: list[dict[str, str]]) -> str:
     return published.digest_of(units, sides=("target",), tag=DIGEST_VERSION)
 
 
+@reviewstate.guarded
 def write_sheets(book_path: Path, out_dir: Path, meaning_dir: Path, *,
                  per_sheet: int = SHEET_UNITS) -> dict[str, Any]:
     """Blind sheets — refused while the book's meaning is still in dispute.
@@ -137,6 +134,8 @@ def write_sheets(book_path: Path, out_dir: Path, meaning_dir: Path, *,
         return {"ok": False, "refused": "bad-per-sheet", "detail": trouble}
 
     book = ir.load_book(book_path)
+    reviewstate.read_review(sidecar_path(out_dir), stage=STAGE, rubrics=RUBRICS,
+                            optional=True, history_only=True)
     pairs = meaning_review.pairs(book)
     settled = meaning_review.verdict(Path(meaning_dir),
                                      meaning_review.revision(pairs))
@@ -191,7 +190,8 @@ def write_sheets(book_path: Path, out_dir: Path, meaning_dir: Path, *,
          "superseded": superseded,
          # Which meaning verdict licensed this pass. Recorded so a reader can
          # check the claim rather than trust that it was made.
-         "meaning_revision": meaning_review.revision(pairs)},
+         "meaning_revision": meaning_review.revision(pairs),
+         "meaning_dir": str(Path(meaning_dir).resolve())},
         ensure_ascii=False, indent=1) + "\n")
     return {"ok": True, "revision": rev, "sheets": written, "units": len(units),
             "superseded": superseded}
@@ -206,14 +206,16 @@ def sidecar_path(out_dir: Path) -> Path:
     return Path(out_dir) / "fluency.json"
 
 
+@reviewstate.guarded
 def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
     """File the proposed edits against the Persian they were proposed from."""
     out_dir = Path(out_dir)
+    before_book = bookwrite.file_digest(Path(book_path))
     manifest_path = out_dir / "manifest.json"
     if not manifest_path.exists():
         return {"ok": False, "refused": "no-sheets",
                 "detail": f"there is no {manifest_path}; write the sheets first"}
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = reviewstate.object_file(manifest_path)
 
     units = targets(ir.load_book(book_path))
     rev = revision(units)
@@ -223,14 +225,32 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
                           "so the reviewer read text that is no longer there. "
                           "Write the sheets again."}
 
-    gaps = reviewsheet.coverage_problems(manifest.get("owned") or {},
-                                         [unit["id"] for unit in units])
+    positions = {unit["id"]: index for index, unit in enumerate(units)}
+
+    def live_sheet(sid, ids, request):
+        first = positions[ids[0]]
+        batch = [units[positions[i]] for i in ids]
+        return sheet(batch, sheet_id=sid, rev=rev, request=request,
+                     before=neighbour(units, first - CONTEXT_UNITS, batch[0]),
+                     after=neighbour(units, first + len(batch), batch[-1]))
+
+    gaps = reviewsheet.manifest_problems(
+        manifest, stage=STAGE, revision=rev, inventory=[unit["id"] for unit in units],
+        policy=rubric_table(), out_dir=out_dir, render=live_sheet)
     if gaps:
         return {"ok": False, "refused": "incomplete-coverage", "problems": gaps}
+    reviewstate.require(isinstance(manifest.get("meaning_dir"), str)
+                        and isinstance(manifest.get("meaning_revision"), str),
+                        "fluency sheets require meaning prerequisites; regenerate them")
+    current_meaning = meaning_review.revision(meaning_review.pairs(ir.load_book(book_path)))
+    if (manifest["meaning_revision"] != current_meaning
+            or not meaning_review.verdict(Path(manifest["meaning_dir"]), current_meaning)["ok"]):
+        return {"ok": False, "refused": "meaning-unsettled", "detail": "the source comparison that licensed these sheets no longer holds"}
 
     edits: list[dict[str, str]] = []
     problems: list[str] = []
     requests = manifest.get("requests") or {}
+    responses = {}
     for sheet_id in manifest.get("sheets") or []:
         reply = out_dir / f"out_{sheet_id}.md"
         if not reply.exists():
@@ -238,6 +258,7 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
                             f"this sheet")
             continue
         text = reply.read_text(encoding="utf-8")
+        responses[sheet_id] = text
         # Its own sheet, its own token, its own grammar. A meaning reply filed
         # here had its `??` findings silently dropped and the sheet reported
         # clean; a claim for another sheet used to discharge that sheet too.
@@ -278,12 +299,12 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
     if problems:
         return {"ok": False, "refused": "incomplete", "problems": problems}
 
-    previous: dict[str, Any] = {}
-    if sidecar_path(out_dir).exists():
-        try:
-            previous = json.loads(sidecar_path(out_dir).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            previous = {}
+    before_side = bookwrite.file_digest(sidecar_path(out_dir))
+    previous = reviewstate.read_review(sidecar_path(out_dir), stage=STAGE,
+                                       rubrics=RUBRICS, optional=True, history_only=True)
+    event = reviewsheet.event_identity(manifest, responses)
+    if previous.get("event") == event:
+        return previous
     # Never reset, for the reason `repairlog` exists: applying an edit moves this
     # revision, so clearing the history on a revision change cleared it after
     # every pass that did anything.
@@ -294,7 +315,7 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
     # proposed *from*. Applying the edit moves that wording, so a pass that keeps
     # rewriting the same unit accumulates attempts, and a pass that puts back a
     # wording already rejected is an oscillation rather than a third opinion.
-    sources = {unit["id"]: unit["source"]
+    sources = {unit["id"]: published.repair_source(unit)
                for unit in meaning_review.pairs(ir.load_book(book_path))}
     episodes = dict(previous.get("episodes") or {})
     seen: set[str] = set()
@@ -307,11 +328,16 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
             text=known.get(edit["id"], ""),
             # The replacement *is* the argument in this stage's grammar, so it is
             # what an escalation has to be able to read.
-            argument=edit["target"], revision=rev)
+            argument=edit["target"], revision=rev, event=event)
     resolved = repairlog.close_absent(episodes, seen=seen, revision=rev)
 
     written: dict[str, Any] = {
         "schema": SCHEMA,
+        "book": str(Path(book_path).resolve()),
+        "event": event,
+        "status": "proposed" if edits else "approved-no-change",
+        "meaning_revision": manifest["meaning_revision"],
+        "meaning_dir": manifest["meaning_dir"],
         "revision": rev,
         "round": len(history) + 1,
         "edits": edits,
@@ -333,14 +359,16 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
     # accepted one, and it refuses such a sidecar by name as well.
     stop = repairlog.blocked(episodes, cap=MAX_ATTEMPTS)
     if stop:
-        written.update({"ok": False, "refused": stop[0]["refused"],
+        written.update({"ok": False, "status": "refused", "refused": stop[0]["refused"],
                         "detail": stop[0]["detail"], "escalate": stop,
                         "refused_edits": edits, "edits": []})
-    ir.write_text(sidecar_path(out_dir),
-                  json.dumps(written, ensure_ascii=False, indent=1) + "\n")
+    with bookwrite.transaction(book_path, actor="fluency.record", expect=before_book) as tx:
+        tx.side(sidecar_path(out_dir).resolve(),
+                json.dumps(written, ensure_ascii=False, indent=1) + "\n", expect=before_side)
     return written
 
 
+@reviewstate.guarded
 def apply_edits(book_path: Path, out_dir: Path) -> dict[str, Any]:
     """Write the accepted Persian into the book, keeping what it replaced.
 
@@ -348,46 +376,30 @@ def apply_edits(book_path: Path, out_dir: Path) -> dict[str, Any]:
     the next question anyone asks is "what did smoothing change", and the answer
     has to survive in the evidence the meaning re-check is read beside.
     """
-    out_dir, book_path = Path(out_dir), Path(book_path)
+    out_dir, book_path = Path(out_dir).resolve(), Path(book_path).resolve()
     path = sidecar_path(out_dir)
     if not path.exists():
         return {"ok": False, "refused": "not-recorded",
                 "detail": f"there is no {path}; record the edits first"}
-    found = json.loads(path.read_text(encoding="utf-8"))
-    if not found.get("ok", True):
-        # A refused pass is filed for its evidence, not for its edits. Writing it
-        # is what makes an escalation readable; applying it would be the loop the
-        # refusal exists to stop.
-        return {"ok": False, "refused": found.get("refused") or "not-recorded",
-                "detail": f"this pass was refused ({found.get('refused')}) and "
-                          f"its proposals were recorded as evidence, not as "
-                          f"edits to write: {found.get('detail') or ''}"}
-
-    # Order matters, and getting it wrong gives a true refusal the wrong reason.
-    # A second `apply` finds the revision moved — because *this* pass moved it —
-    # and reporting that as `stale-edits` tells the caller their book was changed
-    # under them, which is the opposite of what happened. The sidecar's own
-    # record of having been applied is the authoritative answer, so it is asked
-    # first and the digest mismatch is read as its consequence.
-    if found.get("applied"):
-        return {"ok": False, "refused": "already-applied",
-                "detail": f"these edits were already written; the book is at "
-                          f"{found['applied']}"}
-    if found.get("revision") != revision(targets(ir.load_book(book_path))):
-        return {"ok": False, "refused": "stale-edits",
-                "detail": "the Persian changed after these edits were recorded. "
-                          "Applying them would overwrite text nobody reviewed."}
-
-    # One transaction for the book *and* the sidecar. The book used to be saved
-    # first and the sidecar after it, so a failure between the two left the
-    # Persian changed with nothing recording that it had been — and the next run
-    # applied the same edits again. It also validates the result whole before
-    # anything lands: a replacement carrying `[[fn:fn0099]]`, a note the book does
-    # not have, was written straight to disk.
+    before_side = bookwrite.file_digest(path)
+    recovering = bookwrite.journal_path(book_path).is_file()
     changed: list[dict[str, str]] = []
     refusal: dict[str, Any] | None = None
     try:
         with bookwrite.transaction(book_path, actor="fluency.apply") as tx:
+            if not recovering and bookwrite.file_digest(path) != before_side:
+                raise reviewstate.Refused("review-changed", "proposal evidence changed while waiting for the book lock")
+            snapshot = path.read_bytes().decode("utf-8")
+            found = reviewstate.read_review(path, stage=STAGE, rubrics=RUBRICS, snapshot=snapshot)
+            status = reviewstate.fluency_decision(found, operation="apply")
+            if found["revision"] != revision(targets(tx.book)):
+                raise reviewstate.Refused("stale-edits", "the Persian changed before this transaction acquired its lock")
+            current_meaning = meaning_review.revision(meaning_review.pairs(tx.book))
+            if (found["meaning_revision"] != current_meaning or not meaning_review.verdict(
+                    Path(found["meaning_dir"]), current_meaning)["ok"]):
+                raise reviewstate.Refused("meaning-unconfirmed", "the source or meaning approval changed; regenerate the fluency sheets")
+            if status == "approved-no-change":
+                return {"ok": True, "changed": 0, "applied": found["revision"], "units": []}
             resolve = merging.addressing(tx.book)
             for edit in found.get("edits") or []:
                 slot = resolve(edit["id"])
@@ -404,20 +416,21 @@ def apply_edits(book_path: Path, out_dir: Path) -> dict[str, Any]:
                 container[field] = edit["target"]
             found["changes"] = changed
             found["applied"] = revision(targets(tx.book))
-            tx.side(path, json.dumps(found, ensure_ascii=False, indent=1) + "\n")
+            found["status"] = "applied"
+            tx.side(path, json.dumps(found, ensure_ascii=False, indent=1) + "\n",
+                    expect=bookwrite.digest(snapshot))
     except bookwrite.Refused as stopped:
-        # Nothing was written — not the book, not the sidecar — so the pass is
-        # exactly where it was and can be run again once the cause is dealt with.
         return refusal or {"ok": False, "refused": stopped.reason,
-                           "detail": stopped.detail}
+                           "detail": stopped.detail,
+                           "recovery_required": bookwrite.journal_path(book_path).exists()}
     except OSError as failure:
         # A disk or permission failure mid-commit. The journal is on disk and the
         # next writer resolves it; what must not happen is a traceback that leaves
         # the caller guessing whether the edits landed.
         return {"ok": False, "refused": "write-failed",
-                "detail": f"the commit failed ({failure}). The journal beside the "
-                          f"book records what was in progress and the next write "
-                          f"finishes or undoes it; nothing here is half applied."}
+                "recovery_required": bookwrite.journal_path(book_path).exists(),
+                "detail": f"the commit failed ({failure}). Files may have changed; "
+                          "recover the journal before using any approval."}
 
     return {"ok": True, "applied": found["applied"], "changed": len(changed),
             "units": [item["id"] for item in changed],
@@ -427,6 +440,7 @@ def apply_edits(book_path: Path, out_dir: Path) -> dict[str, Any]:
                       "stage does not pass without it."}
 
 
+@reviewstate.guarded
 def verdict(out_dir: Path, book_path: Path, meaning_dir: Path) -> dict[str, Any]:
     """What a gate should make of the fluency pass. Never raises.
 
@@ -437,16 +451,14 @@ def verdict(out_dir: Path, book_path: Path, meaning_dir: Path) -> dict[str, Any]
     true without it.
     """
     path = sidecar_path(Path(out_dir))
+    if bookwrite.journal_path(Path(book_path)).exists():
+        return {"ok": False, "refused": "recovery-pending", "detail": "a book transaction needs recovery before approval"}
     if not path.exists():
         return {"ok": False, "refused": "not-reviewed",
                 "detail": f"nobody has read this Persian on its own: there is no "
-                          f"{path}. The meaning review saw the source beside it "
-                          f"and cannot answer {', '.join(RUBRICS)}."}
-    try:
-        found = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as failure:
-        return {"ok": False, "refused": "unreadable-review",
-                "detail": f"{path} could not be read: {failure}"}
+                          f"{path}. An independent Persian pass is still required."}
+    found = reviewstate.read_review(path, stage=STAGE, rubrics=RUBRICS)
+    reviewstate.fluency_decision(found, operation="verdict")
 
     recorded = str(found.get("revision") or "")
     if recorded.partition(":")[0] != DIGEST_VERSION:
@@ -498,6 +510,7 @@ def verdict(out_dir: Path, book_path: Path, meaning_dir: Path) -> dict[str, Any]
             "changed": [item["id"] for item in found.get("changes") or []]}
 
 
+@reviewstate.cli
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     parser = argparse.ArgumentParser(prog="revayat-novel fluency")

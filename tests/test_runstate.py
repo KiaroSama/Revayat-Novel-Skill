@@ -17,6 +17,7 @@ import bookir as ir
 from tests_support import reply_text
 import chunk as chunking
 import runstate
+import reviewstate
 
 
 # --------------------------------------------------------------------------- #
@@ -66,15 +67,14 @@ def test_a_value_that_is_not_a_hash_still_counts(tmp_path):
     assert state.is_stale("chunk", {"book": "abc", "budget": 4000})[0] is True
 
 
-def test_a_corrupt_state_file_is_read_as_empty_rather_than_fatal(tmp_path):
-    """The one file whose whole job is to answer conservatively must not
-    strand a working directory when it is unreadable."""
-    (tmp_path / runstate.STATE_NAME).write_text("{not json", encoding="utf-8")
-    state = runstate.RunState(tmp_path)
-    assert state.recorded("chunk") is None
-    assert state.is_stale("chunk", {"book": "abc"})[0] is True
-    state.record("chunk", {"book": "abc"})
-    assert json.loads((tmp_path / runstate.STATE_NAME).read_text(encoding="utf-8"))
+def test_a_corrupt_state_file_is_preserved_with_a_named_refusal(tmp_path):
+    """Unknown history must not become a fresh mutable empty record."""
+    path = tmp_path / runstate.STATE_NAME
+    path.write_text("{not json", encoding="utf-8")
+    with pytest.raises(reviewstate.Refused) as refusal:
+        runstate.RunState(tmp_path).record("chunk", {"book": "abc"})
+    assert refusal.value.reason == "unreadable-state"
+    assert path.read_text(encoding="utf-8") == "{not json"
 
 
 def test_an_unknown_stage_is_rejected(tmp_path):

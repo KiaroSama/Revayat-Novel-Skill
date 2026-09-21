@@ -395,15 +395,8 @@ def test_a_pass_does_not_survive_the_persian_changing(translated, settled, tmp_p
     assert decided["refused"] == "stale-review"
 
 
-def test_the_same_edits_proposed_twice_stop_the_loop(translated, settled, tmp_path):
-    """Two identical blind passes mean the sentence is not the problem.
-
-    The second one is now the refusal, not the third: the episode records the
-    wording each proposal was made *from*, and the Persian has not moved between
-    the two, so nothing has been learned. The old counter needed a third pass
-    because it compared whole-round signatures and cleared them whenever the
-    revision moved — which applying an edit does.
-    """
+def test_distinct_blind_reviews_without_progress_stop_the_loop(translated, settled, tmp_path):
+    """A fresh review event with unchanged evidence still exhausts the episode."""
     out = tmp_path / "fluency"
     fluency.write_sheets(translated, out, settled)
     proposal = f"++ b00001 calque\n{SMOOTHED}\n!! reviewed sheet_0001\n"
@@ -412,6 +405,7 @@ def test_the_same_edits_proposed_twice_stop_the_loop(translated, settled, tmp_pa
     first = fluency.record(out, translated)
     assert first["ok"] is True
 
+    _reply(out, "sheet_0001", "Second reading of the unchanged passage.\n" + proposal)
     second = fluency.record(out, translated)
     assert second["ok"] is False
     assert second["refused"] == "no-new-evidence"
@@ -474,7 +468,7 @@ def test_a_meaning_findings_file_is_not_read_as_edits():
     assert edits == [], (
         "a semantic finding parses as an edit, so its prose argument would be "
         "written into the book as Persian")
-    assert problems == []
+    assert any("foreign fluency control" in problem for problem in problems)
 
 
 # --------------------------------------------------------------------------- #

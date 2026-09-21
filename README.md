@@ -1,5 +1,9 @@
 # Revayat Novel — روایت
 
+[![CI](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml)
+[![Python 3.10 or newer](https://img.shields.io/badge/Python-3.10%2B-blue)](skills/revayat-novel/requirements.txt)
+[![GPL 3.0 or later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue)](LICENSE)
+
 **Translate a whole book into publication-quality Persian, and get a Word file a publisher could work from.**
 
 An agent skill for Claude Code, Kiro, Codex, Cursor, Cline and any other coding
@@ -7,6 +11,12 @@ agent that can read a `SKILL.md`. It handles the parts that make book translatio
 actually hard: scanned pages, illustrations that must keep their size and place,
 names that must not drift across forty chapters, and Persian typography that has
 to be right rather than approximately right.
+
+Web novels can start from a website link or ordered saved HTML/text chapters;
+the bundled [intake workflow](skills/revayat-novel/references/web-novels.md) preserves
+source snapshots and resumes without overwriting translated work. Native DOCX/PDF
+book guidance ships inside the skill. Optional parallel translation and editing
+asks the user first; one coordinator keeps terminology, integration and QA consistent.
 
 <div align="left"><a href="LICENSE">GPL-3.0 licensed</a></div>
 <div align="right"><a href="README.fa.md">فارسی</a></div>
@@ -131,8 +141,8 @@ $PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pag
 # Finish the published text *before* anybody reads it: typography is mechanical
 # and the title page is published prose. Both move the revision the approvals
 # below are bound to, so running them afterwards makes those approvals stale.
+#   … set meta.title_target / meta.author_target through bookwrite.transaction …
 $PY $S/revayat-novel.py falint fix --book work/book.json
-#   … and translate meta.title_target / meta.author_target in work/book.json …
 
 # Read the Persian against the English. Three rubrics are about meaning and
 # block; two are about style and deliberately do not.
@@ -141,13 +151,12 @@ $PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
 $PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
 $PY $S/revayat-novel.py meaning status --book work/book.json --out work/review
 
-# Then read the Persian with the English taken away — the one question a
-# bilingual reviewer cannot answer, because they read the English behind it.
+# An independent Persian reading complements the source-grounded review.
 $PY $S/revayat-novel.py fluency sheets --book work/book.json --out work/fluency --meaning work/review
 #   … read work/fluency/sheet_NNNN.md, propose replacements in out_sheet_NNNN.md …
 $PY $S/revayat-novel.py fluency record --book work/book.json --out work/fluency
 $PY $S/revayat-novel.py fluency apply  --book work/book.json --out work/fluency
-#   … the book moved, so re-run the four `meaning` commands above: that re-run
+#   … the book moved, so repeat the complete `meaning` review above: that re-run
 #       is the comparison against the source, and nothing passes without it …
 $PY $S/revayat-novel.py fluency status --book work/book.json --out work/fluency --meaning work/review
 
@@ -186,10 +195,9 @@ book.pdf / .epub / .docx
    merge ── every @@ id must return exactly once, or it is a named error
         │
         ▼
-   bilingual review ── does the Persian say what the English said? meaning
-        │               blocks, style is recorded and never sent back
+   metadata + Persian typography ── settle the published text first
         ▼
-   Persian typography ── ZWNJ, punctuation, digits; protected regions untouched
+   bilingual review → independent Persian review → renewed source confirmation
         │
         ▼
    quality gates ── coverage, footnote parity, omissions, image hashes, glossary
@@ -255,10 +263,28 @@ Fixtures are generated, not committed: the suite builds its own PDF, EPUB and
 DOCX, so it stays fast and no third-party book text is vendored in.
 
 `tests/e2e_pipeline.py` runs every stage against a generated book — extract,
-glossary, chunk, merge, bilingual review, typography, QA, build, package
+glossary, chunk, merge, typography, semantic reviews, QA, build, package
 verification — so a break
 in the seam between two stages fails even when each module's own tests pass. CI
 runs it on Linux, macOS and Windows.
+
+`python tests/run_audit.py --repo .` runs normal collection including the shared
+contract regressions, retaining JUnit and a result record under `.pytest-tmp/audit/`.
+Reviewer replies in those fixtures simulate protocol states; they do not certify
+linguistic quality. The original benchmark accepts multiple faithful renderings
+and reports unseen ones as `unknown`, without an overall quality score.
+
+See [review-contracts.md](skills/revayat-novel/references/review-contracts.md) for
+explicit approval states, immutable reply archives, retryable freshness refusals
+and legacy migration. An empty edit list or unknown digest never approves delivery.
+Every agent using the skill must keep a UTF-8 workflow log beside the translated
+file, recording translation, corrections and verification. The
+[preservation rules](skills/revayat-novel/references/preservation-and-logging.md)
+also require original page dimensions, original image resolution and documented,
+visually checked derivatives when poor images need improvement.
+[Source-language profiles](skills/revayat-novel/references/source-languages.md)
+cover Japanese, Korean, Chinese, French, Spanish and English to Persian, with
+evidence and uncertainty rules rather than claims of automatic literary quality.
 
 ## Credits
 

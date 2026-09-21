@@ -29,6 +29,7 @@ from typing import Any, Iterable
 import bookir as ir
 import falint
 import runstate
+import reviewstate
 
 # The store and the candidate scan live in `glossentry`; everything here is the
 # half that makes a book honour them. Re-exported because `gl.make_entry`,
@@ -483,6 +484,7 @@ def check(glossary: dict[str, Any], book: dict[str, Any]) -> list[dict[str, Any]
 # CLI
 # --------------------------------------------------------------------------- #
 
+@reviewstate.cli
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     parser = argparse.ArgumentParser(prog="revayat-novel glossary")

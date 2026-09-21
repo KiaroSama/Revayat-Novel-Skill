@@ -429,8 +429,8 @@ def test_status_hands_back_a_finished_page_whose_text_moved(tmp_path):
     assert moved["next"] == 1, "a stale page must be handed back, not skipped"
 
 
-def test_status_without_a_book_says_it_checked_nothing(tmp_path):
-    """An unverifiable report must not read like a verified one."""
+def test_status_resolves_the_manifest_book_even_without_an_explicit_path(tmp_path):
+    """Omitting a CLI argument must not bypass the stored-book freshness check."""
     import runstate
 
     book_path = _chapters(tmp_path)
@@ -443,8 +443,8 @@ def test_status_without_a_book_says_it_checked_nothing(tmp_path):
     state.set_page(1, "accepted")
 
     blind = pagerun.status(pages_dir)
-    assert blind["freshness"] == "unchecked"
-    assert blind["stale"] == []
+    assert blind["freshness"] == "checked"
+    assert blind["stale"] == [1]
 
     seen = pagerun.status(pages_dir, book_path)
     assert seen["freshness"] == "checked"

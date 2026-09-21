@@ -1,7 +1,7 @@
 {
   "schema": "revayat-novel/benchmark@1",
   "about": [
-    "An original bilingual benchmark: English written for this file, with several",
+    "An original multilingual benchmark: source passages written for this file, with several",
     "acceptable Persian renderings each. Rights-clean on purpose — no published",
     "translation is quoted — which is also its limit: it measures translation, not",
     "extraction from a real book.",
@@ -20,7 +20,8 @@
     "modality, speaker attribution, irony, a second idiom, dialogue register and a",
     "clause split across segments. Each was written for this file and checked",
     "against the rubric it states; none was reviewed by an independent translator,",
-    "and that is a limit of the benchmark rather than a claim about it."
+    "and that is a limit of the benchmark rather than a claim about it.",
+    "The shared-contract audit adds eight original contextual controls and five language-specific Persian-target controls (ja, ko, zh, fr, es). These are recorded comparison cases, not an independent assessment of a real book or a general translation-quality certificate."
   ],
   "cases": [
     {
@@ -266,6 +267,179 @@
         }
       ],
       "rationale": "The failure a segmented worksheet produces: the sentence still parses, the length ratio is inside the band, and one of its two reasons is missing."
+    },
+    {
+      "id": "negctx-02",
+      "axis": "contextual negation",
+      "source": "I never said that Nora stole the key. I said she borrowed it.",
+      "accepts": [
+        "من هرگز نگفتم نورا کلید را دزدیده است. گفتم آن را قرض گرفته است.",
+        "اصلاً نگفتم نورا کلید را دزدیده؛ گفتم کلید را قرض گرفته."
+      ],
+      "fails": [
+        {
+          "text": "گفتم نورا کلید را ندزدیده است. گفتم آن را قرض گرفته است.",
+          "why": "Negation belongs to saying, not to the stealing proposition."
+        }
+      ],
+      "rationale": "Contextual meaning control: Negation belongs to saying, not to the stealing proposition. Faithful natural alternatives are accepted; optional taste changes are not errors."
+    },
+    {
+      "id": "scope-02",
+      "axis": "restrictive scope",
+      "source": "Only the guards who heard the bell left; the others stayed.",
+      "accepts": [
+        "فقط نگهبانانی که صدای زنگ را شنیدند رفتند؛ بقیه ماندند.",
+        "از میان نگهبان‌ها، تنها کسانی رفتند که زنگ را شنیده بودند؛ دیگران ماندند."
+      ],
+      "fails": [
+        {
+          "text": "نگهبان‌ها صدای زنگ را شنیدند و همگی رفتند؛ دیگران ماندند.",
+          "why": "The relative clause selects a subset, rather than describing all guards."
+        }
+      ],
+      "rationale": "Contextual meaning control: The relative clause selects a subset, rather than describing all guards. Faithful natural alternatives are accepted; optional taste changes are not errors."
+    },
+    {
+      "id": "role-02",
+      "axis": "speaker and participant attribution",
+      "source": "Mina handed Sara the receipt after Sara paid Mina.",
+      "accepts": [
+        "مینا پس از آنکه سارا پول را به او پرداخت، رسید را به سارا داد.",
+        "سارا به مینا پول داد و بعد مینا رسید را به سارا تحویل داد."
+      ],
+      "fails": [
+        {
+          "text": "سارا پس از آنکه مینا پول را به او پرداخت، رسید را به مینا داد.",
+          "why": "Both transfer directions must remain attached to the named participants."
+        }
+      ],
+      "rationale": "Contextual meaning control: Both transfer directions must remain attached to the named participants. Faithful natural alternatives are accepted; optional taste changes are not errors."
+    },
+    {
+      "id": "modal-02",
+      "axis": "modality",
+      "source": "You may leave now; you do not have to wait for me.",
+      "accepts": [
+        "می‌توانی همین حالا بروی؛ لازم نیست منتظر من بمانی.",
+        "اجازه داری الان بروی؛ مجبور نیستی برای من صبر کنی."
+      ],
+      "fails": [
+        {
+          "text": "باید همین حالا بروی؛ لازم نیست منتظر من بمانی.",
+          "why": "Permission is not an obligation; the second clause confirms freedom to leave."
+        }
+      ],
+      "rationale": "Contextual meaning control: Permission is not an obligation; the second clause confirms freedom to leave. Faithful natural alternatives are accepted; optional taste changes are not errors."
+    },
+    {
+      "id": "quant-02",
+      "axis": "quantities",
+      "source": "Exactly two of the five letters were unsigned, and neither was dated.",
+      "accepts": [
+        "دقیقاً دو تا از پنج نامه امضا نداشتند و هیچ‌کدام از آن دو تاریخ هم نداشت.",
+        "از پنج نامه، درست دو نامه بی‌امضا بود و آن دو هیچ‌یک تاریخ نداشتند."
+      ],
+      "fails": [
+        {
+          "text": "دست‌کم دو تا از پنج نامه امضا نداشتند و هیچ‌کدام از آن دو تاریخ هم نداشت.",
+          "why": "An exact count cannot become a lower bound; neither refers to those two letters."
+        }
+      ],
+      "rationale": "Contextual meaning control: An exact count cannot become a lower bound; neither refers to those two letters. Faithful natural alternatives are accepted; optional taste changes are not errors."
+    },
+    {
+      "id": "idiom-03",
+      "axis": "idiom",
+      "source": "When the guests arrived, he broke the ice with a joke.",
+      "accepts": [
+        "وقتی مهمان‌ها رسیدند، با شوخی‌ای یخ جمع را شکست.",
+        "با رسیدن مهمانان، او با یک شوخی فضای جمع را صمیمی کرد."
+      ],
+      "fails": [
+        {
+          "text": "وقتی مهمان‌ها رسیدند، با یک شوخی تکه‌یخ را شکست.",
+          "why": "The idiom describes easing social tension, not breaking a physical object."
+        }
+      ],
+      "rationale": "Contextual meaning control: The idiom describes easing social tension, not breaking a physical object. Faithful natural alternatives are accepted; optional taste changes are not errors."
+    },
+    {
+      "id": "irony-02",
+      "axis": "irony",
+      "source": "The roof began to leak. 'Excellent timing,' she said, moving the bed.",
+      "accepts": [
+        "سقف شروع کرد به چکه کردن. درحالی‌که تخت را جابه‌جا می‌کرد گفت: «چه وقت خوبی!»",
+        "سقف چکه کرد. او تخت را کنار می‌کشید و گفت: «عجب موقع مناسبی!»"
+      ],
+      "fails": [
+        {
+          "text": "سقف شروع کرد به چکه کردن. او خوشحال از زمان مناسبش، تخت را جابه‌جا کرد.",
+          "why": "The adverse event supplies the irony; sincere pleasure is an invented attitude."
+        }
+      ],
+      "rationale": "Contextual meaning control: The adverse event supplies the irony; sincere pleasure is an invented attitude. Faithful natural alternatives are accepted; optional taste changes are not errors."
+    },
+    {
+      "id": "referent-02",
+      "axis": "cross-segment references",
+      "source": "Omid put the blue folder beside the red one. Before leaving, he locked the latter in the drawer.",
+      "accepts": [
+        "امید پوشهٔ آبی را کنار پوشهٔ قرمز گذاشت. پیش از رفتن، دومی را در کشو گذاشت و درِ کشو را قفل کرد.",
+        "امید پوشهٔ آبی را کنار قرمز گذاشت. قبل از رفتن، پوشهٔ قرمز را داخل کشو گذاشت و کشو را قفل کرد."
+      ],
+      "fails": [
+        {
+          "text": "امید پوشهٔ آبی را کنار پوشهٔ قرمز گذاشت. پیش از رفتن، پوشهٔ آبی را در کشو گذاشت و درِ کشو را قفل کرد.",
+          "why": "The latter refers across the sentence boundary to the red folder, not the blue one."
+        }
+      ],
+      "rationale": "Contextual meaning control: The latter refers across the sentence boundary to the red folder, not the blue one. Faithful natural alternatives are accepted; optional taste changes are not errors."
+    },
+    {
+      "id": "ja-role-01",
+      "source_language": "ja",
+      "axis": "participant roles",
+      "source": "太郎は花子に本を返した。彼女は礼を言った。",
+      "accepts": ["تارو کتاب را به هاناکو پس داد. هاناکو تشکر کرد.", "تارو کتاب را به هاناکو برگرداند. او تشکر کرد."],
+      "fails": [{"text": "هاناکو کتاب را به تارو پس داد. تارو تشکر کرد.", "why": "The giver, recipient and subsequent speaker have been reversed."}],
+      "rationale": "Original Japanese role and reference control; not independently reviewed or evidence of general Japanese-to-Persian proficiency."
+    },
+    {
+      "id": "ko-prohibition-01",
+      "source_language": "ko",
+      "axis": "modality",
+      "source": "문을 열지 마세요.",
+      "accepts": ["لطفاً در را باز نکنید.", "در را باز نکنید."],
+      "fails": [{"text": "لطفاً در را باز کنید.", "why": "A prohibition became a positive request to open the door."}],
+      "rationale": "Original Korean prohibition control; wording may preserve politeness without adding a literal please."
+    },
+    {
+      "id": "zh-quantity-01",
+      "source_language": "zh",
+      "axis": "quantities",
+      "source": "他买了三万本书。",
+      "accepts": ["او سی هزار جلد کتاب خرید.", "او سی هزار کتاب خرید."],
+      "fails": [{"text": "او سه هزار جلد کتاب خرید.", "why": "Three ten-thousands is thirty thousand, not three thousand."}],
+      "rationale": "Original Chinese numeral-unit control; Persian need not add a gender absent from its pronouns."
+    },
+    {
+      "id": "fr-restriction-01",
+      "source_language": "fr",
+      "axis": "negation scope",
+      "source": "Je ne connais que son nom.",
+      "accepts": ["فقط نامش را می‌دانم.", "تنها اسمش را می‌دانم."],
+      "fails": [{"text": "نامش را نمی‌دانم.", "why": "Restrictive ne ... que means only; it does not negate knowing the name."}],
+      "rationale": "Original French restriction control, separating fluent Persian from correct scope."
+    },
+    {
+      "id": "es-uncertainty-01",
+      "source_language": "es",
+      "axis": "modality",
+      "source": "Tal vez venga mañana.",
+      "accepts": ["شاید فردا بیاید.", "ممکن است فردا بیاید."],
+      "fails": [{"text": "حتماً فردا می‌آید.", "why": "An uncertain possibility became a certainty; the omitted subject does not justify inventing an identity."}],
+      "rationale": "Original Spanish uncertainty control. No exact-match case certifies literary translation quality."
     }
   ]
 }
