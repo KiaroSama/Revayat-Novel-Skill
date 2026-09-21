@@ -30,8 +30,9 @@
 pymupdf>=1.24.3          # PDF text, geometry and original image bytes
 python-docx>=1.1         # DOCX reading and writing
 beautifulsoup4>=4.12     # EPUB (XHTML) parsing
-lxml>=5.0                # OOXML manipulation (also a python-docx dependency)
-pillow>=10.0             # removing a colour watermark from scanned pages
+# Security floors: current XML entity and image-decoder fixes; Python 3.10 supported.
+lxml>=6.1.3              # OOXML manipulation (also a python-docx dependency)
+pillow>=12.3.0           # removing a colour watermark from scanned pages
 
 # Development only.
 # 9.0.3 fixes GHSA-6w46-j5rx-g56g and still supports Python 3.10.
