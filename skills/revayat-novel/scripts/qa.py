@@ -36,6 +36,7 @@ import glossary as gl
 import notegraph
 import published
 import signoff
+import reviewstate
 from qanaming import _check_first_mentions  # noqa: F401  (qa's own gate list)
 
 #: Persian usually runs a little longer than English. Outside this band a block
@@ -523,6 +524,7 @@ def _named_glossary(given: str | None) -> tuple[dict[str, Any] | None, Path | No
     return gl.load(path), None
 
 
+@reviewstate.cli
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     parser = argparse.ArgumentParser(prog="revayat-novel qa", description=__doc__)

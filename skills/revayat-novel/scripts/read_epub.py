@@ -97,7 +97,8 @@ def _styled(text: str, bold: bool, italic: bool) -> list[dict[str, Any]]:
     return spans
 
 
-def _inline_spans(node: Tag, bold: bool = False, italic: bool = False
+def _inline_spans(node: Tag, bold: bool = False, italic: bool = False,
+                  notes: dict[int, str] | None = None
                   ) -> list[dict[str, Any]]:
     """Flatten an element's inline content into span dicts."""
     spans: list[dict[str, Any]] = []
@@ -108,6 +109,11 @@ def _inline_spans(node: Tag, bold: bool = False, italic: bool = False
                 spans.extend(_styled(text, bold, italic))
             continue
         if not isinstance(child, Tag) or child.name in SKIP_TAGS:
+            continue
+        if notes and id(child) in notes:
+            span = _span("")
+            span["footnote"] = notes[id(child)]
+            spans.append(span)
             continue
         if child.name == "br":
             spans.append(_span(" ", bold=bold, italic=italic))
@@ -123,16 +129,14 @@ def _inline_spans(node: Tag, bold: bool = False, italic: bool = False
             child,
             bold or child.name in BOLD_TAGS,
             italic or child.name in ITALIC_TAGS,
+            notes,
         ))
     return spans
 
 
 def _markup(node: Tag, footnote_marks: dict[int, str]) -> str:
     """Inline markup for a block element, with footnote tokens re-inserted."""
-    text = ir.render_spans(_inline_spans(node))
-    marker = footnote_marks.get(id(node))
-    if marker:
-        text = f"{text.rstrip()}[[fn:{marker}]]"
+    text = ir.render_spans(_inline_spans(node, notes=footnote_marks))
     return text.strip()
 
 
@@ -232,14 +236,23 @@ def _is_note_link(tag: Tag) -> bool:
     return isinstance(parent, Tag) and parent.name in {"sup", "sub"}
 
 
-def _resolve_note_body(soup: BeautifulSoup, anchor: str) -> str:
-    target = soup.find(id=anchor)
+def _note_body_node(soup: BeautifulSoup, anchor: str) -> Tag | None:
+    target = soup.find(id=unquote(anchor))
     if target is None:
-        return ""
+        return None
     # A note is often a <p id=..> inside an <aside>/<div>; prefer the container
     # when the id sits on a bare backlink anchor with no text of its own.
     if isinstance(target, Tag) and not target.get_text(strip=True) and target.parent:
         target = target.parent
+        if any(_is_note_link(link) for link in target.find_all("a")):
+            raise ValueError("an empty note anchor would include note references in its body; identify a dedicated note container")
+    return target if isinstance(target, Tag) else None
+
+
+def _resolve_note_body(soup: BeautifulSoup, anchor: str) -> str:
+    target = _note_body_node(soup, anchor)
+    if target is None:
+        return ""
     text = re.sub(r"\s+", " ", target.get_text(" ", strip=True))
     # Strip a leading marker such as "12." or "[3]" that the ebook rendered
     # as literal text; Word will number the footnote itself.
@@ -314,6 +327,11 @@ def read_epub(
         book["blocks"] = [b for b in blocks if _keep(b)]
         book["footnotes"] = [f for f in footnotes if f["text"]]
         _drop_orphan_footnote_tokens(book)
+        by_note = {note["id"]: note for note in book["footnotes"]}
+        for block in ir.iter_text_blocks(book):
+            for reference in ir.footnote_refs(block.get("text") or ""):
+                if reference in by_note:
+                    by_note[reference]["anchor_block"] = block["id"]
 
         # Anchors are settled once every document has been read, because a link
         # in chapter 1 can point into chapter 9 and neither knows about the
@@ -342,15 +360,11 @@ def read_epub(
 
 def _harvest_footnotes(soup: BeautifulSoup, footnotes: list[dict[str, Any]],
                        start: int) -> dict[int, str]:
-    """Replace note links with tokens; return ``id(block_tag) -> footnote id``.
-
-    Returns a mapping keyed by the *inline* anchor's nearest block ancestor so
-    the token can be appended when that block is rendered.
-    """
+    """Bind each inline link to its own note, preserving reference positions."""
     marks: dict[int, str] = {}
     index = start
     for link in soup.find_all("a"):
-        if not _is_note_link(link):
+        if link.parent is None or not _is_note_link(link):
             continue
         anchor = urldefrag(link.get("href") or "").fragment
         if not anchor:
@@ -361,19 +375,12 @@ def _harvest_footnotes(soup: BeautifulSoup, footnotes: list[dict[str, Any]],
         index += 1
         note = ir.make_footnote(index, anchor_block="", text=body, origin="source")
         footnotes.append(note)
-        holder = link.parent if link.parent and link.parent.name in {"sup", "sub"} else link
-        block = holder.find_parent(lambda t: isinstance(t, Tag) and t.name in BLOCK_TAGS)
-        if block is not None:
-            marks[id(block)] = note["id"]
-        holder.decompose()
+        marks[id(link)] = note["id"]
 
         # Remove the note body itself so it is not also emitted as a paragraph.
-        target = soup.find(id=anchor)
+        target = _note_body_node(soup, anchor)
         if isinstance(target, Tag):
-            container = target
-            if container.parent and container.parent.name in {"aside", "li", "div"}:
-                container = container.parent
-            container.decompose()
+            target.decompose()
     return marks
 
 
@@ -426,10 +433,7 @@ def _emit_mixed(node: Tag, add, archive, doc_path, asset_dir, seen, marks,
     for child in node.children:
         if isinstance(child, Tag) and child.name in {"img", "image"}:
             _add_image(child, add, archive, doc_path, asset_dir, seen, page)
-    stripped = BeautifulSoup(str(node), "html.parser")
-    for image in stripped.find_all(["img", "image"]):
-        image.decompose()
-    text, extra = _prose(stripped, marks, warn)
+    text, extra = _prose(node, marks, warn)
     if text:
         add("paragraph", page=page, text=text, **extra)
 

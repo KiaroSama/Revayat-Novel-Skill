@@ -57,6 +57,15 @@ on:
       - "requirements-lint.txt"
       - "dependency-floors.json"
       - ".github/workflows/dependency-audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "skills/revayat-novel/requirements.txt"
+      - "skills/revayat-novel/requirements-optional.txt"
+      - "constraints-ci.txt"
+      - "requirements-lint.txt"
+      - "dependency-floors.json"
+      - ".github/workflows/dependency-audit.yml"
 
 permissions:
   contents: read

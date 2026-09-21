@@ -48,11 +48,13 @@ from pathlib import Path
 from typing import Any
 
 import bookir as ir
+import bookwrite
 import published
 import repairlog
 import reviewsheet
+import reviewstate
 
-SCHEMA = "revayat-novel/meaning@1"
+SCHEMA = "revayat-novel/meaning@2"
 
 #: Which stage is asking. Part of every review token, so a reply written for the
 #: other stage is refused by name instead of parsed for records it does not carry.
@@ -61,7 +63,7 @@ STAGE = "meaning"
 #: Tagged, because a digest whose formula is unknown cannot be compared — only
 #: recomputed or refused. The page route learned this the hard way: two modules
 #: wrote different hashes under one key and each believed the other's.
-DIGEST_VERSION = "meaning2"
+DIGEST_VERSION = "meaning3"
 
 #: What the reviewer is asked, why a machine cannot be asked it instead, and one
 #: contrastive pair each. The examples are the calibration: a rubric without them
@@ -227,6 +229,8 @@ def sheet(units: list[dict[str, str]], *, sheet_id: str, rev: str,
                 "Check it against the passage it belongs to: does the book "
                 "support what it says, and does it belong here at all?",
             ]
+            if unit.get("context"):
+                out += [f"[anchor {unit['anchor']}]", unit["context"]]
         else:
             out += ["[source]", str(unit["source"])]
         out += [
@@ -237,6 +241,7 @@ def sheet(units: list[dict[str, str]], *, sheet_id: str, rev: str,
     return "\n".join(out) + "\n"
 
 
+@reviewstate.guarded
 def write_sheets(book_path: Path, out_dir: Path, *,
                  per_sheet: int = SHEET_UNITS) -> dict[str, Any]:
     # Bounded before a single file is touched. `range(0, n, -1)` yields nothing,
@@ -247,6 +252,8 @@ def write_sheets(book_path: Path, out_dir: Path, *,
         return {"ok": False, "refused": "bad-per-sheet", "detail": trouble}
 
     book = ir.load_book(book_path)
+    reviewstate.read_review(sidecar_path(out_dir), stage=STAGE, rubrics=RUBRICS,
+                            optional=True, history_only=True)
     units = pairs(book)
     if not units:
         return {"ok": False, "refused": "nothing-to-review",
@@ -293,47 +300,8 @@ def write_sheets(book_path: Path, out_dir: Path, *,
 
 def read_findings(text: str) -> tuple[list[dict[str, str]], list[str], list[str]]:
     """``(findings, sheets claimed reviewed, problems)``."""
-    findings: list[dict[str, str]] = []
-    claimed: list[str] = []
-    problems: list[str] = []
-    current: dict[str, str] | None = None
-    buffer: list[str] = []
-
-    def flush() -> None:
-        if current is not None:
-            current["detail"] = "\n".join(buffer).strip()
-            findings.append(current)
-
-    for line in text.splitlines():
-        stripped = line.strip()
-        header = FINDING.match(stripped)
-        if header:
-            flush()
-            current = {"id": header.group("id"), "rubric": header.group("rubric")}
-            buffer = []
-            continue
-        reviewed = REVIEWED.match(stripped)
-        if reviewed:
-            flush()
-            current = None
-            buffer = []
-            claimed.append(reviewed.group("sheet"))
-            continue
-        if current is not None:
-            buffer.append(line)
-    flush()
-
-    for finding in findings:
-        if finding["rubric"] not in RUBRICS:
-            problems.append(
-                f"{finding['id']}: `{finding['rubric']}` is not a rubric "
-                f"({', '.join(RUBRICS)}). A finding nobody can classify has no "
-                f"severity, so it would be neither blocking nor reported")
-        if not finding.get("detail"):
-            problems.append(
-                f"{finding['id']} / {finding['rubric']}: no argument given. A "
-                f"finding without one cannot be acted on or disagreed with")
-    return findings, claimed, problems
+    return reviewsheet.parse_records(text, stage=STAGE, header=FINDING,
+                                     rubrics=RUBRICS, payload="detail")
 
 
 def blocking(findings: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -352,14 +320,16 @@ def sidecar_path(out_dir: Path) -> Path:
     return Path(out_dir) / "review.json"
 
 
+@reviewstate.guarded
 def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
     """File the reviewer's findings against the revision they were made from."""
     out_dir = Path(out_dir)
+    before_book = bookwrite.file_digest(Path(book_path))
     manifest_path = out_dir / "manifest.json"
     if not manifest_path.exists():
         return {"ok": False, "refused": "no-sheets",
                 "detail": f"there is no {manifest_path}; write the sheets first"}
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = reviewstate.object_file(manifest_path)
 
     units = pairs(ir.load_book(book_path))
     rev = revision(units)
@@ -371,14 +341,19 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
 
     # The sheets must still cover the book. A manifest naming two sheets says
     # nothing about whether those two between them asked about every unit.
-    gaps = reviewsheet.coverage_problems(manifest.get("owned") or {},
-                                         [unit["id"] for unit in units])
+    by_id = {unit["id"]: unit for unit in units}
+    gaps = reviewsheet.manifest_problems(
+        manifest, stage=STAGE, revision=rev, inventory=[unit["id"] for unit in units],
+        policy=rubric_table(), out_dir=out_dir,
+        render=lambda sid, ids, request: sheet([by_id[i] for i in ids],
+            sheet_id=sid, rev=rev, request=request))
     if gaps:
         return {"ok": False, "refused": "incomplete-coverage", "problems": gaps}
 
     findings: list[dict[str, str]] = []
     problems: list[str] = []
     requests = manifest.get("requests") or {}
+    responses = {}
     for sheet_id in manifest.get("sheets") or []:
         reply = out_dir / f"out_{sheet_id}.md"
         if not reply.exists():
@@ -386,6 +361,7 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
                             f"reported on this sheet")
             continue
         text = reply.read_text(encoding="utf-8")
+        responses[sheet_id] = text
         # Checked against **its own** sheet and its own token, never against the
         # union of every claim in the directory. Unioning them let one reply
         # discharge two sheets while the second one was empty, and left an old
@@ -413,12 +389,12 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
     if problems:
         return {"ok": False, "refused": "incomplete", "problems": problems}
 
-    previous = {}
-    if sidecar_path(out_dir).exists():
-        try:
-            previous = json.loads(sidecar_path(out_dir).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            previous = {}
+    before_side = bookwrite.file_digest(sidecar_path(out_dir))
+    previous = reviewstate.read_review(sidecar_path(out_dir), stage=STAGE,
+                                       rubrics=RUBRICS, optional=True, history_only=True)
+    event = reviewsheet.event_identity(manifest, responses)
+    if previous.get("event") == event:
+        return previous
     # Never reset. The previous version cleared it whenever the revision moved —
     # which is what a repair does — so the history was empty at every round and
     # the budget was unreachable by construction. It is now the evidence trail:
@@ -432,7 +408,6 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
     # ``(unit, rubric)``, surviving every edit to the text, closed when a
     # complete review stops reporting it. `repairlog` owns that rule so the
     # request loop and this recorder cannot reach different conclusions.
-    by_id = {unit["id"]: unit for unit in units}
     episodes = dict(previous.get("episodes") or {})
     seen: set[str] = set()
     for finding in meaning_findings:
@@ -440,13 +415,16 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
         key = repairlog.issue_key(finding["id"], finding["rubric"])
         seen.add(key)
         repairlog.attempt(episodes, key=key,
-                          source=repairlog.wording(unit.get("source", "")),
+                          source=repairlog.wording(published.repair_source(unit)),
                           text=unit.get("target", ""),
-                          argument=finding.get("detail", ""), revision=rev)
+                          argument=finding.get("detail", ""), revision=rev, event=event)
     resolved = repairlog.close_absent(episodes, seen=seen, revision=rev)
 
     written = {
         "schema": SCHEMA,
+        "book": str(Path(book_path).resolve()),
+        "event": event,
+        "status": "rejected" if meaning_findings else "approved",
         "revision": rev,
         "round": len(history) + 1,
         "findings": findings,
@@ -466,11 +444,13 @@ def record(out_dir: Path, book_path: Path) -> dict[str, Any]:
         "history": history + [blocked],
         "ok": not meaning_findings,
     }
-    ir.write_text(sidecar_path(out_dir),
-                  json.dumps(written, ensure_ascii=False, indent=1) + "\n")
+    with bookwrite.transaction(book_path, actor="meaning.record", expect=before_book) as tx:
+        tx.side(sidecar_path(out_dir).resolve(),
+                json.dumps(written, ensure_ascii=False, indent=1) + "\n", expect=before_side)
     return written
 
 
+@reviewstate.guarded
 def verdict(out_dir: Path, rev: str) -> dict[str, Any]:
     """What a gate should make of this review. Never raises."""
     path = sidecar_path(out_dir)
@@ -479,11 +459,9 @@ def verdict(out_dir: Path, rev: str) -> dict[str, Any]:
                 "detail": f"nobody has read this translation against its source: "
                           f"there is no {path}. The deterministic gates do not "
                           f"answer {', '.join(RUBRICS)}."}
-    try:
-        found = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as failure:
-        return {"ok": False, "refused": "unreadable-review",
-                "detail": f"{path} could not be read: {failure}"}
+    found = reviewstate.read_review(path, stage=STAGE, rubrics=RUBRICS)
+    if found.get("book") and bookwrite.journal_path(Path(found["book"])).exists():
+        return {"ok": False, "refused": "recovery-pending", "detail": "recover the book transaction before using its approval"}
 
     recorded = str(found.get("revision") or "")
     if recorded.partition(":")[0] != DIGEST_VERSION:
@@ -505,12 +483,13 @@ def verdict(out_dir: Path, rev: str) -> dict[str, Any]:
     return {"ok": True, **found}
 
 
+@reviewstate.guarded
 def repair_requests(out_dir: Path) -> dict[str, Any]:
     """Which units to translate again — or why this should stop asking."""
     path = sidecar_path(Path(out_dir))
     if not path.exists():
         return {"ok": False, "refused": "not-reviewed", "units": []}
-    found = json.loads(path.read_text(encoding="utf-8"))
+    found = reviewstate.read_review(path, stage=STAGE, rubrics=RUBRICS)
     current = list(found.get("blocking") or [])
 
     if not current:
@@ -538,6 +517,7 @@ def repair_requests(out_dir: Path) -> dict[str, Any]:
                          for item in current}}
 
 
+@reviewstate.cli
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     parser = argparse.ArgumentParser(prog="revayat-novel meaning")

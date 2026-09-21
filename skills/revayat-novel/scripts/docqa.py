@@ -58,8 +58,10 @@ import bookir as ir
 import pagecheck
 import qa
 import read_docx
+import published
 import renderqa
 import review
+import reviewstate
 import wordrender
 
 #: Where the finished document's own evidence lives, kept apart from the
@@ -102,7 +104,8 @@ def document_expectations(book: dict[str, Any]) -> dict[str, Any]:
     Deliberately flat and page-free. This is the one question whose answer must
     not depend on where anything landed.
     """
-    texts: list[str] = []
+    texts: list[str] = [unit["target"] for unit in published.units(book)
+                       if unit["part"] == "metadata" and unit["target"]]
     translatable = 0
     images: list[dict[str, Any]] = []
     for block in book.get("blocks", []):
@@ -122,6 +125,7 @@ def document_expectations(book: dict[str, Any]) -> dict[str, Any]:
         if target:
             texts.append(target)
     return {"page": 0, "texts": texts, "images": images,
+            "untranslated": len(published.pending(book)),
             "translatable": translatable, "setup": dict(book.get("page") or {})}
 
 
@@ -527,11 +531,14 @@ def visual_hash(work_dir: Path) -> str:
     report = report_path(Path(work_dir))
     if not report.exists():
         return ""
-    try:
-        return json.loads(report.read_text(encoding="utf-8")).get(
-            "visual_render_sha256", "")
-    except (OSError, json.JSONDecodeError):
-        return ""
+    found = reviewstate.object_file(report)
+    reviewstate.require(found.get("schema") == pagecheck.SCHEMA and found.get("scope") == "document",
+                        "unsupported document render report schema or scope")
+    identity = found.get("visual_render_sha256", "")
+    reviewstate.require(isinstance(identity, str), "document render identity must be a string")
+    reviewstate.require(not identity or (len(identity) == 64 and set(identity) <= set("0123456789abcdef")),
+                        "document render identity must be a SHA-256 digest")
+    return identity
 
 
 def _write(work_dir: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -564,6 +571,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
                           help="what was wrong, in the reviewer's own words")
 
 
+@reviewstate.cli
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     parser = argparse.ArgumentParser(prog="revayat-novel doc-qa",

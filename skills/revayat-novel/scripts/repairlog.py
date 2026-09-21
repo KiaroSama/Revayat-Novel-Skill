@@ -93,6 +93,7 @@ def _fresh(*, source: str, revision: str,
         # an escalation that throws the arguments away leaves nothing to escalate.
         "arguments": [],
         "revisions": [],
+        "events": [],
         # Wordings rejected in earlier episodes of this same issue, carried so a
         # recurrence cannot be used to launder an oscillation.
         "rejected": list(rejected or []),
@@ -107,13 +108,13 @@ def _fresh(*, source: str, revision: str,
 def _archived(episode: dict[str, Any], why: str) -> dict[str, Any]:
     kept = {name: episode.get(name) for name in
             ("opened", "last_seen", "attempts", "source", "wordings",
-             "arguments", "revisions", "state", "closed_at")}
+             "arguments", "revisions", "events", "state", "closed_at")}
     kept["superseded_because"] = why
     return kept
 
 
 def attempt(episodes: dict[str, Any], *, key: str, source: str, text: str,
-            argument: str, revision: str) -> dict[str, Any]:
+            argument: str, revision: str, event: str = "") -> dict[str, Any]:
     """Record one report of one issue and return that episode.
 
     ``episodes`` is mutated and returned by the caller's sidecar write; nothing
@@ -141,6 +142,12 @@ def attempt(episodes: dict[str, Any], *, key: str, source: str, text: str,
             + list(episode.get("wordings") or []),
             recurrences=int(episode.get("recurrences") or 0) + 1)
 
+    events = list(episode.get("events") or [""] * episode["attempts"])
+    if event and events and events[-1] == event:
+        # Several arguments in one review are one attempt at the same wording.
+        episode["arguments"][-1] += "\n\n" + argument
+        return episode
+    episode["events"] = events + [event]
     episode["attempts"] = int(episode.get("attempts") or 0) + 1
     episode["wordings"] = list(episode.get("wordings") or []) + [wording(text)]
     episode["arguments"] = list(episode.get("arguments") or []) + [argument]

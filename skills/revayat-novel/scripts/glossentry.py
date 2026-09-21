@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import bookir as ir
+import reviewstate
 
 SCHEMA = "revayat-novel/glossary@1"
 
@@ -111,10 +112,27 @@ def new_glossary() -> dict[str, Any]:
 def load(path: Path) -> dict[str, Any]:
     if not path.exists():
         return new_glossary()
-    data = json.loads(path.read_text(encoding="utf-8"))
-    data.setdefault("policy", new_glossary()["policy"])
-    data.setdefault("entries", [])
-    data.setdefault("voices", [])
+    data = reviewstate.object_file(path)
+    reviewstate.require(data.get("schema") == SCHEMA, "unsupported glossary schema")
+    reviewstate.require(isinstance(data.get("policy"), dict)
+                        and isinstance(data.get("entries"), list)
+                        and isinstance(data.get("voices"), list), "invalid glossary fields")
+    for name in ("lock_canonical", "keep_aliases_distinct"):
+        reviewstate.require(type(data["policy"].get(name)) is bool, f"invalid glossary policy {name}")
+    reviewstate.require(isinstance(data["policy"].get("book_voice", ""), str), "invalid book voice")
+    for entry in data["entries"]:
+        reviewstate.require(isinstance(entry, dict) and isinstance(entry.get("id"), str)
+                            and isinstance(entry.get("source"), str), "invalid glossary entry")
+        for field in ("target", "first_form", "later_form", "notes", "first_block_id"):
+            reviewstate.require(isinstance(entry.get(field, ""), str), f"invalid glossary {field}")
+        targets = entry.get("alias_targets", [])
+        reviewstate.require(reviewstate.strings(entry.get("aliases", []))
+                            and (reviewstate.strings(targets) or isinstance(targets, dict)
+                                 and all(isinstance(v, str) for v in targets.values())), "invalid glossary aliases")
+    for voice in data["voices"]:
+        reviewstate.require(isinstance(voice, dict), "invalid voice card")
+        reviewstate.require(all(isinstance(voice.get(k, ""), str) for k in
+                            ("character", "entry", "register", "persian_policy", "speech_style")), "invalid voice-card fields")
     return data
 
 

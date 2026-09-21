@@ -25,6 +25,7 @@ import bookir as ir  # noqa: E402
 import chunk as chunking  # noqa: E402
 import merge as merging  # noqa: E402
 from tests_support import reply_text  # noqa: E402
+from segment_fixtures import write_segment_manifest  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -123,7 +124,7 @@ def test_a_unit_the_book_does_not_have_is_not_reported_as_success(tmp_path):
 
     report = merging.merge(book_path, chunks, strict=True)
 
-    assert report["units_applied"] == 0
+    assert report["refused"] == "invalid-state"
     assert report["ok"] is False, (
         "zero units applied was reported as a successful merge")
 
@@ -247,12 +248,7 @@ def test_a_source_line_that_looks_like_a_header_cannot_forge_a_unit(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def _segmented(tmp_path: Path) -> tuple[Path, Path]:
-    """A manifest whose chunk owns one block as two segments.
-
-    Hand-written on purpose: this is merge's own input contract, and the page
-    route that normally produces segment ids has a separate wrapper guard which
-    this hole sits underneath.
-    """
+    """Hand-authored segment ownership with current, independently bound input."""
     book_path = _book(tmp_path, ["Part one and part two together."])
     chunks = tmp_path / "chunks"
     chunks.mkdir()
@@ -274,8 +270,7 @@ def _segmented(tmp_path: Path) -> tuple[Path, Path]:
             "source_sha256": "",
         }],
     }
-    ir.write_text(chunks / "manifest.json",
-                  json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
+    write_segment_manifest(book_path, chunks, manifest)
     return book_path, chunks
 
 
@@ -304,8 +299,7 @@ def _split_across_two_chunks(tmp_path: Path) -> tuple[Path, Path]:
              "units": 1, "source_chars": 16, "source_sha256": ""},
         ],
     }
-    ir.write_text(chunks / "manifest.json",
-                  json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
+    write_segment_manifest(book_path, chunks, manifest)
     return book_path, chunks
 
 
@@ -460,8 +454,7 @@ def test_two_segments_with_their_own_local_note_ids_keep_both_notes(tmp_path):
              "units": 1, "source_chars": 16, "source_sha256": ""},
         ],
     }
-    ir.write_text(chunks / "manifest.json",
-                  json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
+    write_segment_manifest(book_path, chunks, manifest)
 
     _reply(chunks, "chunk0001",
            "@@ b00001#1 para\nبخش یک.[[fn:tr-01]]\n\n"
@@ -524,10 +517,8 @@ def test_an_unchanged_source_is_not_reported_stale(tmp_path):
     assert not report.get("stale")
 
 
-def test_a_manifest_without_a_recorded_source_hash_still_merges(tmp_path):
-    """A working directory built before freshness was recorded must keep
-    working. Refusing it would strand real translations, and inventing a hash
-    for it would be a lie about what was checked."""
+def test_a_manifest_without_a_recorded_source_hash_requires_revalidation(tmp_path):
+    """Missing historical evidence cannot authorize a current write."""
     book_path = _book(tmp_path, ["Ali arrived."])
     chunks = _build(book_path, tmp_path)
 
@@ -537,14 +528,14 @@ def test_a_manifest_without_a_recorded_source_hash_still_merges(tmp_path):
                   json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
     _reply(chunks, "chunk0001", "@@ b00001 para\nعلی رسید.\n")
 
+    before = book_path.read_bytes()
     report = merging.merge(book_path, chunks, strict=True)
-
-    assert report["ok"] is True, report
+    assert report["ok"] is False and book_path.read_bytes() == before
     assert report.get("unverified_freshness") == ["chunk0001"], report
 
 
-def test_a_manifest_without_recorded_kinds_still_merges(tmp_path):
-    """Same compatibility question for the kind check."""
+def test_a_manifest_without_recorded_kinds_requires_revalidation(tmp_path):
+    """An unknown unit kind cannot authorize a current write."""
     book_path = _book(tmp_path, ["Ali arrived."])
     chunks = _build(book_path, tmp_path)
 
@@ -552,11 +543,11 @@ def test_a_manifest_without_recorded_kinds_still_merges(tmp_path):
     manifest["chunks"][0].pop("unit_kinds", None)
     ir.write_text(chunks / "manifest.json",
                   json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
-    _reply(chunks, "chunk0001", "@@ b00001 whatever\nعلی رسید.\n")
-
+    _reply(chunks, "chunk0001", "@@ b00001 para\nعلی رسید.\n")
+    before = book_path.read_bytes()
     report = merging.merge(book_path, chunks, strict=True)
-
-    assert report["ok"] is True, report
+    assert report["ok"] is False and book_path.read_bytes() == before
+    assert report["unverified_freshness"] == ["chunk0001"]
 
 
 # --------------------------------------------------------------------------- #
@@ -624,7 +615,7 @@ def test_a_named_glossary_that_is_not_there_refuses_the_merge(tmp_path):
 
     assert report["ok"] is False
     assert report["refused"] == "named-glossary-unusable"
-    assert "does not exist" in report["detail"]
+    assert "missing or unreadable" in report["detail"]
     assert book_path.read_bytes() == before
 
 

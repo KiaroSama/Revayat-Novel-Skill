@@ -70,6 +70,8 @@ def _containers(book: dict[str, Any]) -> list[tuple[str, str, str, str]]:
     found: list[tuple[str, str, str, str]] = []
     blocks = {block["id"] for block in ir.iter_text_blocks(book)}
     for unit in published.units(book):
+        if unit["part"] == "note":
+            continue  # Note provenance and target are inspected once below.
         where = ANCHORABLE if unit["id"] in blocks else unit["part"]
         for side in ("source", "target"):
             text = unit.get(side) or ""
@@ -89,9 +91,10 @@ def problems(book: dict[str, Any]) -> list[str]:
     found: list[str] = []
     #: Which units refer to each note, so "the same marker twice" is answerable.
     referrers: dict[str, list[str]] = {}
+    occurrences: dict[tuple[str, str], list[str]] = {}
 
     for unit_id, where, side, text in _containers(book):
-        for ref in ir.footnote_refs(text, include_local=True):
+        for index, ref in enumerate(ir.footnote_refs(text, include_local=True), 1):
             if where != ANCHORABLE and where != "note":
                 found.append(
                     f"{unit_id} ({side}): a footnote marker in a {where} unit. "
@@ -121,15 +124,17 @@ def problems(book: dict[str, Any]) -> list[str]:
                     f"{unit_id} ({side}): `[[fn:{ref}]]` names no note this book "
                     f"defines, so the marker prints as itself")
                 continue
+            occurrences.setdefault((ref, side), []).append(f"{unit_id} marker {index}")
             if side == "target":
                 referrers.setdefault(ref, []).append(unit_id)
 
     for note_id, note in notes.items():
         pointing = referrers.get(note_id) or []
-        if len(set(pointing)) > 1:
-            found.append(
-                f"{note_id}: referred to from {sorted(set(pointing))}. One note "
-                f"cannot belong to two places, and picking one drops the other")
+        for side in ("source", "target"):
+            places = occurrences.get((note_id, side), [])
+            if len(places) > 1:
+                found.append(f"{note_id} ({side}): repeated references at {places}. "
+                             "One note supports one occurrence per side; use distinct notes for distinct anchors")
         if pointing and not (str(note.get("text") or "").strip()
                             or str(note.get("target") or "").strip()):
             found.append(

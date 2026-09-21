@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import bookir as ir
+import bookwrite
 
 SCHEMA = "revayat-novel/ocr@1"
 
@@ -506,9 +507,13 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     if options.book:
-        book = ir.load_book(options.book)
-        report["attached"] = attach(book, sidecar)
-        ir.write_text(options.book, json.dumps(book, ensure_ascii=False, indent=1))
+        try:
+            with bookwrite.transaction(options.book, actor="ocr.attach") as tx:
+                report["attached"] = attach(tx.book, sidecar)
+        except bookwrite.Refused as failure:
+            print(json.dumps({"ok": False, "refused": failure.reason,
+                              "detail": failure.detail}, ensure_ascii=False))
+            return 2
 
     print(json.dumps(report, ensure_ascii=False, indent=1))
     return 0

@@ -39,6 +39,7 @@ import bookir as ir
 import fluency as fluency_pass
 import meaning as meaning_review
 import published
+import reviewstate
 
 #: What `qa` files these findings under. One code per condition, so a report can
 #: be acted on without reading the detail line.
@@ -61,7 +62,10 @@ def problems(book_path: Path, *, review_dir: Path | None,
     recorded sidecars, and nothing here writes or repairs anything.
     """
     book_path = Path(book_path)
-    book = ir.load_book(book_path)
+    try:
+        book = ir.load_book(book_path)
+    except (OSError, ValueError, UnicodeError) as error:
+        return [(REJECTED, "book", f"book is unreadable or invalid: {error}")]
     found: list[tuple[str, str, str]] = []
 
     owing = published.pending(book)
@@ -90,8 +94,8 @@ def problems(book_path: Path, *, review_dir: Path | None,
         found.append((
             UNVERIFIED, "fluency",
             "no --fluency directory was given, so nothing says the Persian has "
-            "been read on its own. A bilingual reviewer cannot answer it: they "
-            "see the English behind every sentence."))
+            "been read on its own. The independent Persian pass complements "
+            "the source-grounded review."))
     elif review_dir is None:
         found.append((
             UNVERIFIED, "fluency",
@@ -107,6 +111,7 @@ def problems(book_path: Path, *, review_dir: Path | None,
     return found
 
 
+@reviewstate.guarded
 def approved(book_path: Path, *, review_dir: Path,
              fluency_dir: Path) -> dict[str, Any]:
     """What was approved, for a report or a later comparison.

@@ -298,18 +298,24 @@ def _check_text_presence(target: dict[str, Any], expected: dict[str, Any],
     haystack = _flat(source) if source is not None else " ".join(
         _flat(block["text"]) for block in target["blocks"])
 
-    if expected["translatable"] and not expected["texts"]:
+    if expected.get("untranslated") or (expected["translatable"] and not expected["texts"]):
         report.add(qa.ERROR, "text-missing", unit,
                    f"{expected['translatable']} blocks belong to this page and "
                    f"none of them is translated yet")
         return
 
+    expected_texts = [_flat(ir.plain_text(text)) for text in expected["texts"]]
+    checked = set()
     for text in expected["texts"]:
-        probe = _probe(text)
+        probe = _flat(ir.plain_text(text)) if source is not None else _probe(text)
         if not probe:
             continue
+        if probe in checked:
+            continue
+        checked.add(probe)
+        wanted = sum(part.count(probe) for part in expected_texts)
         seen = haystack.count(probe)
-        if seen == 0:
+        if seen < wanted:
             if source is None and ir.script_ratio(probe)[0] >= 0.5:
                 report.add(qa.WARNING, "text-unverified", unit,
                            f"{probe[:30]!r} could not be looked for: only a "
@@ -317,10 +323,10 @@ def _check_text_presence(target: dict[str, Any], expected: dict[str, Any],
                            f"not read back from one faithfully")
                 continue
             report.add(qa.ERROR, "text-missing", unit,
-                       f"nothing here begins {probe!r}")
-        elif seen > 1 and len(probe) >= PROBE_MIN_CHARS:
+                       f"{probe[:PROBE_CHARS]!r}: expected {wanted} occurrence(s), found {seen}")
+        elif seen > wanted and len(probe) >= PROBE_MIN_CHARS:
             report.add(qa.ERROR, "text-duplicated", unit,
-                       f"{probe!r} appears {seen} times")
+                       f"{probe[:PROBE_CHARS]!r} appears {seen} times; expected {wanted}")
 
 
 def _check_images(target: dict[str, Any], expected: dict[str, Any],
