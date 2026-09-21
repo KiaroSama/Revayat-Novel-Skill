@@ -77,7 +77,7 @@ def epub_bytes(data, chapters, assets):
     metadata = ET.SubElement(package, "metadata", {"xmlns:dc": "http://purl.org/dc/elements/1.1/"})
     ET.SubElement(metadata, "dc:title").text = data["title"]
     ET.SubElement(metadata, "dc:language").text = data["source_language"]
-    ET.SubElement(metadata, "dc:identifier", id="book-id").text = "revayat:" + ir.sha256_bytes(json.dumps(data, sort_keys=True).encode("utf-8"))
+    ET.SubElement(metadata, "dc:identifier", id="book-id").text = "revayat-novel:" + ir.sha256_bytes(json.dumps(data, sort_keys=True).encode("utf-8"))
     manifest = ET.SubElement(package, "manifest")
     spine = ET.SubElement(package, "spine")
     members = {"mimetype": b"application/epub+zip", "META-INF/container.xml":

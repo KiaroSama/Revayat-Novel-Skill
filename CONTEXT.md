@@ -13,7 +13,7 @@ source structure, illustrations and traceable decisions.
 
 **Review event**: One submitted response to one particular review request, counted once.
 
-**Native document capability**: A book-processing procedure available from Revayat's own
+**Native document capability**: A book-processing procedure available from Revayat Novel's own
 installed payload, independent of another skill installation.
 
 **Workflow log**: The using agent's persistent record of observable translation work,

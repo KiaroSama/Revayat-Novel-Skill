@@ -111,8 +111,8 @@ Ask your agent, in whatever words you like:
 
 Or with the plugin: `/translate-book ./book.pdf`
 
-The agent runs the pipeline, translating chunks in parallel sub-agents and
-stopping at the points where your judgement matters — chiefly the glossary,
+The agent asks whether to use parallel subagents, then runs the pipeline and
+stops at the points where your judgement matters — chiefly the glossary,
 where you decide what each character is called in Persian.
 
 ### Or drive it yourself
@@ -191,7 +191,7 @@ book.pdf / .epub / .docx
         ▼
    chapter-aware worksheets ── term table + neighbouring context per chunk
         │
-        ▼  translated in parallel, one fresh context each
+        ▼  translated serially, or in parallel with user consent
    merge ── every @@ id must return exactly once, or it is a named error
         │
         ▼
