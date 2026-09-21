@@ -12,3 +12,8 @@ Two Claude-specific notes:
 
 When changing `SKILL.md`, keep every front-matter field on a single line.
 Several agents parse it with a line-oriented reader, and CI checks it.
+
+## Agent skills
+
+Development work is tracked locally; see `docs/agents/issue-tracker.md`.
+The single domain glossary is `CONTEXT.md`; see `docs/agents/domain.md`.

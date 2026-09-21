@@ -19,6 +19,7 @@ from typing import Any
 
 import bookir as ir
 import eligible
+import reviewstate
 import glossary as gl
 import runstate
 import segments
@@ -288,11 +289,11 @@ def build(
 
     manifest: dict[str, Any] = {
         "schema": "revayat-novel/chunks@1",
-        "book": str(book_path),
+        "book": str(Path(book_path).resolve()),
         "book_sha256": book["source"].get("sha256", ""),
         # Recorded beside the book because it is the other input that decides
         # what a worksheet says, and `status` has nothing else to find it by.
-        "glossary": str(glossary_path) if glossary_path else "",
+        "glossary": str(Path(glossary_path).resolve()) if glossary_path else "",
         "budget": budget,
         "chunks": [],
     }
@@ -510,6 +511,7 @@ def _state_of(out_dir: Path, entry: dict[str, Any]) -> str:
                     entry.get("unit_kinds") or {})
 
 
+@reviewstate.guarded
 def status(out_dir: Path) -> dict[str, Any]:
     """Which worksheets still need translating — the resume view.
 
@@ -521,7 +523,7 @@ def status(out_dir: Path) -> dict[str, Any]:
     ``stale`` answers the other half of resuming: not only what is left to do,
     but whether what is already done is still worth keeping.
     """
-    manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest = eligible.read_manifest(out_dir)
     order = [entry["id"] for entry in manifest["chunks"]]
     # One read-only eligibility answer per worksheet, the same one merge acts on.
     # `classify` alone agreed with merge about the syntax and disagreed about
@@ -563,6 +565,7 @@ def status(out_dir: Path) -> dict[str, Any]:
     }
 
 
+@reviewstate.cli
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     parser = argparse.ArgumentParser(prog="revayat-novel chunk")
@@ -609,8 +612,9 @@ def main(argv: list[str] | None = None) -> int:
         }, ensure_ascii=False, indent=1))
         return 0
 
-    print(json.dumps(status(Path(args.chunks)), ensure_ascii=False, indent=1))
-    return 0
+    progress = status(Path(args.chunks))
+    print(json.dumps(progress, ensure_ascii=False, indent=1))
+    return 2 if progress.get("ok") is False else 0
 
 
 if __name__ == "__main__":

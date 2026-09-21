@@ -280,9 +280,9 @@ def run_bounded(command: list[str], timeout: float, *,
         # process it forked.
         popen_extra["start_new_session"] = True
     else:
-        popen_extra["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        popen_extra["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-    process = subprocess.Popen(command, stdout=subprocess.PIPE,
+    process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, env=env, **popen_extra)
     try:
         out, err = process.communicate(timeout=timeout)
@@ -444,10 +444,42 @@ def make_footnote(index: int, *, anchor_block: str, text: str,
 
 
 def load_book(path: str | os.PathLike[str]) -> dict[str, Any]:
-    book = json.loads(read_text(path))
+    return decode_book(read_text(path))
+
+
+def decode_book(text: str) -> dict[str, Any]:
+    """Validate container types before any stage traverses persisted book data."""
+    book = json.loads(text)
+    if not isinstance(book, dict):
+        raise ValueError("book must contain a JSON object")
     schema = book.get("schema")
     if schema != SCHEMA:
         raise ValueError(f"unsupported book schema {schema!r}; expected {SCHEMA!r}")
+    for field in ("source", "meta", "page"):
+        if not isinstance(book.get(field), dict):
+            raise ValueError(f"book {field} must be an object")
+    for field in ("blocks", "footnotes"):
+        if not isinstance(book.get(field), list):
+            raise ValueError(f"book {field} must be a list")
+        for item in book[field]:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                raise ValueError(f"invalid {field} member")
+            if field == "blocks" and not isinstance(item.get("type"), str):
+                raise ValueError("block requires a string type")
+            for name in ("text", "target", "alt", "target_alt"):
+                if item.get(name) is not None and not isinstance(item[name], str):
+                    raise ValueError(f"{item['id']} has invalid {name}")
+    for name in ("title", "author", "title_target", "author_target"):
+        if book["meta"].get(name) is not None and not isinstance(book["meta"][name], str):
+            raise ValueError(f"invalid metadata {name}")
+    if "sections" in book:
+        sections = book["sections"]
+        if not isinstance(sections, list) or not all(isinstance(s, dict) for s in sections):
+            raise ValueError("sections must be a list of objects")
+        for section in sections:
+            for name in ("headers", "footers"):
+                if not isinstance(section.get(name, {}), dict):
+                    raise ValueError(f"invalid section {name}")
     return book
 
 

@@ -267,7 +267,7 @@ def test_a_long_book_becomes_one_job_per_page_not_a_few_giant_ones(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def _mark(tmp_path: Path, page: int, state: str, **kwargs) -> None:
-    runstate.RunState(tmp_path).set_page(page, state, **kwargs)
+    runstate.RunState(tmp_path).set_page(page, state, **({"hashes": {"translation": pagerun.translation_hash(tmp_path / "book.json", page)}, **kwargs} if state == "accepted" else kwargs))
 
 
 def test_the_next_page_is_the_first_one_not_accepted(tmp_path):

@@ -23,9 +23,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import bookir as ir  # noqa: E402  (must follow the sys.path bootstrap)
+import reviewstate  # noqa: E402
 
 STAGES = {
     "extract": "extract",
+    "web-import": "webimport",
     "clean-scan": "scan_clean",
     "ocr-sidecar": "ocr_sidecar",
     "glossary": "glossary",
@@ -143,6 +145,7 @@ def doctor() -> dict[str, object]:
     }
 
 
+@reviewstate.cli
 def main(argv: list[str] | None = None) -> int:
     ir.use_utf8_stdio()
     argv = list(sys.argv[1:] if argv is None else argv)

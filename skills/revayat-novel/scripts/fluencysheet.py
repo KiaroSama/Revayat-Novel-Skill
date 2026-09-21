@@ -34,8 +34,8 @@ STAGE = "fluency"
 RUBRICS: dict[str, dict[str, str]] = {
     "calque": {
         "ask": "Is this Persian word order, or English word order in Persian words?",
-        "why": "The one defect a bilingual reviewer is structurally unable to "
-               "see: they read the English behind it and the sentence parses.",
+        "why": "An independent Persian reading can reveal calques that a "
+               "source-aware reading overlooked.",
         "bad": "«مردی که او را در ایستگاه دیده بود که کتاب می‌خواند رفت» — an "
                "English relative chain kept intact.",
         "good": "«مردی رفت که او را در ایستگاه، در حال کتاب خواندن، دیده بود.»",
@@ -87,90 +87,26 @@ CONTEXT_LINE = re.compile(r"^~\s")
 #: off on the way in. The same convention, the same layering rule and the same
 #: reason as `worksheet.ESCAPED_HEADER`: one layer out, one layer in, at any
 #: depth, so the round trip is symmetric for a line that arrives already escaped.
-ESCAPED_LINE = re.compile(r"^(\s*)\\(\\*(?:~\s|<!--\s*revayat-novel\b))")
+ESCAPED_LINE = reviewsheet.PAYLOAD_ESCAPE
 
 
 def reserved_line(line: str) -> bool:
     """Would this line be read as control rather than as Persian?"""
     stripped = line.strip()
     return bool(CONTEXT_LINE.match(stripped)
-                or reviewsheet.SCAFFOLD_COMMENT.match(stripped))
+                or reviewsheet.SCAFFOLD_COMMENT.match(stripped)
+                or re.match(r"^(\?\?|\+\+|!!|@@)", stripped))
 
 
 def escape_payload(text: str) -> str:
-    """Protect Persian that would otherwise read as this sheet's own control.
-
-    A replacement line beginning ``~ `` is a legitimate thing for Persian to
-    begin with — a dash-led aside, a quoted line of verse — and it used to be
-    dropped from the reply in silence, so the unit came back short by a line and
-    nothing said so.
-
-    The backslash goes after the indentation, where :data:`ESCAPED_LINE` looks
-    for it, and a line already in escaped form is escaped again: the reader takes
-    exactly one backslash off anything shaped that way and cannot know who put it
-    there. Asymmetry here is a line of the book quietly changing.
-    """
-    out: list[str] = []
-    for line in text.split("\n"):
-        if reserved_line(line.strip().lstrip("\\")):
-            indent = line[:len(line) - len(line.lstrip())]
-            out.append(f"{indent}\\{line[len(indent):]}")
-        else:
-            out.append(line)
-    return "\n".join(out)
+    """Escape one layer, including literal headers and claims."""
+    return reviewsheet.escape_payload(text)
 
 
 def read_edits(text: str) -> tuple[list[dict[str, str]], list[str], list[str]]:
     """``(edits, sheets claimed read, problems)``."""
-    edits: list[dict[str, str]] = []
-    claimed: list[str] = []
-    problems: list[str] = []
-    current: dict[str, str] | None = None
-    buffer: list[str] = []
-
-    def flush() -> None:
-        if current is not None:
-            current["target"] = "\n".join(buffer).strip()
-            edits.append(current)
-
-    for line in text.splitlines():
-        stripped = line.strip()
-        header = EDIT.match(stripped)
-        if header:
-            flush()
-            current = {"id": header.group("id"), "rubric": header.group("rubric")}
-            buffer = []
-            continue
-        reviewed = REVIEWED.match(stripped)
-        if reviewed:
-            flush()
-            current = None
-            buffer = []
-            claimed.append(reviewed.group("sheet"))
-            continue
-        if current is not None:
-            # Control lines are dropped; everything else is kept exactly, one
-            # escape layer removed. The previous version dropped *any* line
-            # beginning `<!--`, so a replacement carrying a comment-shaped line
-            # of its own lost it — and `~ ` was unescapable, so Persian that
-            # legitimately begins that way could not be proposed at all.
-            if CONTEXT_LINE.match(stripped) or reviewsheet.SCAFFOLD_COMMENT.match(stripped):
-                continue
-            buffer.append(ESCAPED_LINE.sub(r"\1\2", line))
-    flush()
-
-    for edit in edits:
-        if edit["rubric"] not in RUBRICS:
-            problems.append(
-                f"{edit['id']}: `{edit['rubric']}` is not a rubric "
-                f"({', '.join(RUBRICS)}). An edit nobody can classify cannot be "
-                f"argued with")
-        if not edit.get("target"):
-            problems.append(
-                f"{edit['id']} / {edit['rubric']}: no replacement given. An edit "
-                f"with an empty body would delete the unit's Persian, which is "
-                f"never what a fluency note means")
-    return edits, claimed, problems
+    return reviewsheet.parse_records(text, stage=STAGE, header=EDIT,
+                                     rubrics=RUBRICS, payload="target")
 
 
 def rubric_table() -> str:

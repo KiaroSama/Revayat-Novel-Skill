@@ -293,14 +293,15 @@ def test_a_journal_failure_stops_before_anything_else(translated, settled,
     assert bookwrite.file_digest(translated) == before
     assert fluency.sidecar_path(out).read_text(encoding="utf-8") == recorded
     assert not bookwrite.journal_path(translated).is_file()
-    assert not bookwrite.lock_path(translated).exists(), "the lock was not released"
+    with bookwrite.transaction(translated, actor="lock-release-control"):
+        pass
 
 
 def test_a_journal_naming_a_state_the_book_is_not_in_is_not_guessed(translated):
     """Neither direction is safe, so recovery refuses and keeps the evidence."""
     journal = bookwrite.journal_path(translated)
     ir.write_text(journal, json.dumps({
-        "schema": bookwrite.SCHEMA, "actor": "probe", "at": time.time(),
+        "schema": bookwrite.SCHEMA, "phase": "prepared", "actor": "probe", "at": time.time(),
         "book": {"path": str(translated), "before": "a" * 64, "after": "b" * 64},
         "side": [],
     }))
@@ -373,23 +374,19 @@ def test_merge_refuses_rather_than_committing_over_a_book_that_moved(
 def test_a_held_lock_refuses_and_a_dead_one_is_taken_over(translated,
                                                           monkeypatch):
     monkeypatch.setattr(bookwrite, "WAIT_SECONDS", 0.05)
-    lock = bookwrite.lock_path(translated)
-    ir.write_text(lock, json.dumps({"pid": 1, "actor": "someone",
-                                    "at": time.time()}))
+    held = bookwrite._take_lock(translated, "someone")
+    try:
+        with pytest.raises(bookwrite.Refused) as stopped:
+            with bookwrite.transaction(translated, actor="probe"):
+                pass
+        assert stopped.value.reason == "locked"
+    finally:
+        held.release()
 
-    with pytest.raises(bookwrite.Refused) as stopped:
-        with bookwrite.transaction(translated, actor="probe"):
-            pass
-    assert stopped.value.reason == "locked"
-    assert "someone" in stopped.value.detail
-
-    # A lock older than the ceiling belonged to a process that is gone; refusing
-    # for ever would stop the pipeline on a crash nobody can clear.
-    monkeypatch.setattr(bookwrite, "LOCK_SECONDS", -1.0)
+    # A released handle, with the diagnostic lock file still present, is free.
     with bookwrite.transaction(translated, actor="probe") as tx:
         tx.book["meta"]["author_target"] = "نویسندهٔ تازه"
     assert ir.load_book(translated)["meta"]["author_target"] == "نویسندهٔ تازه"
-    assert not lock.exists()
 
 
 def test_a_successful_edit_invalidates_the_review_that_licensed_it(

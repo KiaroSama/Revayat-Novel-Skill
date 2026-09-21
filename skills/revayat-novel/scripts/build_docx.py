@@ -162,7 +162,7 @@ class Builder:
             # `Title` was missing, and it is the one style on the title page.
             # `style_rtl` returns silently for a style a custom --template does
             # not define, so naming one that may be absent is safe.
-            for name in ("Normal", "Title", "Quote", "Caption", "List Bullet",
+            for name in ("Normal", "Title", "Subtitle", "Quote", "Caption", "List Bullet",
                          "List Number", *(f"Heading {n}" for n in range(1, 7))):
                 ooxml.style_rtl(self.document, name, persian_font=self.options.font)
 
@@ -334,13 +334,12 @@ class Builder:
             if block["type"] != "heading":
                 continue
             level = int(block.get("level", 1))
-            if level > self.options.toc_depth:
-                continue
             index += 1
             anchor = f"rv_{index:04d}"
             block["_anchor"] = anchor
             text = ir.plain_text(block.get("target") or block.get("text") or "")
-            self.toc_entries.append((anchor, text.strip(), level))
+            if level <= self.options.toc_depth:
+                self.toc_entries.append((anchor, text.strip(), level))
 
     def start_section(self, record: dict[str, Any]) -> None:
         """Open a Word section here, so the source's own page setup resumes.

@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import bookir as ir
+import reviewstate
 
 SCHEMA = "revayat-novel/runstate@1"
 
@@ -283,19 +284,20 @@ def source_digest(book: dict[str, Any]) -> str:
 
 
 def _read(path: Path) -> dict[str, Any]:
-    """The stored state, or an empty one.
-
-    A missing *or unreadable* file means "nothing is known", which makes every
-    stage stale. Raising here would strand a whole working directory over the
-    one file whose only job is to answer conservatively.
-    """
-    try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        data = None
-    if not isinstance(data, dict) or not isinstance(data.get("stages"), dict):
+    """Absence starts a run; corrupt evidence is retained and refused."""
+    data = reviewstate.object_file(path, optional=True)
+    if data is None:
         return {"schema": SCHEMA, "stages": {}, "pages": {}}
-    data.setdefault("schema", SCHEMA)
-    if not isinstance(data.get("pages"), dict):
-        data["pages"] = {}
+    if data.get("schema") != SCHEMA:
+        raise reviewstate.Refused("unsupported-version", "unsupported run-state schema")
+    reviewstate.require(isinstance(data.get("stages"), dict) and isinstance(data.get("pages"), dict),
+                        "run state requires stage and page objects")
+    for entry in data["stages"].values():
+        reviewstate.require(isinstance(entry, dict) and isinstance(entry.get("inputs"), dict)
+                            and isinstance(entry.get("outputs", {}), dict), "invalid stage record")
+    for key, entry in data["pages"].items():
+        reviewstate.require(key.isdigit() and int(key) > 0 and isinstance(entry, dict), "invalid page record")
+        reviewstate.require(entry.get("state") in PAGE_STATES and type(entry.get("attempts")) is int
+                            and entry["attempts"] >= 0 and isinstance(entry.get("hashes"), dict), "invalid page state")
+        reviewstate.require(all(isinstance(value, str) for value in entry["hashes"].values()), "invalid page hashes")
     return data
