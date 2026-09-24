@@ -179,11 +179,17 @@ def fit_units(
                 break
             candidate = [(segment_id(unit_id, index), kind, part)
                          for index, part in enumerate(parts, start=1)]
-            overshoot = max(len(render([one])) - budget for one in candidate)
+            excess = [len(render([one])) - budget for one in candidate]
+            overshoot = max(excess)
             if overshoot <= 0:
                 cut = candidate
                 break
-            room -= max(overshoot, 1)
+            # Shrink from the observed segment, not unused room above its last
+            # legal boundary. Otherwise sparse sentence/word ends can produce
+            # the same oversized cut for every bounded fitting attempt.
+            measured_room = min(len(one[2]) - over
+                                for one, over in zip(candidate, excess) if over > 0)
+            room = min(room - overshoot, measured_room)
 
         # Nothing that fits. Leave it whole so the caller refuses with the real
         # numbers rather than writing a worksheet of fragments.
