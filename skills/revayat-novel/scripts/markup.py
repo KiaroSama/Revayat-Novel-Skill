@@ -46,16 +46,19 @@ _FOOTNOTE_ID = r"fn\d{4,}"
 
 FOOTNOTE_TOKEN = re.compile(rf"\[\[fn:({_FOOTNOTE_ID})\]\]")
 #: Any footnote token, including the ``tr-NN`` form a translator writes before
-#: merge allocates it a book-wide id. Kept separate from the canonical pattern
+#: merge allocates a book-wide id. Kept separate from the canonical pattern
 #: on purpose: a ``tr-NN`` left in a finished book is a defect, and
 #: :func:`validate_book` should still catch it.
 ANY_FOOTNOTE_TOKEN = re.compile(r"\[\[fn:([A-Za-z0-9_-]+)\]\]")
 _INLINE = re.compile(
-    rf"(?P<token>\[\[fn:{_FOOTNOTE_ID}\]\])"
-    r"|(?P<code>(?<!\\)`(?P<code_body>[^`]*)`)"
-    r"|(?P<bi>(?<!\\)\*\*\*(?P<bi_body>(?:[^*\\]|\\.)+?)\*\*\*)"
-    r"|(?P<bold>(?<!\\)\*\*(?P<bold_body>(?:[^*\\]|\\.)+?)\*\*)"
-    r"|(?P<italic>(?<!\\)\*(?P<italic_body>(?:[^*\\]|\\.)+?)\*)"
+    # Consume escaped delimiters before recognizing markup. A doubled literal
+    # backslash must not hide the opening delimiter that follows it.
+    r"(?P<escaped>\\[\\*`])"
+    rf"|(?P<token>\[\[fn:{_FOOTNOTE_ID}\]\])"
+    r"|(?P<code>`(?P<code_body>[^`]*)`)"
+    r"|(?P<bi>\*\*\*(?P<bi_body>(?:[^*\\]|\\.)+?)\*\*\*)"
+    r"|(?P<bold>\*\*(?P<bold_body>(?:[^*\\]|\\.)+?)\*\*)"
+    r"|(?P<italic>\*(?P<italic_body>(?:[^*\\]|\\.)+?)\*)"
 )
 
 
@@ -127,6 +130,14 @@ def parse_markup(text: str) -> list[dict[str, Any]]:
              verbatim: bool = False, footnote: str | None = None) -> None:
         if footnote is None and not chunk:
             return
+        # Escapes are separate tokenizer matches, not separate prose runs.
+        # Coalesce only ordinary text; distinct verbatim spans keep their IDs
+        # in the ordered literal inventory and must never be collapsed.
+        if (spans and footnote is None and not verbatim
+                and spans[-1]["footnote"] is None and not spans[-1]["verbatim"]
+                and spans[-1]["bold"] == bold and spans[-1]["italic"] == italic):
+            spans[-1]["text"] += chunk
+            return
         spans.append({
             "text": chunk,
             "bold": bold,
@@ -156,7 +167,9 @@ def parse_markup(text: str) -> list[dict[str, Any]]:
     cursor = 0
     for match in _INLINE.finditer(text):
         push(_unescape(text[cursor:match.start()]))
-        if match.group("token"):
+        if match.group("escaped"):
+            push(match.group("escaped")[1:])
+        elif match.group("token"):
             push("", footnote=FOOTNOTE_TOKEN.match(match.group("token")).group(1))
         elif match.group("code") is not None:
             push(match.group("code_body"), verbatim=True)
@@ -253,7 +266,7 @@ def rewrite_footnote_refs(text: str, mapping: dict[str, str]) -> str:
 
     The substitution used to run over the raw string, so a worksheet's own
     example — a literal `[[fn:tr-example]]` inside backticks — was rewritten into
-    a real allocated id the moment any reply offered a body for that name. A
+    a real allocated id the moment some reply offered a body for that name. A
     documented example became a live reference to a footnote.
     """
     if not mapping:
