@@ -11,6 +11,9 @@ note body pulled from the element the link points at, in this file or another.
 
 from __future__ import annotations
 
+from collections import Counter
+from copy import deepcopy
+import logging
 import posixpath
 import re
 import zipfile
@@ -19,9 +22,11 @@ from typing import Any
 from urllib.parse import unquote, urldefrag, urlsplit
 from xml.etree import ElementTree
 
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
 import bookir as ir
+
+LOG = logging.getLogger(__name__)
 
 HEADINGS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
 BOLD_TAGS = {"b", "strong"}
@@ -38,6 +43,20 @@ _OPF_NS = {"opf": "http://www.idpf.org/2007/opf",
 _DC_NS = {"dc": "http://purl.org/dc/elements/1.1/"}
 
 
+def _local_member(document: str, href: str) -> str:
+    """Resolve an EPUB-local URI without dropping its document component."""
+    parsed = urlsplit(href)
+    if parsed.scheme or parsed.netloc or parsed.query:
+        raise ValueError("EPUB resource must be an archive-local URI")
+    path = unquote(parsed.path)
+    if "\\" in path or path.startswith("/"):
+        raise ValueError("unsafe EPUB resource path")
+    member = posixpath.normpath(posixpath.join(posixpath.dirname(document), path)) if path else document
+    if member == ".." or member.startswith("../"):
+        raise ValueError("EPUB resource escapes its archive")
+    return member
+
+
 def _opf_path(archive: zipfile.ZipFile) -> str:
     root = ElementTree.fromstring(archive.read("META-INF/container.xml"))
     node = root.find(".//cnt:rootfile", _OPF_NS)
@@ -48,21 +67,32 @@ def _opf_path(archive: zipfile.ZipFile) -> str:
 
 def _spine_documents(archive: zipfile.ZipFile, opf: str) -> tuple[list[str], dict[str, str]]:
     root = ElementTree.fromstring(archive.read(opf))
-    base = posixpath.dirname(opf)
     manifest: dict[str, tuple[str, str]] = {}
     for item in root.iterfind(".//opf:manifest/opf:item", _OPF_NS):
         item_id = item.get("id")
         href = item.get("href")
-        if item_id and href:
-            full = posixpath.normpath(posixpath.join(base, unquote(href)))
-            manifest[item_id] = (full, item.get("media-type", ""))
+        if not item_id or not href or item_id in manifest:
+            raise ValueError("EPUB manifest requires unique ids and nonempty hrefs")
+        full = _local_member(opf, href)
+        manifest[item_id] = (full, item.get("media-type", ""))
 
-    documents = [
-        manifest[ref.get("idref")][0]
-        for ref in root.iterfind(".//opf:spine/opf:itemref", _OPF_NS)
-        if ref.get("idref") in manifest
-        and ref.get("linear", "yes").lower() != "no"
-    ]
+    documents: list[str] = []
+    for ref in root.iterfind(".//opf:spine/opf:itemref", _OPF_NS):
+        identity = ref.get("idref")
+        if identity not in manifest:
+            raise ValueError(f"EPUB spine names an unknown document: {identity!r}")
+        if ref.get("linear", "yes").lower() == "no":
+            continue
+        member, media = manifest[identity]
+        if media not in ("application/xhtml+xml", "text/html"):
+            raise ValueError(f"unsupported EPUB spine document media type: {media!r}")
+        if member not in archive.namelist():
+            raise ValueError(f"EPUB spine document is missing: {member}")
+        if member in documents:
+            raise ValueError(f"EPUB spine repeats a document: {member}")
+        documents.append(member)
+    if not documents:
+        raise ValueError("EPUB spine contains no readable document")
 
     meta: dict[str, str] = {}
     for field in ("title", "creator", "language"):
@@ -103,6 +133,8 @@ def _inline_spans(node: Tag, bold: bool = False, italic: bool = False,
     """Flatten an element's inline content into span dicts."""
     spans: list[dict[str, Any]] = []
     for child in node.children:
+        if isinstance(child, Comment):
+            continue
         if isinstance(child, NavigableString):
             text = re.sub(r"\s+", " ", str(child))
             if text:
@@ -119,12 +151,16 @@ def _inline_spans(node: Tag, bold: bool = False, italic: bool = False,
             spans.append(_span(" ", bold=bold, italic=italic))
             continue
         if child.name in VERBATIM_TAGS:
-            body = re.sub(r"\s+", " ", child.get_text()).strip()
+            body = child.get_text()
+            if "`" in body:
+                raise ValueError("EPUB verbatim content contains an unrepresentable backtick")
             if body:
                 # Verbatim is a span *kind*, not literal backticks in the text:
                 # writing the markers here would only get them escaped again.
                 spans.append(_span(body, verbatim=True))
             continue
+        if child.name in BLOCK_TAGS and spans and not spans[-1]["text"].endswith((" ", "\n")):
+            spans.append(_span(" "))
         spans.extend(_inline_spans(
             child,
             bold or child.name in BOLD_TAGS,
@@ -227,7 +263,10 @@ def _settle_anchors(book: dict[str, Any], wanted: set[str]) -> None:
 
 def _is_note_link(tag: Tag) -> bool:
     epub_type = (tag.get("epub:type") or tag.get("type") or "").lower()
-    if "noteref" in epub_type:
+    role = (tag.get("role") or "").lower()
+    if "backlink" in epub_type or role == "doc-backlink":
+        return False
+    if "noteref" in epub_type.split() or role == "doc-noteref":
         return True
     href = tag.get("href") or ""
     if not href.startswith("#") and "#" not in href:
@@ -253,17 +292,14 @@ def _resolve_note_body(soup: BeautifulSoup, anchor: str) -> str:
     target = _note_body_node(soup, anchor)
     if target is None:
         return ""
-    text = re.sub(r"\s+", " ", target.get_text(" ", strip=True))
-    # Strip a leading marker such as "12." or "[3]" that the ebook rendered
-    # as literal text; Word will number the footnote itself.
-    return re.sub(r"^\s*[\[\(]?\d{1,3}[\]\).:]?\s*", "", text).strip()
+    return _note_text(target)
 
 
 def read_epub(
     path: str,
     asset_dir: Path,
     *,
-    lang_source: str = "en",
+    lang_source: str | None = None,
     lang_target: str = "fa-IR",
 ) -> dict[str, Any]:
     asset_dir.mkdir(parents=True, exist_ok=True)
@@ -308,21 +344,32 @@ def read_epub(
             blocks.append(block)
             return block
 
-        for doc_index, doc_path in enumerate(documents, start=1):
-            try:
-                raw = archive.read(doc_path)
-            except KeyError:
-                continue
-            soup = BeautifulSoup(raw, "html.parser")
-            for junk in soup.find_all(list(SKIP_TAGS)):
-                junk.decompose()
+        soups: dict[str, BeautifulSoup] = {}
 
-            footnote_marks = _harvest_footnotes(soup, footnotes, len(footnotes))
+        def load_document(member: str) -> BeautifulSoup:
+            if member not in soups:
+                try:
+                    raw = archive.read(member)
+                except KeyError as error:
+                    raise ValueError(f"EPUB document is missing: {member}") from error
+                soup = BeautifulSoup(raw, "html.parser")
+                for junk in soup.find_all(list(SKIP_TAGS)):
+                    junk.decompose()
+                soups[member] = soup
+            return soups[member]
+
+        for member in documents:
+            load_document(member)
+        marks = _book_footnotes(documents, load_document, footnotes)
+        _namespace_anchors(documents, soups, warn)
+        for doc_index, doc_path in enumerate(documents, start=1):
+            soup = soups[doc_path]
             body = soup.body or soup
             if doc_index > 1:
                 add("pagebreak", page=doc_index, soft=False)
             _walk(body, add, archive, doc_path, asset_dir, seen_assets,
-                  footnote_marks, doc_index, warn)
+                  marks.get(doc_path, {}), doc_index, warn)
+            LOG.debug("Parsed EPUB spine item %d of %d", doc_index, len(documents))
 
         book["blocks"] = [b for b in blocks if _keep(b)]
         book["footnotes"] = [f for f in footnotes if f["text"]]
@@ -353,98 +400,241 @@ def read_epub(
             })
         if warnings:
             book["source"]["epub_warnings"] = warnings
+        LOG.info("EPUB extracted: %d blocks, %d notes, %d distinct assets",
+                 len(book["blocks"]), len(book["footnotes"]), len(seen_assets))
         return book
+    except (ValueError, KeyError, zipfile.BadZipFile):
+        LOG.error("EPUB extraction refused; source content was not complete")
+        raise
     finally:
         archive.close()
 
 
-def _harvest_footnotes(soup: BeautifulSoup, footnotes: list[dict[str, Any]],
-                       start: int) -> dict[int, str]:
-    """Bind each inline link to its own note, preserving reference positions."""
-    marks: dict[int, str] = {}
-    index = start
-    for link in soup.find_all("a"):
-        if link.parent is None or not _is_note_link(link):
-            continue
-        anchor = urldefrag(link.get("href") or "").fragment
-        if not anchor:
-            continue
-        body = _resolve_note_body(soup, anchor)
-        if not body:
-            continue
-        index += 1
-        note = ir.make_footnote(index, anchor_block="", text=body, origin="source")
-        footnotes.append(note)
-        marks[id(link)] = note["id"]
+def _note_text(target: Tag) -> str:
+    """Keep note markup and actual quantities; remove only explicit numbering."""
+    copied = deepcopy(target)
+    for link in list(copied.find_all("a")):
+        role = str(link.get("role") or "")
+        kind = str(link.get("epub:type") or "")
+        if role == "doc-backlink" or "backlink" in kind.split() or link.get_text(strip=True) in {"↩", "↵", "↑"}:
+            link.decompose()
+        elif _is_note_link(link):
+            raise ValueError("EPUB note contains another note reference; resolve its structure before extraction")
+    if copied.find(["img", "image", "table", "svg", "math"]):
+        raise ValueError("EPUB note contains unsupported structured content; supply a faithful text note")
+    body = _markup(copied, {})
+    # Bare quantities (12 people), years, and decimals are content, not labels.
+    return re.sub(r"^\s*(?:\[\d{1,3}\]|\(\d{1,3}\)|\d{1,3}[.):])(?:\s+|$)", "", body).strip()
 
-        # Remove the note body itself so it is not also emitted as a paragraph.
-        target = _note_body_node(soup, anchor)
-        if isinstance(target, Tag):
+
+def _book_footnotes(documents, load_document, footnotes):
+    """Resolve all references before removing any body, across document files."""
+    marks: dict[str, dict[int, str]] = {}
+    bodies: dict[tuple[str, str], str] = {}
+    targets: dict[int, Tag] = {}
+    for document in documents:
+        soup = load_document(document)
+        own: dict[int, str] = {}
+        for link in list(soup.find_all("a")):
+            if not _is_note_link(link):
+                continue
+            href = str(link.get("href") or "")
+            try:
+                member = _local_member(document, href)
+                fragment = unquote(urldefrag(href).fragment)
+                if not fragment:
+                    raise ValueError("note has no fragment")
+                target_soup = load_document(member)
+                if len(target_soup.find_all(id=fragment)) != 1:
+                    raise ValueError("note target is missing or ambiguous")
+                key = (member, fragment)
+                target = _note_body_node(target_soup, fragment)
+                if target is None:
+                    raise ValueError("note body is missing")
+                if key not in bodies:
+                    bodies[key] = _note_text(target)
+                if not bodies[key]:
+                    raise ValueError("note body is empty")
+            except (ValueError, KeyError) as error:
+                raise ValueError(f"unresolved EPUB note in {document}: {error}") from error
+            note = ir.make_footnote(len(footnotes) + 1, anchor_block="", text=bodies[key], origin="source")
+            footnotes.append(note)
+            own[id(link)] = note["id"]
+            targets[id(target)] = target
+        marks[document] = own
+    # Keep all target nodes alive while other references still need them.
+    for target in targets.values():
+        if target.parent is not None:
             target.decompose()
     return marks
+
+
+def _namespace_anchors(documents, soups, warn):
+    """A fragment is file-scoped in EPUB and book-scoped after assembly."""
+    identities: dict[tuple[str, str], Tag] = {}
+    for document in documents:
+        for tag in soups[document].find_all(id=True):
+            key = (document, str(tag["id"]))
+            if key in identities:
+                raise ValueError(f"duplicate EPUB anchor in {document}: {tag['id']}")
+            identities[key] = tag
+    counts = Counter(fragment for _, fragment in identities)
+    used = {fragment for _, fragment in identities}
+    resolved: dict[tuple[str, str], str] = {}
+    for (document, fragment), tag in identities.items():
+        name = fragment
+        if counts[fragment] > 1:
+            base = "epub-" + ir.sha256_bytes(document.encode("utf-8"))[:12] + "-" + fragment
+            name, suffix = base, 1
+            while name in used:
+                suffix += 1
+                name = f"{base}-{suffix}"
+            used.add(name)
+        resolved[(document, fragment)] = name
+        tag["id"] = name
+    for document in documents:
+        for link in soups[document].find_all("a"):
+            if _is_note_link(link):
+                continue
+            href = str(link.get("href") or "")
+            split = urlsplit(href)
+            if split.scheme or split.netloc or not split.fragment:
+                continue
+            try:
+                member = _local_member(document, href)
+            except ValueError:
+                member = ""
+            name = resolved.get((member, unquote(split.fragment)))
+            if name is None:
+                warn("unresolved-internal-link", "an internal target is absent from the imported spine; display words were retained")
+                link.attrs.pop("href", None)
+            else:
+                link["href"] = "#" + name
 
 
 def _walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
           asset_dir: Path, seen: dict[str, str], marks: dict[int, str],
           page: int, warn=lambda *a: None) -> None:
-    for child in node.children:
-        if not isinstance(child, Tag) or child.name in SKIP_TAGS:
-            continue
-        name = child.name
+    """Emit prose and images in one DOM-order traversal, without flattening a plate."""
+    emitted: list[dict[str, Any]] = []
 
-        if name == "img" or name == "image":
-            _add_image(child, add, archive, doc_path, asset_dir, seen, page)
-            continue
-        if name == "hr":
-            add("separator", page=page)
-            continue
-        if name in HEADINGS:
-            text, extra = _prose(child, marks, warn)
-            if text:
-                add("heading", page=page, level=HEADINGS[name], text=text,
-                    **extra)
-            continue
-        if name in {"p", "figcaption", "dt", "dd", "td", "th"}:
-            if child.find("img"):
-                _emit_mixed(child, add, archive, doc_path, asset_dir, seen,
-                            marks, page, warn)
-                continue
-            text, extra = _prose(child, marks, warn)
-            if text:
-                kind = "caption" if name == "figcaption" else "paragraph"
-                add(kind, page=page, text=text, **extra)
-            continue
-        if name == "blockquote":
-            _walk_quote(child, add, marks, page, warn)
-            continue
-        if name == "li":
-            text, extra = _prose(child, marks, warn)
-            if text:
-                add("listitem", page=page, level=1, ordered=_ordered(child),
-                    text=text, **extra)
-            continue
-        # Container element: recurse.
-        _walk(child, add, archive, doc_path, asset_dir, seen, marks, page, warn)
+    def emit(kind, **fields):
+        block = add(kind, page=page, **fields)
+        emitted.append(block)
+        return block
 
+    def image(tag):
+        def image_add(kind, **fields):
+            block = add(kind, **fields)
+            emitted.append(block)
+            return block
+        _add_image(tag, image_add, archive, doc_path, asset_dir, seen, page)
 
-def _emit_mixed(node: Tag, add, archive, doc_path, asset_dir, seen, marks,
-                page, warn=lambda *a: None) -> None:
-    """A paragraph that also holds an image — emit both, in document order."""
-    for child in node.children:
-        if isinstance(child, Tag) and child.name in {"img", "image"}:
-            _add_image(child, add, archive, doc_path, asset_dir, seen, page)
-    text, extra = _prose(node, marks, warn)
-    if text:
-        add("paragraph", page=page, text=text, **extra)
+    def flow(container, kind="paragraph", fields=None, bold=False, italic=False, depth=0, inherited_link=None):
+        if depth > 200:
+            raise ValueError("EPUB document nesting exceeds the supported depth")
+        first = len(emitted)
+        buffer, anchors, links = [], [], {}
+        fields = dict(fields or {})
 
+        def append(spans, active=None):
+            buffer.extend(spans)
+            if active is not None:
+                identity, href = active
+                display = "".join(span["text"] for span in spans)
+                if identity not in links:
+                    links[identity] = {"text": "", "href": href}
+                links[identity]["text"] += display
 
-def _walk_quote(node: Tag, add, marks: dict[int, str], page: int,
-                warn=lambda *a: None) -> None:
-    paragraphs = node.find_all("p", recursive=False) or [node]
-    for paragraph in paragraphs:
-        text, extra = _prose(paragraph, marks, warn)
-        if text:
-            add("blockquote", page=page, text=text, **extra)
+        def flush():
+            if any(span["text"].strip() or span.get("footnote") or
+                   (span.get("verbatim") and span["text"]) for span in buffer):
+                text = ir.render_spans(buffer).strip()
+                extra = dict(fields)
+                carried = [{"text": item["text"].strip(), "href": item["href"]}
+                           for item in links.values() if item["text"].strip()]
+                if carried:
+                    extra["links"] = carried
+                if anchors:
+                    extra["bookmarks"] = list(dict.fromkeys(anchors))
+                emit(kind, text=text, **extra)
+            buffer.clear()
+            anchors.clear()
+            links.clear()
+
+        def visit(child, strong=bold, emphasis=italic, active=inherited_link):
+            if isinstance(child, Comment):
+                return
+            if isinstance(child, NavigableString):
+                append(_styled(re.sub(r"\s+", " ", str(child)), strong, emphasis), active)
+                return
+            if not isinstance(child, Tag) or child.name in SKIP_TAGS:
+                return
+            name = child.name
+            if id(child) in marks:
+                span = _span("", bold=strong, italic=emphasis)
+                span["footnote"] = marks[id(child)]
+                append([span])
+                return
+            if name in {"img", "image"}:
+                flush()
+                image(child)
+                if child.get("id"):
+                    emitted[-1].setdefault("bookmarks", []).append(child["id"])
+                return
+            if name == "hr":
+                flush()
+                emit("separator")
+                return
+            if name == "br":
+                append([_span(" ", bold=strong, italic=emphasis)], active)
+                return
+            if name in VERBATIM_TAGS:
+                if name == "pre":
+                    flush()
+                if child.get("id"):
+                    anchors.append(child["id"])
+                literal = child.get_text()
+                if "`" in literal:
+                    raise ValueError("EPUB verbatim content contains an unrepresentable backtick")
+                append([_span(literal, bold=strong, italic=emphasis, verbatim=True)], active)
+                if name == "pre":
+                    flush()
+                return
+            if name in BLOCK_TAGS:
+                flush()
+                new_kind, new_fields = kind, dict(fields)
+                if name in HEADINGS:
+                    new_kind, new_fields = "heading", {"level": HEADINGS[name]}
+                elif name == "li":
+                    new_kind, new_fields = "listitem", {
+                        "level": 1 + len(child.find_parents("li")), "ordered": _ordered(child)}
+                elif name == "blockquote":
+                    new_kind, new_fields = "blockquote", {}
+                elif name == "figcaption":
+                    new_kind, new_fields = "caption", {}
+                elif kind not in {"listitem", "blockquote"}:
+                    new_kind, new_fields = "paragraph", {}
+                flow(child, new_kind, new_fields, strong, emphasis, depth + 1, active)
+                return
+            if child.get("id"):
+                anchors.append(child["id"])
+            if name == "a":
+                target = _link_target(str(child.get("href") or ""), warn)
+                active = (id(child), target) if target else None
+            for item in child.children:
+                visit(item, strong or name in BOLD_TAGS,
+                      emphasis or name in ITALIC_TAGS, active)
+
+        for child in container.children:
+            visit(child)
+        flush()
+        if container.get("id") and len(emitted) > first:
+            target = emitted[first].setdefault("bookmarks", [])
+            if container["id"] not in target:
+                target.insert(0, container["id"])
+
+    flow(node)
 
 
 def _ordered(item: Tag) -> bool:
@@ -456,20 +646,21 @@ def _add_image(tag: Tag, add, archive: zipfile.ZipFile, doc_path: str,
                asset_dir: Path, seen: dict[str, str], page: int) -> None:
     href = tag.get("src") or tag.get("xlink:href") or tag.get("href")
     if not href:
-        return
-    target = posixpath.normpath(
-        posixpath.join(posixpath.dirname(doc_path), unquote(urldefrag(href).url))
-    )
+        raise ValueError("EPUB image has no source asset")
+    target = _local_member(doc_path, href)
     try:
         data = archive.read(target)
-    except KeyError:
-        return
+    except KeyError as error:
+        raise ValueError(f"EPUB image asset is missing: {target}") from error
 
     digest = ir.sha256_bytes(data)
     if digest in seen:
         asset_name = seen[digest]
     else:
-        asset_name = f"e{page:04d}-{Path(target).name}"
+        suffix = Path(target).suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"}:
+            raise ValueError(f"unsupported EPUB image asset format: {suffix!r}")
+        asset_name = f"e-{digest}{suffix}"
         (asset_dir / asset_name).write_bytes(data)
         seen[digest] = asset_name
 
