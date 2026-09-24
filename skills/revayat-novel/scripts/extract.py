@@ -24,11 +24,13 @@ import argparse
 import glob
 import json
 import os
+import re
 import shutil
 import string
 import subprocess
 import sys
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -292,7 +294,9 @@ def _interpreter_scripts() -> Path:
     *alongside this skill's own dependencies* is invisible to `shutil.which`
     on every platform — not just Windows.
     """
-    return Path(sys.executable).resolve().parent
+    # Resolving a venv's Python symlink would search the system bin directory,
+    # where its pip-installed console scripts do not live.
+    return Path(sys.executable).absolute().parent
 
 
 def _candidates(pattern: str) -> list[str]:
@@ -305,7 +309,9 @@ def _candidates(pattern: str) -> list[str]:
     for one in expanded:
         # Reversed, so a versioned directory yields the newest first —
         # `gs10.07.1` before `gs10.02.0`.
-        found += sorted(glob.glob(one), reverse=True)
+        found += sorted(glob.glob(one), key=lambda path: tuple(
+            (1, int(part)) if part.isdigit() else (0, part.casefold())
+            for part in re.split(r"(\d+)", path)), reverse=True)
     return found
 
 
@@ -406,7 +412,7 @@ def ocr_environment(env: dict[str, str] | None = None) -> dict[str, str]:
                          (["gs", "gswin64c", "gswin32c"], "ghostscript")):
         found = find_tool(names, label)
         if found:
-            directory = str(Path(found).resolve().parent)
+            directory = str(Path(found).absolute().parent)
             if directory not in directories:
                 directories.append(directory)
     if directories:
@@ -557,12 +563,12 @@ def extract(args: argparse.Namespace) -> dict[str, Any]:
         book = from_mineru(
             Path(args.from_mineru), asset_dir,
             source_name=Path(args.input).stem if args.input else "book",
-            lang_source=args.source_lang, lang_target=args.target_lang,
+            lang_source=args.source_lang or "en", lang_target=args.target_lang,
         )
     elif args.from_markdown:
         book = from_markdown(
             Path(args.from_markdown), asset_dir,
-            lang_source=args.source_lang, lang_target=args.target_lang,
+            lang_source=args.source_lang or "en", lang_target=args.target_lang,
         )
     else:
         book = _extract_native(args, out_dir, asset_dir, report)
@@ -602,12 +608,15 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
 
     if kind == "epub":
         from read_epub import read_epub
-        return read_epub(str(source), asset_dir,
-                         lang_source=args.source_lang, lang_target=args.target_lang)
+        try:
+            return read_epub(str(source), asset_dir,
+                             lang_source=args.source_lang, lang_target=args.target_lang)
+        except (ValueError, KeyError, zipfile.BadZipFile) as error:
+            raise ExtractError(f"EPUB extraction refused: {error}") from error
     if kind == "docx":
         from read_docx import read_docx
         return read_docx(str(source), asset_dir,
-                         lang_source=args.source_lang, lang_target=args.target_lang)
+                         lang_source=args.source_lang or "en", lang_target=args.target_lang)
 
     probe = probe_pdf(source)
     report["probe"] = probe
@@ -687,7 +696,7 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
 
     from read_pdf import read_pdf
     book = read_pdf(str(read_from), asset_dir,
-                    lang_source=args.source_lang, lang_target=args.target_lang,
+                    lang_source=args.source_lang or "en", lang_target=args.target_lang,
                     max_pages=args.max_pages,
                     ocr_text=from_ocr)
     book["source"]["original_path"] = str(source)
@@ -698,7 +707,8 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("input", nargs="?", help="book file (.pdf, .epub, .docx)")
     parser.add_argument("--out", required=True, help="working directory for this run")
-    parser.add_argument("--source-lang", default="en")
+    parser.add_argument("--source-lang", default=None,
+                        help="source language (default: EPUB metadata, otherwise en)")
     parser.add_argument("--target-lang", default="fa-IR")
     parser.add_argument("--ocr", choices=["auto", "off"], default="auto",
                         help="auto (default) OCRs scanned/mixed PDFs; off never does")
