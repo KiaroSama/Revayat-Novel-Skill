@@ -373,7 +373,7 @@ def read_epub(
 
         book["blocks"] = [b for b in blocks if _keep(b)]
         book["footnotes"] = [f for f in footnotes if f["text"]]
-        _drop_orphan_footnote_tokens(book)
+        _validate_footnote_tokens(book)
         by_note = {note["id"]: note for note in book["footnotes"]}
         for block in ir.iter_text_blocks(book):
             for reference in ir.footnote_refs(block.get("text") or ""):
@@ -706,13 +706,10 @@ def _keep(block: dict[str, Any]) -> bool:
     return True
 
 
-def _drop_orphan_footnote_tokens(book: dict[str, Any]) -> None:
-    """Remove tokens whose note body was discarded as empty."""
+def _validate_footnote_tokens(book: dict[str, Any]) -> None:
+    """Check actual edges; never delete literal examples or unresolved content."""
     live = {note["id"] for note in book["footnotes"]}
     for block in ir.iter_text_blocks(book):
-        text = block.get("text") or ""
-        if "[[fn:" not in text:
-            continue
-        block["text"] = ir.FOOTNOTE_TOKEN.sub(
-            lambda m: m.group(0) if m.group(1) in live else "", text
-        )
+        unknown = set(ir.footnote_refs(block.get("text") or "")) - live
+        if unknown:
+            raise ValueError(f"unresolved EPUB footnote token in {block['id']}: {sorted(unknown)}")
