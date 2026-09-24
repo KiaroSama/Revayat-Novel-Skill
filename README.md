@@ -4,7 +4,7 @@
 [![Plugin version 1.0.0](https://img.shields.io/badge/Version-1.0.0-blue)](.claude-plugin/plugin.json)
 [![Python 3.10 or newer](https://img.shields.io/badge/Python-3.10%2B-blue)](skills/revayat-novel/requirements.txt)
 [![Windows, macOS and Linux](https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux-blue)](.github/workflows/ci.yml)
-[![Revayat Novel agent skill](https://img.shields.io/badge/Skill-Revayat%20Novel-8A2BE2)](skills/revayat-novel/SKILL.md)
+[![Revayat Novel agent skill](https://img.shields.io/badge/Skill-Persian%20books-8A2BE2)](skills/revayat-novel/SKILL.md)
 [![Claude Code plugin](https://img.shields.io/badge/Plugin-Claude%20Code-8A2BE2)](.claude-plugin/plugin.json)
 [![Cursor plugin](https://img.shields.io/badge/Plugin-Cursor-8A2BE2)](.cursor-plugin/plugin.json)
 [![Codex plugin](https://img.shields.io/badge/Plugin-Codex-8A2BE2)](.codex-plugin/plugin.json)
