@@ -26,7 +26,8 @@ def test_project_install_contains_native_document_and_opt_in_workflows(tmp_path)
     assert installed.returncode == 0, installed.stderr.decode("utf-8")
     skill = project / ".claude/skills/revayat-novel"
     entry = (skill / "SKILL.md").read_text(encoding="utf-8")
-    for name in ("native-docx.md", "native-pdf.md", "parallel-work.md", "web-novels.md"):
+    for name in ("native-docx.md", "native-pdf.md", "parallel-work.md", "web-novels.md",
+                 "book-preflight.md"):
         assert f"references/{name}" in entry
         guide = skill / "references" / name
         assert guide.is_file()

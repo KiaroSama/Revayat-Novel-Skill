@@ -82,6 +82,11 @@ retain the independently verified OCR text.
 
 ## Step 3 — Set names and voice
 
+First follow [book-preflight.md](references/book-preflight.md): inspect the
+source's order and representative passages, record risks by unit/page id in the
+adjacent workflow log, and settle observable voice/terminology questions before
+wide dispatch. A representative worksheet is a trial, not final approval.
+
 Identify the actual edition's source language and read its profile in
 [source-languages.md](references/source-languages.md), including Japanese,
 Korean, Chinese, French and Spanish. Record evidence-based decisions in the
@@ -290,6 +295,7 @@ benchmark matches and `unknown` results do not certify a book's translation.
 
 ## References
 
+- [book-preflight.md](references/book-preflight.md): inspect source structure and representative passages before setting voice and dispatching work.
 - [parallel-work.md](references/parallel-work.md): optional user-approved parallel translation, review and editing with one coordinator.
 - [web-novels.md](references/web-novels.md): site links, ordered saved chapters, source snapshots and safe resume.
 - [preservation-and-logging.md](references/preservation-and-logging.md): mandatory agent logging beside the translation, page dimensions and image fidelity.
