@@ -1,0 +1,70 @@
+name: Audit replay snapshot
+
+# A portable checkout for reproducing a specific audit when Git transport is
+# unavailable. Archive tracked files only, never credentials or working books.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/audit-replay.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/audit-replay.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Record the exact checkout and archive tracked source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p replay-evidence
+          git rev-parse HEAD > replay-evidence/commit.txt
+          git ls-tree -r HEAD > replay-evidence/tracked-tree.txt
+          git archive --format=zip --output=replay-evidence/source.zip HEAD
+          (cd replay-evidence && sha256sum source.zip > source.sha256)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: source-replay-${{ github.sha }}
+          path: replay-evidence/
+          if-no-files-found: error
+          retention-days: 7
+
+  wheelhouse:
+    # This is opt-in by workflow dispatch or changing this workflow, not part
+    # of normal source pushes. It does not replace the existing CI matrix.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Build the pinned audit dependencies for offline Linux replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p wheelhouse
+          python -m pip wheel --wheel-dir wheelhouse \
+            -r skills/revayat-novel/requirements.txt \
+            -r skills/revayat-novel/requirements-optional.txt \
+            -r requirements-lint.txt -c constraints-ci.txt
+          python --version > wheelhouse/interpreter.txt
+          git rev-parse HEAD > wheelhouse/source-commit.txt
+          (cd wheelhouse && sha256sum ./*.whl > wheels.sha256)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: audit-wheels-linux-py313-${{ github.sha }}
+          path: wheelhouse/
+          if-no-files-found: error
+          retention-days: 7

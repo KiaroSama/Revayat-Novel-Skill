@@ -1,8 +1,36 @@
 # Revayat Novel — روایت
 
-[![CI](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml)
-[![Python 3.10 or newer](https://img.shields.io/badge/Python-3.10%2B-blue)](skills/revayat-novel/requirements.txt)
 [![GPL 3.0 or later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue)](LICENSE)
+[![Plugin version 1.0.0](https://img.shields.io/badge/Version-1.0.0-blue)](.claude-plugin/plugin.json)
+[![Python 3.10 or newer](https://img.shields.io/badge/Python-3.10%2B-blue)](skills/revayat-novel/requirements.txt)
+[![Windows, macOS and Linux](https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux-blue)](.github/workflows/ci.yml)
+[![Revayat Novel agent skill](https://img.shields.io/badge/Skill-Revayat%20Novel-8A2BE2)](skills/revayat-novel/SKILL.md)
+[![Claude Code plugin](https://img.shields.io/badge/Plugin-Claude%20Code-8A2BE2)](.claude-plugin/plugin.json)
+[![Cursor plugin](https://img.shields.io/badge/Plugin-Cursor-8A2BE2)](.cursor-plugin/plugin.json)
+[![Codex plugin](https://img.shields.io/badge/Plugin-Codex-8A2BE2)](.codex-plugin/plugin.json)
+[![Installs into eight agents](https://img.shields.io/badge/Works_with-8%20agents-0A7A72)](install/install.ps1)
+
+[![PDF, EPUB, DOCX and text inputs](https://img.shields.io/badge/Sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-blue)](skills/revayat-novel/SKILL.md)
+[![Web novels from links or saved files](https://img.shields.io/badge/Web%20novels-links%20%7C%20saved%20files-blue)](skills/revayat-novel/references/web-novels.md)
+[![Persian Word output](https://img.shields.io/badge/Output-Persian%20Word-0A7A72)](skills/revayat-novel/references/native-docx.md)
+[![Japanese, Korean, Chinese, French and Spanish source guides](https://img.shields.io/badge/Source%20guides-JA%20%7C%20KO%20%7C%20ZH%20%7C%20FR%20%7C%20ES-blue)](skills/revayat-novel/references/source-languages.md)
+[![Original image pixels preserved](https://img.shields.io/badge/Images-native%20pixels-0A7A72)](skills/revayat-novel/references/preservation-and-logging.md)
+[![Word-native right-to-left text](https://img.shields.io/badge/RTL-Word--native-blue)](skills/revayat-novel/references/persian-typography.md)
+
+[![CI on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml)
+[![CodeQL on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/codeql.yml)
+[![Dependency audit on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/dependency-audit.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/dependency-audit.yml)
+[![Supported dependency range on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/supported-range.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/supported-range.yml)
+[![OCR and renderer integration on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/integration.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/integration.yml)
+[![Audit replay snapshot on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/audit-replay.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/audit-replay.yml)
+
+[![GitHub stars](https://img.shields.io/github/stars/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill)
+[![GitHub forks](https://img.shields.io/github/forks/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/forks)
+[![GitHub contributors](https://img.shields.io/github/contributors/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/graphs/contributors)
+[![Open issues](https://img.shields.io/github/issues/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/issues)
+[![Open pull requests](https://img.shields.io/github/issues-pr/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/pulls)
+[![Last commit on main](https://img.shields.io/github/last-commit/KiaroSama/Revayat-Novel-Skill/main)](https://github.com/KiaroSama/Revayat-Novel-Skill/commits/main)
+[![Project donations](https://img.shields.io/badge/Support-donations-EA4AAA)](README.md#donate)
 
 **Translate a whole book into publication-quality Persian, and get a Word file a publisher could work from.**
 
