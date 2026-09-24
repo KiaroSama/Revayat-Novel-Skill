@@ -63,6 +63,18 @@ invented details. Increasing pixel count alone is not proof of restored quality.
 If no available method improves the image faithfully, preserve the original and
 record the unresolved quality limit. This skill does not ship a restoration model.
 
+Inspect covers, screenshots, diagrams, maps and illustrations for letters that
+remain in the source language *inside* the image. Translate meaningful labels
+as part of the book, separately from its caption or alt text. Keep the original
+bytes and create a faithful localized derivative when the lettering can be
+changed without inventing or erasing visual facts. Preserve native pixel size
+or a justified higher-resolution derivative, aspect ratio and physical display
+size; log the source/derivative hashes, changed labels and comparison result.
+If localization cannot be done faithfully, record the asset/page and unresolved
+letters. A caption translation alone cannot justify `no-source-language=yes` on
+a page that still visibly contains source-language lettering. Inspect that page
+again before recording visual approval.
+
 After any approved enhancement, rerun package and render checks, inspect image
 placement and clarity, and renew affected visual approvals. Never substitute a
 low-resolution preview for the original publication asset.
