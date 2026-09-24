@@ -250,3 +250,19 @@ def test_epub_assets_and_cross_file_notes_reach_the_production_docx(tmp_path, ro
         assert len(opc.footnote_references(document)) == 1
         assert len(opc.drawing_extents(document)) == 2
         assert b"A  B" in archive.read("word/footnotes.xml")
+
+
+@pytest.mark.parametrize("body,literal", [
+    ('<p>Example: <code>[[fn:fn0001]]</code>.</p>', "[[fn:fn0001]]"),
+    ('<pre>[[fn:fn0001]]</pre>', "[[fn:fn0001]]"),
+    ('<p><em><code>[[fn:fn10000]]</code></em></p>', "[[fn:fn10000]]"),
+])
+def test_literal_note_examples_are_not_deleted(tmp_path, body, literal):
+    book = read(tmp_path, body)
+    assert [value for block in book["blocks"] for value in ir.verbatim_spans(block.get("text") or "")] == [literal]
+    assert book["footnotes"] == []
+
+
+def test_undefined_live_token_is_refused_not_silently_removed(tmp_path):
+    with pytest.raises(ValueError, match="footnote"):
+        read(tmp_path, "<p>Unresolved [[fn:fn0001]] reference.</p>")
