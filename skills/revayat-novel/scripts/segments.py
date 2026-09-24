@@ -31,6 +31,8 @@ So the unit is cut, under four rules that make the cut safe to undo:
 from __future__ import annotations
 
 import re
+import unicodedata
+from bisect import bisect_right
 from typing import Callable, Iterable
 
 import bookir as ir
@@ -88,35 +90,57 @@ def cut_points(text: str) -> list[int]:
     return sorted(points)
 
 
+# These explicit sentence marks are useful where words are not space-separated.
+# ASCII full stops are deliberately excluded: decimals, versions and domains
+# are not reliable sentence boundaries. This is not a full Unicode segmenter.
+_SENTENCE_END = re.compile(r"[。！？]+[」』）】〉》”’»]*")
+_URL = re.compile(r"(?:https?://|www\.)[^\s]+", re.IGNORECASE)
+
+
+def _text_boundaries(text: str) -> list[int]:
+    """Conservative word/sentence ends, outside indivisible inline tokens."""
+    safe = set(cut_points(text))
+    ends = {p for p in safe if p and (p == len(text) or text[p - 1].isspace())}
+    urls = [match.span() for match in _URL.finditer(text)]
+    url_index = 0
+    for match in _SENTENCE_END.finditer(text):
+        end = match.end()
+        while url_index < len(urls) and urls[url_index][1] <= match.start():
+            url_index += 1
+        in_url = (url_index < len(urls)
+                  and urls[url_index][0] < end and match.start() < urls[url_index][1])
+        # Keep combining/variation marks and joiner sequences with their base.
+        attached = (end < len(text) and
+                    (unicodedata.category(text[end]).startswith("M")
+                     or text[end] == "\u200d"))
+        if end in safe and not in_url and not attached:
+            ends.add(end)
+    return sorted(ends)
+
+
 def split_text(text: str, budget: int) -> list[str]:
-    """``text`` in pieces of at most ``budget`` characters that rejoin exactly.
+    """Cut at word or unspaced sentence ends, keeping the exact source slices.
 
-    ``"".join(split_text(t, n)) == t`` for every ``t`` and every ``n``. That is
-    the property the whole design rests on, and it is tested as one.
-
-    Cuts land after a space where one is available, because a piece ending
-    mid-word hands the translator half a word and the next job the other half.
-    A word longer than the budget is left whole and over: cutting inside one
-    produces two fragments that are words in no language.
+    ``"".join(split_text(t, n)) == t`` always. Existing space-separated prose
+    retains its word boundaries; Japanese/Chinese prose can additionally break
+    after 。/！/？ and its closing quotation marks. No arbitrary character cuts
+    are made: a single oversized word, sentence or inline token remains whole
+    and over budget for the caller to refuse explicitly.
     """
     if budget <= 0 or len(text) <= budget:
         return [text]
 
-    safe = cut_points(text)
-    ends_a_word = [p for p in safe if p and (p == len(text) or text[p - 1].isspace())]
+    boundaries = _text_boundaries(text)
     pieces: list[str] = []
     start = 0
     while start < len(text):
-        limit = start + budget
-        within = [p for p in ends_a_word if start < p <= limit]
-        if within:
-            end = max(within)
+        index = bisect_right(boundaries, start + budget)
+        if index and boundaries[index - 1] > start:
+            end = boundaries[index - 1]
         else:
-            # One word longer than the whole allowance. Run on to the end of
-            # it rather than hand the translator two halves of a word that are
-            # words in no language; the overshoot is bounded by that word.
-            beyond = [p for p in ends_a_word if p > limit]
-            end = beyond[0] if beyond else len(text)
+            # No legal cut within the allowance: retain the whole indivisible
+            # run rather than silently truncating it or cutting inside a token.
+            end = boundaries[index] if index < len(boundaries) else len(text)
         pieces.append(text[start:end])
         start = end
     return pieces
