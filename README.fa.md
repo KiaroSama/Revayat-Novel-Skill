@@ -2,9 +2,37 @@
 
 # روایت — Revayat Novel
 
-[![وضعیت CI](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml)
-[![پایتون ۳٫۱۰ به بالا](https://img.shields.io/badge/Python-3.10%2B-blue)](skills/revayat-novel/requirements.txt)
 [![مجوز GPL نسخهٔ ۳ یا بالاتر](https://img.shields.io/badge/License-GPL--3.0--or--later-blue)](LICENSE)
+[![نسخهٔ پلاگین ۱٫۰٫۰](https://img.shields.io/badge/Version-1.0.0-blue)](.claude-plugin/plugin.json)
+[![پایتون ۳٫۱۰ به بالا](https://img.shields.io/badge/Python-3.10%2B-blue)](skills/revayat-novel/requirements.txt)
+[![پشتیبانی از ویندوز، مک و لینوکس](https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux-blue)](.github/workflows/ci.yml)
+[![اسکیل روایت ناول](https://img.shields.io/badge/Skill-Revayat%20Novel-8A2BE2)](skills/revayat-novel/SKILL.md)
+[![پلاگین Claude Code](https://img.shields.io/badge/Plugin-Claude%20Code-8A2BE2)](.claude-plugin/plugin.json)
+[![پلاگین Cursor](https://img.shields.io/badge/Plugin-Cursor-8A2BE2)](.cursor-plugin/plugin.json)
+[![پلاگین Codex](https://img.shields.io/badge/Plugin-Codex-8A2BE2)](.codex-plugin/plugin.json)
+[![نصب برای هشت ایجنت](https://img.shields.io/badge/Works_with-8%20agents-0A7A72)](install/install.ps1)
+
+[![ورودی‌های PDF، EPUB، DOCX و متن](https://img.shields.io/badge/Sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-blue)](skills/revayat-novel/SKILL.md)
+[![وب‌ناول از لینک یا فایل ذخیره‌شده](https://img.shields.io/badge/Web%20novels-links%20%7C%20saved%20files-blue)](skills/revayat-novel/references/web-novels.md)
+[![خروجی ورد فارسی](https://img.shields.io/badge/Output-Persian%20Word-0A7A72)](skills/revayat-novel/references/native-docx.md)
+[![راهنمای زبان‌های ژاپنی، کره‌ای، چینی، فرانسوی و اسپانیایی](https://img.shields.io/badge/Source%20guides-JA%20%7C%20KO%20%7C%20ZH%20%7C%20FR%20%7C%20ES-blue)](skills/revayat-novel/references/source-languages.md)
+[![حفظ پیکسل‌های اصلی تصویر](https://img.shields.io/badge/Images-native%20pixels-0A7A72)](skills/revayat-novel/references/preservation-and-logging.md)
+[![راست‌به‌چپ بومی ورد](https://img.shields.io/badge/RTL-Word--native-blue)](skills/revayat-novel/references/persian-typography.md)
+
+[![وضعیت CI روی شاخهٔ اصلی](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml)
+[![وضعیت CodeQL روی شاخهٔ اصلی](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/codeql.yml)
+[![وضعیت ممیزی وابستگی‌ها روی شاخهٔ اصلی](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/dependency-audit.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/dependency-audit.yml)
+[![وضعیت حداقل نسخه‌های پشتیبانی‌شده](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/supported-range.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/supported-range.yml)
+[![وضعیت آزمون OCR و رندر](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/integration.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/integration.yml)
+[![وضعیت بازپخش ممیزی روی شاخهٔ اصلی](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/audit-replay.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/audit-replay.yml)
+
+[![ستاره‌های گیت‌هاب](https://img.shields.io/github/stars/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill)
+[![فورک‌های گیت‌هاب](https://img.shields.io/github/forks/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/forks)
+[![مشارکت‌کنندگان گیت‌هاب](https://img.shields.io/github/contributors/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/graphs/contributors)
+[![ایشوهای باز](https://img.shields.io/github/issues/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/issues)
+[![درخواست‌های ادغام باز](https://img.shields.io/github/issues-pr/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/pulls)
+[![آخرین کامیت شاخهٔ اصلی](https://img.shields.io/github/last-commit/KiaroSama/Revayat-Novel-Skill/main)](https://github.com/KiaroSama/Revayat-Novel-Skill/commits/main)
+[![حمایت مالی از پروژه](https://img.shields.io/badge/Support-donations-EA4AAA)](README.md#donate)
 
 **ترجمهٔ کامل یک کتاب به فارسیِ در حد چاپ، و تحویل یک فایل ورد که یک ناشر بتواند رویش کار کند.**
 
