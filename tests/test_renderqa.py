@@ -1000,6 +1000,8 @@ def test_doctor_picks_the_newest_versioned_install(tmp_path, monkeypatch):
 
     monkeypatch.setattr(extract.shutil, "which", lambda name: None)
     monkeypatch.setattr(extract, "_drives", lambda: [str(tmp_path)])
+    # This test isolates fallback installs, not an actual interpreter's tools.
+    monkeypatch.setattr(extract, "_interpreter_scripts", lambda: tmp_path / "empty-bin")
     pattern = os.sep.join(["<drive>", "gs", "gs*", "bin", "gswin64c.exe"])
     monkeypatch.setattr(extract, "BUNDLED_TOOLS", {"ghostscript": (pattern,)})
 

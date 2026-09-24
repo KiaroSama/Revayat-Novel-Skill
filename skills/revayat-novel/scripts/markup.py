@@ -75,8 +75,34 @@ _INVISIBLE = str.maketrans({
 
 
 def normalise_source(text: str) -> str:
-    """Strip invisible noise that extractors leave in prose."""
-    return re.sub(r"[ \t]{2,}", " ", (text or "").translate(_INVISIBLE)).strip()
+    """Normalize extractor noise in prose, never inside literal source spans.
+
+    Work over raw token slices so malformed markup is not reserialized and
+    escaped delimiters retain their original spelling. Emphasis may contain
+    literals, so its body uses the same traversal recursively.
+    """
+    def prose(value: str) -> str:
+        return re.sub(r"[ \t]{2,}", " ", value.translate(_INVISIBLE))
+
+    def clean(value: str) -> str:
+        parts: list[str] = []
+        cursor = 0
+        for match in _INLINE.finditer(value):
+            parts.append(prose(value[cursor:match.start()]))
+            if match.group("code") is not None:
+                parts.append(match.group(0))
+            else:
+                for kind, marker in (("bi", "***"), ("bold", "**"), ("italic", "*")):
+                    if match.group(kind) is not None:
+                        parts.append(marker + clean(match.group(kind + "_body")) + marker)
+                        break
+                else:
+                    parts.append(prose(match.group(0)))
+            cursor = match.end()
+        parts.append(prose(value[cursor:]))
+        return "".join(parts)
+
+    return clean(text or "").strip()
 
 
 def escape_markup(text: str) -> str:
