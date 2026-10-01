@@ -56,6 +56,13 @@ def test_direct_and_container_prose_is_never_lost(tmp_path, body):
     assert visible(read(tmp_path, body)) == ["Bare first.", "Middle.", "Bare last."]
 
 
+@pytest.mark.parametrize("wrapper", ["pre", "code"])
+def test_structured_literal_refuses_instead_of_losing_its_image(tmp_path, wrapper):
+    with pytest.raises(ValueError, match="literal|verbatim|structured"):
+        read(tmp_path, f'<{wrapper}>Before<img src="p.png"/>After</{wrapper}>',
+             extras={"p.png": png_bytes(12, 8)})
+
+
 @pytest.mark.parametrize("wrapper,kind", [("p", "paragraph"), ("blockquote", "blockquote"), ("li", "listitem"), ("h2", "heading")])
 @pytest.mark.parametrize("wrapped", [False, True])
 def test_mixed_images_keep_narrative_order_and_block_kind(tmp_path, wrapper, kind, wrapped):
@@ -119,6 +126,22 @@ def test_cross_document_note_is_not_repeated_as_main_prose(tmp_path):
 def test_a_note_does_not_lose_a_real_leading_quantity(tmp_path, note):
     book = read(tmp_path, '<p>Word<sup><a href="#n">1</a></sup>.</p><aside id="n"><p>' + note + '</p></aside>')
     assert book["footnotes"][0]["text"] == note
+
+
+@pytest.mark.parametrize("body", ["<p>First.</p>Second.", "First.<p>Second.</p>Third."])
+def test_note_block_boundaries_do_not_join_adjacent_words(tmp_path, body):
+    book = read(tmp_path, '<p>Word<a epub:type="noteref" href="#n">1</a>.</p>'
+                '<aside id="n">' + body + '</aside>')
+    assert ir.plain_text(book["footnotes"][0]["text"]) == (
+        "First. Second. Third." if "Third." in body else "First. Second.")
+
+
+@pytest.mark.parametrize("symbol", ["↩", "↵", "↑"])
+def test_note_symbol_links_are_content_unless_explicitly_backlinks(tmp_path, symbol):
+    book = read(tmp_path, '<p>Word<a epub:type="noteref" href="#n">1</a>.</p>'
+                '<aside id="n"><p>Direction <a href="https://example.com/diagram">'
+                + symbol + '</a> matters.<a role="doc-backlink" href="#origin">↑</a></p></aside>')
+    assert ir.plain_text(book["footnotes"][0]["text"]) == f"Direction {symbol} matters."
 
 
 def test_note_emphasis_and_verbatim_survive_extraction(tmp_path):

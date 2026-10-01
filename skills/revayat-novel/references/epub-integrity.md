@@ -22,7 +22,12 @@ confirm the actual edition using source-languages.md and book-preflight.md.
 Inspect source warnings before dispatch. Unsupported note structures or literal
 backticks that cannot be represented losslessly are explicit refusals, not a
 license to paraphrase source evidence. Non-linear documents remain outside the
-main spine, but may supply referenced notes. Ordinary links to entire files or
+linear reading order, but may supply referenced notes. A linked local notes
+content document belongs in the EPUB spine, normally with `linear="no"`.
+Pictures or other structured content inside a literal pre/code region refuse
+rather than disappearing; provide a faithful supported source structure.
+Note block boundaries retain word separation. Only explicitly identified
+backlinks are removed; an arrow-shaped ordinary link is still source content. Ordinary links to entire files or
 unavailable targets retain their words and report their unavailable destination.
 This is structured book extraction, not a complete HTML/CSS browser: inspect
 complex layout and embedded lettering as described in preservation-and-logging.md.
