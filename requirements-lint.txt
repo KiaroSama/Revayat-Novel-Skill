@@ -23,4 +23,4 @@
 # rules, run `ruff check skills/revayat-novel/scripts tests evaluation` locally
 # at the candidate version, and only then raise it.
 
-ruff==0.16.8
+ruff==0.16.10

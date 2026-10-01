@@ -37,6 +37,7 @@ from typing import Any
 import bookir as ir
 import bookwrite
 import runstate
+from toollocations import BUNDLED_TOOLS, OPTIONAL_TOOLS  # noqa: F401
 
 # The side doors live in their own module now. Re-exported here because
 # `extract` is the stage everything calls and the tests import these names from
@@ -201,7 +202,6 @@ def find_ocrmypdf() -> list[str] | None:
     return [sys.executable, "-m", "ocrmypdf"]
 
 
-from toollocations import BUNDLED_TOOLS, OPTIONAL_TOOLS  # noqa: F401
 
 
 def _drives() -> list[str]:

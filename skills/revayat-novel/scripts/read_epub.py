@@ -26,12 +26,12 @@ from bs4 import BeautifulSoup, Tag
 
 import bookir as ir
 
-LOG = logging.getLogger(__name__)
-
 from epubdom import (  # noqa: F401
     BLOCK_TAGS, BOLD_TAGS, HEADINGS, ITALIC_TAGS, SKIP_TAGS, VERBATIM_TAGS,
     _inline_spans, _link_target, _markup, _span, _styled, walk as _dom_walk,
 )
+
+LOG = logging.getLogger(__name__)
 
 _OPF_NS = {"opf": "http://www.idpf.org/2007/opf",
            "cnt": "urn:oasis:names:tc:opendocument:xmlns:container"}
