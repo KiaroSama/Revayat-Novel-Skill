@@ -231,7 +231,11 @@ unchanged.
 
 EPUB is the best source when you have a choice: it is already structured, so
 headings, emphasis, block quotes, lists and image references need no guessing.
-Spine order is authoritative. Footnotes are recovered from
+Spine order is authoritative. Before dispatch, follow
+[EPUB integrity and recovery](epub-integrity.md): restore missing chapters,
+images or note targets in the source package, never delete their references.
+An unspecified source language uses EPUB metadata; an explicit override wins.
+Footnotes are recovered from
 `epub:type="noteref"` links and from `<sup><a href="#id">` markers, with the
 note body pulled from the element the link points at and its leading `1.`
 stripped — Word numbers footnotes itself.

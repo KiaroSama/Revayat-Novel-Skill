@@ -24,11 +24,13 @@ import argparse
 import glob
 import json
 import os
+import re
 import shutil
 import string
 import subprocess
 import sys
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -199,74 +201,7 @@ def find_ocrmypdf() -> list[str] | None:
     return [sys.executable, "-m", "ocrmypdf"]
 
 
-#: The names a binary may go by, and why a reader wants it. Ghostscript is `gs`
-#: on Unix and `gswin64c` / `gswin32c` on Windows — checking only the Unix name
-#: reported it missing on every Windows machine that had it.
-#:
-#: Here rather than in the dispatcher, and keyed by the same labels as
-#: `BUNDLED_TOOLS` below, because the two are joined by that string: `find_tool`
-#: does `BUNDLED_TOOLS.get(label, ())`, so a label spelled differently in the
-#: two tables silently searches no install locations at all and falls back to
-#: PATH — which is the exact defect this mechanism exists to fix, with nothing
-#: anywhere to report it. One table cannot drift from itself.
-OPTIONAL_TOOLS = {
-    "ocrmypdf": (["ocrmypdf"], "adds a text layer to scanned or mixed PDFs"),
-    "tesseract": (["tesseract"], "the OCR engine OCRmyPDF drives"),
-    "ghostscript": (["gs", "gswin64c", "gswin32c"], "required by OCRmyPDF"),
-    "mineru": (["mineru", "magic-pdf"], "stronger extraction for difficult scans"),
-}
-
-#: Where an ordinary install leaves a tool *without* putting it on PATH.
-#:
-#: Same shape and the same measured reason as `wordrender.BUNDLED_LIBREOFFICE`:
-#: `shutil.which` alone reported MinerU and Tesseract missing on a machine that
-#: had both installed, so `doctor` printed install instructions for software the
-#: reader already had, `ocr_sidecar` refused to run, and the OCR tier skipped
-#: itself. A tool that is present but not on PATH is the ordinary case, not the
-#: exception.
-#:
-#: A pattern containing `<drive>` is Windows-only and is expanded against every
-#: fixed drive — a large optional tool is routinely installed off the system
-#: drive, and the MinerU this was measured against lives on `G:`. Every other
-#: pattern is used as written, with `~` expanded, and is tried on any platform.
-#:
-#: It lives here rather than in the dispatcher because `extract` is the stage
-#: that drives these tools and already owns `find_ocrmypdf` — and because the
-#: OCR tests need the same answer `doctor` gives. Two places deciding separately
-#: is how they came to disagree.
-BUNDLED_TOOLS = {
-    "tesseract": (
-        r"<drive>\Program Files\Tesseract-OCR\tesseract.exe",
-        r"<drive>\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        "/opt/homebrew/bin/tesseract",          # Homebrew on Apple silicon
-        "/usr/local/bin/tesseract",             # Homebrew on Intel, /usr/local
-        "/opt/local/bin/tesseract",             # MacPorts
-        "~/.local/bin/tesseract",               # pip --user, pipx
-    ),
-    "ghostscript": (
-        r"<drive>\Program Files\gs\gs*\bin\gswin64c.exe",
-        r"<drive>\Program Files\gs\gs*\bin\gswin32c.exe",
-        "/opt/homebrew/bin/gs",
-        "/usr/local/bin/gs",
-        "/opt/local/bin/gs",
-    ),
-    "mineru": (
-        r"<drive>\Program Files\MinerU\venv\Scripts\mineru.exe",
-        r"<drive>\MinerU\venv\Scripts\mineru.exe",
-        "/opt/MinerU/venv/bin/mineru",
-        "~/MinerU/venv/bin/mineru",
-        "~/.local/bin/mineru",
-    ),
-}
-
-#: Every label with install locations must be a tool `doctor` asks about, and
-#: every tool that can live off PATH must have locations. `ocrmypdf` is the one
-#: exception by design: `find_ocrmypdf` resolves it, from PATH or as a module in
-#: this interpreter, so it needs no path patterns. Checked at import because it
-#: is a structural invariant over two literals in this one file — a mismatch
-#: means the module is broken, not that some input was bad.
-assert set(BUNDLED_TOOLS) == set(OPTIONAL_TOOLS) - {"ocrmypdf"}, (
-    f"the two tool tables disagree: {set(BUNDLED_TOOLS) ^ set(OPTIONAL_TOOLS)}")
+from toollocations import BUNDLED_TOOLS, OPTIONAL_TOOLS  # noqa: F401
 
 
 def _drives() -> list[str]:
@@ -292,7 +227,9 @@ def _interpreter_scripts() -> Path:
     *alongside this skill's own dependencies* is invisible to `shutil.which`
     on every platform — not just Windows.
     """
-    return Path(sys.executable).resolve().parent
+    # Resolving a venv's Python symlink would search the system bin directory,
+    # where its pip-installed console scripts do not live.
+    return Path(sys.executable).absolute().parent
 
 
 def _candidates(pattern: str) -> list[str]:
@@ -305,7 +242,9 @@ def _candidates(pattern: str) -> list[str]:
     for one in expanded:
         # Reversed, so a versioned directory yields the newest first —
         # `gs10.07.1` before `gs10.02.0`.
-        found += sorted(glob.glob(one), reverse=True)
+        found += sorted(glob.glob(one), key=lambda path: tuple(
+            (1, int(part)) if part.isdigit() else (0, part.casefold())
+            for part in re.split(r"(\d+)", path)), reverse=True)
     return found
 
 
@@ -406,7 +345,7 @@ def ocr_environment(env: dict[str, str] | None = None) -> dict[str, str]:
                          (["gs", "gswin64c", "gswin32c"], "ghostscript")):
         found = find_tool(names, label)
         if found:
-            directory = str(Path(found).resolve().parent)
+            directory = str(Path(found).absolute().parent)
             if directory not in directories:
                 directories.append(directory)
     if directories:
@@ -557,12 +496,12 @@ def extract(args: argparse.Namespace) -> dict[str, Any]:
         book = from_mineru(
             Path(args.from_mineru), asset_dir,
             source_name=Path(args.input).stem if args.input else "book",
-            lang_source=args.source_lang, lang_target=args.target_lang,
+            lang_source=args.source_lang or "en", lang_target=args.target_lang,
         )
     elif args.from_markdown:
         book = from_markdown(
             Path(args.from_markdown), asset_dir,
-            lang_source=args.source_lang, lang_target=args.target_lang,
+            lang_source=args.source_lang or "en", lang_target=args.target_lang,
         )
     else:
         book = _extract_native(args, out_dir, asset_dir, report)
@@ -602,12 +541,15 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
 
     if kind == "epub":
         from read_epub import read_epub
-        return read_epub(str(source), asset_dir,
-                         lang_source=args.source_lang, lang_target=args.target_lang)
+        try:
+            return read_epub(str(source), asset_dir,
+                             lang_source=args.source_lang, lang_target=args.target_lang)
+        except (ValueError, KeyError, zipfile.BadZipFile) as error:
+            raise ExtractError(f"EPUB extraction refused: {error}") from error
     if kind == "docx":
         from read_docx import read_docx
         return read_docx(str(source), asset_dir,
-                         lang_source=args.source_lang, lang_target=args.target_lang)
+                         lang_source=args.source_lang or "en", lang_target=args.target_lang)
 
     probe = probe_pdf(source)
     report["probe"] = probe
@@ -687,7 +629,7 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
 
     from read_pdf import read_pdf
     book = read_pdf(str(read_from), asset_dir,
-                    lang_source=args.source_lang, lang_target=args.target_lang,
+                    lang_source=args.source_lang or "en", lang_target=args.target_lang,
                     max_pages=args.max_pages,
                     ocr_text=from_ocr)
     book["source"]["original_path"] = str(source)
@@ -698,7 +640,8 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("input", nargs="?", help="book file (.pdf, .epub, .docx)")
     parser.add_argument("--out", required=True, help="working directory for this run")
-    parser.add_argument("--source-lang", default="en")
+    parser.add_argument("--source-lang", default=None,
+                        help="source language (default: EPUB metadata, otherwise en)")
     parser.add_argument("--target-lang", default="fa-IR")
     parser.add_argument("--ocr", choices=["auto", "off"], default="auto",
                         help="auto (default) OCRs scanned/mixed PDFs; off never does")
