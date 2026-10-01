@@ -21,16 +21,30 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Record the exact checkout and archive tracked source
         shell: bash
         run: |
           set -euo pipefail
+          log() {
+            local level="$1"; shift
+            case "$level" in INFO|WARNING|ERROR|DEBUG) ;; *) return 2 ;; esac
+            printf '%s [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$level" "$*"
+          }
+          trap 'log ERROR "Source replay export failed"' ERR
+          log INFO "Exporting tracked source and its exact history"
           mkdir -p replay-evidence
           git rev-parse HEAD > replay-evidence/commit.txt
           git ls-tree -r HEAD > replay-evidence/tracked-tree.txt
           git archive --format=zip --output=replay-evidence/source.zip HEAD
           (cd replay-evidence && sha256sum source.zip > source.sha256)
+          git bundle create replay-evidence/source.bundle HEAD
+          git bundle verify replay-evidence/source.bundle
+          (cd replay-evidence && sha256sum source.bundle > bundle.sha256)
+          log DEBUG "Git bundle verified against the checked-out commit"
+          log WARNING "Committed history is included; local Rules and untracked books are not"
+          log INFO "Source replay ready"
       - uses: actions/upload-artifact@v7
         with:
           name: source-replay-${{ github.sha }}
