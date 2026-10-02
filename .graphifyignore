@@ -10,7 +10,7 @@ graphify-out/
 node_modules/
 .venv/
 venv/
-.revayat-venv/
+.*-venv/
 .uv-cache/
 .pytest-tmp/
 .pytest_cache/
