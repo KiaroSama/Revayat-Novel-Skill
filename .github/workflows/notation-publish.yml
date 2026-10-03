@@ -1,0 +1,98 @@
+name: Publish verified notation repair
+on:
+  push:
+    branches: [fix/2026-10-03-source-notation]
+    paths: [.github/audit/**, .github/workflows/notation-publish.yml]
+permissions:
+  contents: write
+concurrency:
+  group: publish-notation-repair
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'KiaroSama/Revayat-Novel-Skill' && github.ref == 'refs/heads/fix/2026-10-03-source-notation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate the transferred patch and publish only its exact tree
+        shell: bash
+        env:
+          PUBLISH_TOKEN: ${{ github.token }}
+          EXPECTED_REF: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import io
+          import json
+          import logging
+          import os
+          from pathlib import Path
+          import shutil
+          import subprocess
+
+          logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(levelname)s] %(message)s')
+          log = logging.getLogger('notation-publication')
+          branch = 'fix/2026-10-03-source-notation'
+          base = 'c03ab2985db2862313720fe1a0512d915ff23286'
+          desired = '8643f0edcf5ee313f40c02e51d0d494e3c80785b'
+          expected_hash = '279d100bd00d721b7a8f56519764de93a74a63c6fcb861cb3ecd94f4fd7b0361'
+          store = Path(os.environ['RUNNER_TEMP']) / 'notation-transfer'
+          shutil.copytree('.github/audit', store, dirs_exist_ok=True)
+          try:
+              log.info('Verifying a fixed, source-only repair patch before writing any ref')
+              encoded = (store / 'source-notation.patch.gz.b64').read_text().strip()
+              corrections = store / 'transport-corrections.json'
+              if corrections.exists():
+                  for correction in json.loads(corrections.read_text()):
+                      old, new = correction['old'], correction['new']
+                      if encoded.count(old) != 1:
+                          raise ValueError('transport correction is not unique')
+                      encoded = encoded.replace(old, new, 1)
+              compressed = base64.b64decode(encoded, validate=True)
+              with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as handle:
+                  patch = handle.read(40001)
+              if len(patch) > 40000 or hashlib.sha256(patch).hexdigest() != expected_hash:
+                  raise ValueError('transferred patch does not match the locally tested patch')
+              (store / 'repair.patch').write_bytes(patch)
+              subprocess.run(['git', 'switch', '--detach', base], check=True)
+              subprocess.run(['git', 'apply', '--check', str(store / 'repair.patch')], check=True)
+              subprocess.run(['git', 'apply', '--index', str(store / 'repair.patch')], check=True)
+              tree = subprocess.check_output(['git', 'write-tree'], text=True).strip()
+              if tree != desired:
+                  raise ValueError('candidate tree differs from the tested tree')
+              log.debug('Exact repaired tree verified: %s', tree)
+              env = os.environ.copy()
+              env.update(GIT_AUTHOR_NAME='KiaroSama', GIT_COMMITTER_NAME='KiaroSama',
+                         GIT_AUTHOR_EMAIL='Kiaro.Sama.Dev@gmail.com',
+                         GIT_COMMITTER_EMAIL='Kiaro.Sama.Dev@gmail.com')
+              commit = subprocess.check_output(['git', 'commit-tree', tree, '-p', base,
+                  '-m', 'fix: preserve source joiners, ruby readings and note notation'], env=env, text=True).strip()
+              identity = subprocess.check_output(['git', 'show', '-s', '--format=%ae%n%ce', commit], text=True).splitlines()
+              if identity != ['Kiaro.Sama.Dev@gmail.com'] * 2:
+                  raise ValueError('commit identities do not match the required address')
+              log.warning('Updating only the newly created repair branch with an exact observed-ref lease')
+              authorization = base64.b64encode(('x-access-token:' + env['PUBLISH_TOKEN']).encode()).decode()
+              env.update(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='http.https://github.com/.extraheader',
+                         GIT_CONFIG_VALUE_0='AUTHORIZATION: basic ' + authorization)
+              subprocess.run(['git', 'push', '--force-with-lease=refs/heads/' + branch + ':' + os.environ['EXPECTED_REF'],
+                              'origin', commit + ':refs/heads/' + branch], check=True, env=env)
+              (store / 'published.json').write_text(json.dumps({'commit': commit, 'tree': tree, 'base': base,
+                  'author_email': identity[0], 'committer_email': identity[1]}, indent=2) + '\n')
+              log.info('Published verified repair commit %s; main and PR states were not changed', commit)
+          except Exception as error:
+              log.error('Publication stopped before claiming success: %s', type(error).__name__)
+              raise
+          PY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: notation-transfer-evidence
+          path: ${{ runner.temp }}/notation-transfer/
+          if-no-files-found: error
+          retention-days: 7
