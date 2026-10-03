@@ -18,20 +18,24 @@ was never the alternative to dropping it.
 from __future__ import annotations
 
 import re
+import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Iterator
 
 from docx import Document
 from docx.enum.section import WD_ORIENT
-from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.hyperlink import Hyperlink
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
-from lxml import etree
 
 import bookir as ir
+from docxnotes import NOTE_PARTS, note_key, read_notes
+
+LOG = logging.getLogger(__name__)
 
 EMU_PER_PT = ir.EMU_PER_PT
 
@@ -92,17 +96,34 @@ def table_cells(table) -> list[dict[str, Any]]:
     open_at: dict[int, dict[str, Any]] = {}
 
     for row_number, tr in enumerate(table._tbl.findall(qn("w:tr")), start=1):
-        column = 0
+        properties = tr.find(qn("w:trPr"))
+        before = properties.find(qn("w:gridBefore")) if properties is not None else None
+        try:
+            column = int(before.get(qn("w:val"))) if before is not None else 0
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid DOCX table leading grid offset") from error
+        if column < 0:
+            raise ValueError("invalid DOCX table leading grid offset")
+        following: dict[int, dict[str, Any]] = {}
         for tc in tr.findall(qn("w:tc")):
             width = column_span(tc)
-            if _vertical_merge(tc) == "continue" and column in open_at:
-                open_at[column]["row_span"] += 1
+            merge = _vertical_merge(tc)
+            if merge == "continue":
+                record = open_at.get(column)
+                if record is None or record["col_span"] != width:
+                    raise ValueError("invalid DOCX table vertical merge continuation")
+                record["row_span"] += 1
+                following[column] = record
             else:
                 record = {"tc": _Cell(tc, table), "row": row_number,
                           "cell": column + 1, "row_span": 1, "col_span": width}
                 found.append(record)
-                open_at[column] = record
+                if merge == "restart":
+                    following[column] = record
             column += width
+        # Only a restarted/continued span in the immediately preceding row is
+        # eligible. Ordinary or absent cells must never seed a later merge.
+        open_at = following
     return found
 
 
@@ -365,75 +386,36 @@ def _run_style(run) -> tuple[bool, bool]:
     return bool(bold), bool(italic)
 
 
-#: The note parts are read past python-docx, which models neither, so this is
-#: the one place in the project that parses a stranger's XML itself. It matches
-#: what python-docx does for every part it *does* own (`docx/oxml/parser.py`):
-#: entities off. A .docx is an archive from whoever sent the book - the same
-#: reason `bookir.check_archive_limits` refuses one before inflating it - and
-#: an entity expansion is consumed memory before any exception exists, so the
-#: `except` below would never see it.
-_NOTE_PARSER = etree.XMLParser(resolve_entities=False)
-
-#: The two ways Word stores a note. They are the same shape and the same loss
-#: if missed - a book that puts its notes at the back rather than the foot of
-#: the page came through with every one of them gone, and nothing said so.
-#: Both become footnotes in the Persian edition, because that is where a
-#: Persian reader looks, and because it is what the builder writes.
-NOTE_PARTS = (("footnote", RT.FOOTNOTES, "w:footnote", "w:footnoteReference"),
-              ("endnote", RT.ENDNOTES, "w:endnote", "w:endnoteReference"))
-
-
 def _read_notes(document) -> dict[str, str]:
-    """``"<kind>:<id>" -> plain text``, from both note parts.
-
-    Keyed by kind as well as id because the two id spaces are separate: an
-    endnote 1 and a footnote 1 are different notes, and merging them on the
-    number alone silently drops one of the two.
-
-    Word reserves ids -1 and 0 for the separator marks; they carry no content.
-    """
-    notes: dict[str, str] = {}
-    for kind, relationship, tag, _ in NOTE_PARTS:
-        try:
-            part = document.part.part_related_by(relationship)
-        except KeyError:
-            continue
-        try:
-            root = etree.fromstring(part.blob, parser=_NOTE_PARSER)
-        except Exception:
-            continue
-        for node in root.findall(qn(tag)):
-            note_id = node.get(qn("w:id"))
-            if note_id is None or int(note_id) <= 0:
-                continue
-            pieces = [t.text or "" for t in node.iter(qn("w:t"))]
-            text = re.sub(r"\s+", " ", "".join(pieces)).strip()
-            if text:
-                notes[f"{kind}:{note_id}"] = text
-    return notes
+    """Native note markup, keyed by note kind and normalized numeric ID."""
+    return read_notes(document, _run_style)
 
 
-def _picture(run, document) -> dict[str, Any] | None:
+def _picture_element(element, document) -> dict[str, Any]:
     """Image bytes and the author's rendered size, from an inline drawing."""
-    blips = run._r.findall(f".//{qn('a:blip')}")
-    if not blips:
-        return None
+    blips = element.findall(f".//{qn('a:blip')}")
+    if len(blips) != 1:
+        raise ValueError("DOCX drawing is not one supported embedded picture")
     rel_id = blips[0].get(qn("r:embed"))
     if not rel_id:
-        return None
+        raise ValueError("DOCX picture has no embedded image relationship")
     try:
         image_part = document.part.related_parts[rel_id]
-    except KeyError:
-        return None
+    except KeyError as error:
+        raise ValueError("DOCX picture relationship is missing") from error
 
     width_pt = height_pt = None
-    extent = run._r.find(f".//{qn('wp:extent')}")
+    extent = element.find(f".//{qn('wp:extent')}")
     if extent is not None:
         try:
             width_pt = round(int(extent.get("cx")) / EMU_PER_PT, 2)
             height_pt = round(int(extent.get("cy")) / EMU_PER_PT, 2)
-        except (TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as error:
+            raise ValueError("DOCX picture has invalid source dimensions") from error
+        if width_pt <= 0 or height_pt <= 0:
+            raise ValueError("DOCX picture has nonpositive source dimensions")
+    else:
+        raise ValueError("DOCX picture has no source dimensions")
 
     blob = image_part.blob
     return {
@@ -457,6 +439,17 @@ def read_docx(
     # declares. Refused here first, before any member is inflated.
     ir.check_archive_limits(path)
     document = Document(path)
+    # python-docx's paragraph/run iterators do not expose these source nodes.
+    # Refuse their presence rather than certify an apparently complete book
+    # with the hidden subtree removed. Resolve revisions/unsupported objects in
+    # a separate faithful source copy before importing again.
+    unsupported = {qn(name) for name in (
+        "w:sdt", "w:ins", "w:del", "w:moveFrom", "w:moveTo", "w:altChunk",
+        "w:fldSimple", "w:customXml", "m:oMath", "m:oMathPara")}
+    for element in document.element.body.iter():
+        if element.tag in unsupported:
+            LOG.error("Refused unsupported DOCX source node %s", element.tag)
+            raise ValueError(f"unsupported DOCX source content: {element.tag}")
     notes = _read_notes(document)
     core = document.core_properties
 
@@ -485,7 +478,6 @@ def read_docx(
     blocks: list[dict[str, Any]] = []
     footnotes: list[dict[str, Any]] = []
     seen_assets: dict[str, str] = {}
-    used_notes: set[str] = set()
     counter = 0
 
     # Only the bookmarks an in-document link actually points at are carried.
@@ -585,52 +577,113 @@ def read_docx(
     def read_paragraph(paragraph, **extra: Any) -> None:
         first_block = len(blocks)
         spans: list[tuple[str, bool, bool]] = []
-        pending_notes: list[str] = []
-        # A link belongs to the prose of this paragraph, never to a picture
-        # that happens to sit inside it, so the two branches carry different
-        # context.
-        links = hyperlinks(paragraph)
-        prose = {**extra, "links": links} if links else extra
+        links: dict[Any, dict[str, str]] = {}
+        active_link = None
 
-        for run in iter_runs(paragraph):
-            picture = _picture(run, document)
-            if picture is not None:
-                _flush(spans, pending_notes, paragraph, add, footnotes,
-                       used_notes, notes, prose)
-                spans, pending_notes = [], []
-                digest = picture["sha256"]
-                if digest in seen_assets:
-                    asset_name = seen_assets[digest]
-                else:
-                    asset_name = f"d{len(seen_assets) + 1:04d}-{picture['name']}"
-                    (asset_dir / asset_name).write_bytes(picture["blob"])
-                    seen_assets[digest] = asset_name
-                add("image", page=0, asset=asset_name, sha256=digest, bbox=None,
-                    width_pt=picture["width_pt"], height_pt=picture["height_pt"],
-                    pixel_width=None, pixel_height=None, alt="", target_alt=None,
-                    **extra)
-                continue
+        def append(text, bold, italic):
+            spans.append((text, bold, italic))
+            if active_link is not None:
+                identity, target = active_link
+                links.setdefault(identity, {"text": "", "href": target})["text"] += text
 
-            for kind, _, _, reference in NOTE_PARTS:
-                for ref in run._r.findall(qn(reference)):
-                    key = f"{kind}:{ref.get(qn('w:id'))}"
-                    if key in notes:
-                        pending_notes.append(key)
+        def flush():
+            carried = [{**link, "text": link["text"].strip(" ")} for link in links.values()
+                       if link["text"].strip()]
+            prose = {**extra, "links": carried} if carried else extra
+            _flush(spans, paragraph, add, footnotes, prose)
+            spans.clear()
+            links.clear()
 
-            text = run.text
-            if text:
-                bold, italic = _run_style(run)
-                spans.append((text, bold, italic))
+        def linked_runs():
+            for item in paragraph.iter_inner_content():
+                if isinstance(item, Run):
+                    yield item, None
+                elif isinstance(item, Hyperlink):
+                    target = item.address or ""
+                    if item.fragment:
+                        target += "#" + item.fragment
+                    for run in item.runs:
+                        yield run, (item._hyperlink, target) if target else None
 
-            if has_page_break(run):
-                _flush(spans, pending_notes, paragraph, add, footnotes,
-                       used_notes, notes, prose)
-                spans, pending_notes = [], []
-                add("pagebreak", page=0, soft=False)
-
-        _flush(spans, pending_notes, paragraph, add, footnotes, used_notes,
-               notes, prose)
+        reference_kinds = {qn(reference): kind for kind, _, _, reference in NOTE_PARTS}
+        for run, active_link in linked_runs():
+            bold, italic = _run_style(run)
+            # A run may interleave text, pictures, breaks and note references.
+            # Neither aggregate run.text nor a single first-picture lookup can
+            # express that sequence; consume each child exactly once instead.
+            for child in run._r:
+                if child.tag in reference_kinds:
+                    kind = reference_kinds[child.tag]
+                    key = note_key(kind, child.get(qn("w:id")))
+                    if key not in notes or not notes[key].strip():
+                        raise ValueError(f"unresolved or empty DOCX note {key}")
+                    note = ir.make_footnote(len(footnotes) + 1, anchor_block="",
+                                           text=notes[key], origin="source")
+                    # These are authored native controls, not extractor noise.
+                    note["text"] = notes[key]
+                    footnotes.append(note)
+                    spans.append((f"[[fn:{note['id']}]]", False, False))
+                elif child.tag == qn("w:drawing"):
+                    flush()
+                    if active_link is not None:
+                        warnings.append({"kind": "image-hyperlink-dropped",
+                                         "detail": "image bytes and placement are retained; "
+                                                   "the image's clickable target is not represented"})
+                    placements = [node for node in child if node.tag in
+                                  {qn("wp:inline"), qn("wp:anchor")}]
+                    if not placements:
+                        raise ValueError("DOCX drawing has no supported image placement")
+                    for placement in placements:
+                        picture = _picture_element(placement, document)
+                        digest = picture["sha256"]
+                        if digest in seen_assets:
+                            asset_name = seen_assets[digest]
+                        else:
+                            # Content identity, not encounter order: an import that
+                            # later refuses must never replace an older book's image.
+                            asset_name = f"d-{digest}{Path(picture['name']).suffix.lower()}"
+                            destination = asset_dir / asset_name
+                            if destination.exists() and destination.read_bytes() != picture["blob"]:
+                                raise ValueError("DOCX asset content disagrees with its identity")
+                            if not destination.exists():
+                                temporary = None
+                                try:
+                                    with tempfile.NamedTemporaryFile(dir=asset_dir, suffix=".tmp", delete=False) as handle:
+                                        temporary = Path(handle.name)
+                                        handle.write(picture["blob"])
+                                        handle.flush()
+                                        os.fsync(handle.fileno())
+                                    os.replace(temporary, destination)
+                                finally:
+                                    if temporary is not None:
+                                        temporary.unlink(missing_ok=True)
+                            seen_assets[digest] = asset_name
+                        add("image", page=0, asset=asset_name, sha256=digest, bbox=None,
+                            width_pt=picture["width_pt"], height_pt=picture["height_pt"],
+                            pixel_width=None, pixel_height=None, alt="", target_alt=None,
+                            **extra)
+                elif child.tag == qn("w:br") and child.get(qn("w:type")) == "page":
+                    flush()
+                    add("pagebreak", page=0, soft=False)
+                elif child.tag == qn("w:t"):
+                    append(child.text or "", bold, italic)
+                elif child.tag in {qn("w:tab"), qn("w:cr"), qn("w:noBreakHyphen")}:
+                    value = {qn("w:tab"): "\t", qn("w:cr"): "\n",
+                             qn("w:noBreakHyphen"): "\u2011"}[child.tag]
+                    append(value, bold, italic)
+                elif child.tag == qn("w:br"):
+                    if child.get(qn("w:type"), "textWrapping") != "textWrapping":
+                        raise ValueError("unsupported DOCX run break type")
+                    append("\n", bold, italic)
+                elif child.tag == qn("w:softHyphen"):
+                    append("\u00ad", bold, italic)
+                elif child.tag not in {qn("w:" + name) for name in (
+                        "rPr", "lastRenderedPageBreak", "fldChar", "instrText",
+                        "commentReference", "footnoteRef", "endnoteRef")}:
+                    raise ValueError(f"unsupported DOCX run content: {child.tag}")
+        flush()
         keep_anchors(paragraph, first_block)
+
 
     def read_table(table, table_id: str, depth: int = 0) -> int:
         """One table's cells, each read exactly once. Returns the row count.
@@ -655,12 +708,15 @@ def read_docx(
                     if record[name] > 1}
             merges += bool(span)
             cell = record["tc"]
-            for paragraph in cell.paragraphs:
-                read_paragraph(paragraph, table=table_id, row=record["row"],
-                               cell=record["cell"], **span)
-            for inner_number, inner in enumerate(cell.tables, start=1):
-                read_table(inner, f"{table_id}-{record['row']}"
-                                  f"{record['cell']}n{inner_number}", depth + 1)
+            inner_number = 0
+            for element in cell._tc:
+                if element.tag == qn("w:p"):
+                    read_paragraph(Paragraph(element, cell), table=table_id, row=record["row"],
+                                   cell=record["cell"], **span)
+                elif element.tag == qn("w:tbl"):
+                    inner_number += 1
+                    read_table(Table(element, cell), f"{table_id}-{record['row']}"
+                                    f"{record['cell']}n{inner_number}", depth + 1)
         if merges:
             warnings.append({
                 "kind": "table-merged-cells", "table": table_id,
@@ -744,27 +800,19 @@ def read_docx(
 
     if warnings:
         book["source"]["docx_warnings"] = warnings
+    LOG.info("DOCX extracted: %d blocks, %d native notes", len(blocks), len(footnotes))
     return book
 
 
-def _flush(spans, pending_notes, paragraph, add, footnotes, used_notes, notes,
+def _flush(spans, paragraph, add, footnotes,
            extra: dict[str, Any] | None = None) -> None:
     """Emit the accumulated runs of one paragraph as a block."""
     if not spans:
         return
-    text = ir.render_markup(spans).strip()
-    if not text:
+    text = ir.render_markup(spans).strip(" ")
+    if not text.strip():
         return
     extra = dict(extra or {})
-
-    for note_id in pending_notes:
-        if note_id in used_notes:
-            continue
-        used_notes.add(note_id)
-        note = ir.make_footnote(len(footnotes) + 1, anchor_block="",
-                                text=notes[note_id], origin="source")
-        footnotes.append(note)
-        text = f"{text}[[fn:{note['id']}]]"
 
     style_name = getattr(paragraph.style, "name", "") or ""
     # The style records the paragraph's role; the numbering properties record
@@ -783,6 +831,7 @@ def _flush(spans, pending_notes, paragraph, add, footnotes, used_notes, notes,
     else:
         block = add("paragraph", page=0, text=text, **extra)
 
+    block["text"] = text
     for note in footnotes:
         if not note["anchor_block"] and note["id"] in ir.footnote_refs(text):
             note["anchor_block"] = block["id"]
