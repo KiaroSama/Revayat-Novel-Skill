@@ -47,7 +47,7 @@ def _check_per_chapter(record: dict[str, Any], introduction: str, name: str,
     placements: dict[str, list[tuple[str, int]]] = {}
     for place in record.get("places") or []:
         for block_id in place["blocks"]:
-            count = dict(targets).get(block_id, "").count(introduction)
+            count = naming.introduction_count(dict(targets).get(block_id, ""), record["first_form"])
             if count:
                 placements.setdefault(place["group"], []).append((block_id, count))
 
@@ -99,14 +99,8 @@ def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
         report.add(ERROR, "glossary-policy", "glossary", str(error))
         return
 
-    # Counted over the **prose**, with verbatim runs removed, because that is the
-    # text the enforcement pass is allowed to touch: it masks literals through
-    # `falint.mask_literals` before inserting anything. Counting the raw target
-    # instead made the two disagree — a technical passage quoting «علی (Ali)»
-    # inside backticks read as a placement, so the gate demanded the removal of
-    # something the pass had correctly left alone, and no amount of re-running
-    # could satisfy both.
-    targets = [(block["id"], _prose(block.get("target") or ""))
+    # The shared naming view keeps protected spans as barriers, not deletions.
+    targets = [(block["id"], block.get("target") or "")
                for block in ir.iter_text_blocks(book)]
 
     for entry in glossary.get("entries", []):
@@ -137,8 +131,8 @@ def _check_first_mentions(book: dict[str, Any], glossary: dict[str, Any],
         # Counted, not merely located. A block-level list cannot tell one
         # introduction from three inside the same paragraph, which is exactly
         # what a chunk repeating itself produces.
-        placements = [(block_id, target.count(introduction))
-                      for block_id, target in targets if introduction in target]
+        placements = [(block_id, count) for block_id, target in targets
+                      if (count := naming.introduction_count(target, record["first_form"]))]
         total = sum(count for _, count in placements)
 
         if policy == "never":

@@ -134,11 +134,10 @@ def freshness(entry, *, book, glossary, glossary_named, book_path=None,
     return "", ""
 
 
-def candidate_problems(book, entry, transport, companions=()):
+def candidate_problems(book, entry, transport, companions=(), manifest=None):
     """Apply to an isolated candidate and ask the production note graph."""
     import merge
     import notegraph
-    import segments
 
     replies = [(entry, transport), *companions]
     if not (book.get("footnotes") or any(reply["notes"] or any(
@@ -153,7 +152,7 @@ def candidate_problems(book, entry, transport, companions=()):
         candidate["footnotes"] = [n for n in candidate.get("footnotes", []) if n["id"] not in retired] + notes
         answered.update(merge._resolve_local_tokens(reply["answered"], mapping))
         touched.update(mapping.values())
-    merge.apply_units(candidate, segments.rejoin(answered))
+    merge.apply_units(candidate, merge.rejoin_units(candidate, answered, manifest or {}))
     merge._anchor_notes(candidate, [n for n in candidate["footnotes"] if n["id"] in touched])
     return notegraph.problems(candidate)
 
@@ -185,7 +184,7 @@ def eligibility(out_dir, entry, *, book=None, glossary=None, glossary_named=Fals
             if check:
                 state, detail = check, why
         if state == "answered" and check_candidate:
-            problems = candidate_problems(book, entry, transport)
+            problems = candidate_problems(book, entry, transport, manifest=manifest)
             if problems:
                 candidate = problems
                 state, detail = "invalid", "; ".join(problems)
@@ -243,7 +242,7 @@ def every(out_dir, manifest=None, *, book_path=None, book=None, glossary=None,
         members = sorted(group)
         first, *rest = members
         problems = candidate_problems(book, jobs[first], proofs[first]["transport"],
-            [(jobs[index], proofs[index]["transport"]) for index in rest])
+            [(jobs[index], proofs[index]["transport"]) for index in rest], manifest=manifest)
         if problems:
             for index in members:
                 proofs[index].update(state="invalid", detail="; ".join(problems),

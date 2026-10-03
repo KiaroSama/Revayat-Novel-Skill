@@ -49,7 +49,7 @@ def test_saved_chapters_preserve_declared_order_prose_and_image_bytes(tmp_path):
     texts = [block.get("text", "") for block in book["blocks"]]
     assert texts[0] == "Second first"
     assert texts.index("First last") > texts.index("After image.")
-    assert "Before **bold**." in texts and "Next line." in texts
+    assert "Before **bold**.\nNext line." in texts
     assert "Skip this menu" not in " ".join(texts)
     figure = next(block for block in book["blocks"] if block["type"] == "image")
     index = book["blocks"].index(figure)

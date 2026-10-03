@@ -79,6 +79,13 @@ emitted once. Real duplicate IDs on different source nodes remain invalid.
 Empty link destinations are attached to the next real Book IR block; a trailing
 destination uses the final block because Book IR bookmarks are block-level.
 Check retained chapter content and referenced destinations before dispatch.
+Selected content inside hidden/navigation/form/template ancestors is refused;
+a visible sibling remains usable. MathML, including namespace-prefixed elements,
+is refused in native EPUB and web intake: the current IR cannot faithfully
+represent its expression structure. Retain the source and prepare a verified
+supported representation rather than concatenating mathematical leaves.
+An explicit `br` stays a newline in its original block, including repeated and
+edge breaks; `wbr` is an optional wrap point, not a hard break or a new paragraph.
 
 For a page-oriented run, `pages build --neighbour-chars 0` disables both context
 sides. Positive values bound each side independently. Negative or non-integer

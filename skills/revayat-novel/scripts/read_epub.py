@@ -251,6 +251,8 @@ def read_epub(
                 soup = BeautifulSoup(raw, "html.parser", preserve_whitespace_tags=VERBATIM_TAGS | {"textarea"})
                 for junk in soup.find_all(list(SKIP_TAGS)):
                     junk.decompose()
+                if soup.find(lambda tag: tag.name.rsplit(":", 1)[-1].lower() == "math"):
+                    raise ValueError("EPUB contains unsupported MathML structure; supply a verified faithful supported source")
                 soups[member] = soup
             return soups[member]
 
@@ -320,7 +322,7 @@ def _note_text(target: Tag) -> str:
         raise ValueError("EPUB note contains unsupported structured content; supply a faithful text note")
     body = _markup(copied, {})
     # Bare quantities (12 people), years, and decimals are content, not labels.
-    return re.sub(r"^\s*(?:\[\d{1,3}\]|\(\d{1,3}\)|\d{1,3}[.):])(?:\s+|$)", "", body).strip()
+    return re.sub(r"^[ \t]*(?:\[\d{1,3}\]|\(\d{1,3}\)|\d{1,3}[.):])(?:[ \t]+|$)", "", body).strip(" \t")
 
 
 def _book_footnotes(documents, load_document, footnotes):

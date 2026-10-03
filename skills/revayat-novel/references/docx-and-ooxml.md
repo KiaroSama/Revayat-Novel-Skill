@@ -122,6 +122,17 @@ not fidelity, and the author's foot may well be a page number already.
 `Caption` for captions, `List Bullet` / `List Number` for lists, `Title` and
 `Subtitle` for the front matter. Page size and margins come from `book.page`.
 
+## Literal line controls
+
+Notes and raw internal hyperlinks use native `w:br` / `w:tab` controls, not layout
+characters hidden inside `w:t`. CRLF represents one logical break. Package QA
+compares note text literally after interpreting markup on the IR side only;
+edge controls and literal markup examples are not stripped or parsed again.
+`footnote-control-text`, `link-control-text`, `footnote-text-mismatch` and
+`link-text-mismatch` require rebuilding from current reviewed IR, not editing the
+package or suppressing its findings. Link control comparison applies to declared
+control-bearing source labels; this is not universal hyperlink translation QA.
+
 ## Verifying the result
 
 ```bash

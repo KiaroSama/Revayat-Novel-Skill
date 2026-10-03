@@ -252,8 +252,11 @@ def text_of(element: ElementTree.Element) -> str:
     Word splits one sentence across runs whenever anything about the formatting
     changes, so the text of a paragraph is never one node's ``.text``.
     """
-    return "".join(node.text or ""
-                   for node in element.iter(qname("w", "t")))
+    return "".join(node.text or "" if node.tag == qname("w", "t") else
+                   "\t" if node.tag in {qname("w", "tab"), qname("w", "ptab")} else
+                   "\n" if node.tag == qname("w", "cr") or
+                   (node.tag == qname("w", "br") and node.get(qname("w", "type"), "textWrapping") == "textWrapping") else ""
+                   for node in element.iter())
 
 
 def footnote_references(document: ElementTree.Element) -> list[str]:
@@ -278,7 +281,9 @@ def footnote_bodies(footnotes: ElementTree.Element) -> dict[str, str]:
         identifier = note.get(qname("w", "id")) or ""
         if identifier in ("0", "-1", ""):
             continue
-        bodies[identifier] = text_of(note).strip()
+        body = text_of(note)
+        # The writer separates the automatic note mark with one ordinary space.
+        bodies[identifier] = body[1:] if body.startswith(" ") else body
     return bodies
 
 

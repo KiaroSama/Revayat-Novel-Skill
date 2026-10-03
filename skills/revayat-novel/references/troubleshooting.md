@@ -28,6 +28,19 @@ A Windows console defaulting to a legacy code page. Every script calls
 `use_utf8_stdio()` first, so this should not happen from the CLI. If you see it
 from your own wrapper, set `PYTHONIOENCODING=utf-8`.
 
+## Literal line controls or name introductions keep failing QA
+
+A `footnote-control-text` / `link-control-text` finding means a raw layout character
+was written inside `w:t`; rebuild with the current writer. Text-mismatch findings
+also compare authored break/tab order, including note edges. Preserve the original
+source and old outputs; never replace breaks with spaces or clear reviews to pass.
+
+Naming enforcement and QA share eligible complete prose introductions. URLs,
+code, notes and attached word fragments are not introduction sites. Keep an already
+correct styled introduction; fix redundant complete forms only. Regenerate affected
+worksheets after glossary/source changes and reread current review sheets rather
+than renaming archived replies. After fluency edits, fresh meaning review is required.
+
 ## The Word file opens, but the table of contents is empty
 
 Word only fills a TOC field when fields update. The builder sets

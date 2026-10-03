@@ -40,7 +40,10 @@ documents.
 | `footnotes-relationship-missing` | there are references and no footnotes relationship. Word resolves the notes through the relationship graph, so the notes are unreachable | re-build |
 | `footnote-reference-duplicated` | two markers point at one Word note, so one sentence is footnoted by text written for the other | re-build; a set of ids cannot see this |
 | `footnote-body-orphaned` | a note body nothing in the document refers to | re-build |
-| `footnote-text-mismatch` | the notes in the document are not the notes in the book, compared in reading order and by content. Matching ids cannot see a substituted body | re-build from `book.json` |
+| `footnote-text-mismatch` | the notes differ in reading order, content or ordered breaks/tabs, including edge controls | re-build from `book.json`; compare the named note |
+| `footnote-control-text` | note layout controls were stored as raw text | rebuild with native Word breaks/tabs; do not edit the package to silence QA |
+| `link-control-text` | hyperlink layout controls were stored as raw text | rebuild from current book.json with native Word breaks/tabs |
+| `link-text-mismatch` | a declared control-bearing link label lost or moved content | compare the retained source label and rebuilt Word link; renew affected visual review |
 | `picture-aspect` | a picture is drawn at a different shape from its source — squashed, which preserving the aspect ratio cannot produce | re-build; never resize in the document |
 | `picture-too-wide` | a picture is drawn wider than the section's text measure, which the builder's fitting never produces | re-build |
 | `picture-size-invalid` | a picture is drawn at a size Word cannot render | re-build |

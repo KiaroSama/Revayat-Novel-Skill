@@ -72,7 +72,7 @@ def test_every_chunk_introducing_the_name_collapses_to_one():
                               f"سپس {ELIZABETH} برخاست.",
                               f"و {ELIZABETH} رفت."]
     assert report["introduced"] == {"g0001": "b00001"}
-    assert report["flattened"] == 3
+    assert report["flattened"] == 2
 
 
 def test_the_introduction_lands_in_the_block_the_scan_chose():

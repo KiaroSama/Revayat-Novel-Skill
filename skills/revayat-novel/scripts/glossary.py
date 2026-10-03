@@ -23,6 +23,7 @@ import argparse
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -231,7 +232,8 @@ def _joined(text: str, index: int) -> bool:
     if not 0 <= index < len(text):
         return False
     character = text[index]
-    return character == ZWNJ or bool(_WORD.match(character))
+    return (character in {ZWNJ, "‍", "_"} or unicodedata.category(character).startswith("M")
+            or bool(_WORD.match(character)))
 
 
 def standalone_spans(text: str, needle: str) -> list[tuple[int, int]]:

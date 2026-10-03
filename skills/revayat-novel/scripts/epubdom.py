@@ -80,7 +80,7 @@ def _inline_spans(node: Tag, bold: bool = False, italic: bool = False,
             spans.append(span)
             continue
         if child.name == "br":
-            spans.append(_span(" ", bold=bold, italic=italic))
+            spans.append(_span("\n", bold=bold, italic=italic))
             continue
         if child.name in VERBATIM_TAGS:
             body = literal_text(child)
@@ -107,7 +107,7 @@ def _inline_spans(node: Tag, bold: bool = False, italic: bool = False,
 def _markup(node: Tag, footnote_marks: dict[int, str]) -> str:
     """Inline markup for a block element, with footnote tokens re-inserted."""
     text = ir.render_spans(_inline_spans(node, notes=footnote_marks))
-    return text.strip()
+    return text.strip(" \t")
 
 
 def _link_target(href: str, warn) -> str | None:
@@ -177,7 +177,7 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
         def flush():
             if any(span["text"].strip() or span.get("footnote") or
                    (span.get("verbatim") and span["text"]) for span in buffer):
-                text = ir.render_spans(buffer).strip()
+                text = ir.render_spans(buffer).strip(" \t")
                 extra = dict(fields)
                 carried = [{"text": item["text"].strip(), "href": item["href"]}
                            for item in links.values() if item["text"].strip()]
@@ -215,7 +215,7 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
                 carry_anchors(emit("separator"))
                 return
             if name == "br":
-                append([_span(" ", bold=strong, italic=emphasis)], active)
+                append([_span("\n", bold=strong, italic=emphasis)], active)
                 return
             if name in VERBATIM_TAGS:
                 if name == "pre":

@@ -32,10 +32,10 @@ had them.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import bookir as ir
-import falint
 import glossary as gl
 
 #: What the plan calls the group of blocks outside any chapter.
@@ -52,18 +52,33 @@ def placement_spans(target: str, form: str) -> list[tuple[int, int]]:
     point is that the gate now agrees, rather than demanding a placement the
     writer refuses.
     """
-    found: list[tuple[int, int]] = []
-    offset = 0
-    for span in ir.parse_markup(target or ""):
-        body = span.get("text") or ""
-        if span.get("footnote"):
-            continue
-        if not span.get("verbatim"):
-            masked, _keep = falint.mask_literals(body)
-            found += [(offset + start, offset + end)
-                      for start, end in gl.standalone_spans(masked, form)]
-        offset += len(body)
+    spans, view = _prose_view(target)
+    matches = gl.standalone_spans(view, form)
+    found, offset = [], 0
+    for span in spans:
+        end = offset + (1 if span.get("footnote") else len(span.get("text") or ""))
+        if not span.get("footnote") and not span.get("verbatim"):
+            found.extend((start, stop) for start, stop in matches if offset <= start and stop <= end)
+        offset = end
     return found
+
+
+def _prose_view(target: str):
+    spans = ir.parse_markup(target or "")
+    view = "".join("￼" if span.get("footnote") else
+                   "￼" * len(span.get("text") or "") if span.get("verbatim") else
+                   span.get("text") or "" for span in spans)
+    for match in reversed(list(re.finditer(r"(?:https?://|www\.)[^\s￼]+", view, re.IGNORECASE))):
+        view = view[:match.start()] + "￼" * len(match.group()) + view[match.end():]
+    return spans, view
+
+
+def introduction_spans(target: str, form: str):
+    return gl.standalone_spans(_prose_view(target)[1], form)
+
+
+def introduction_count(target: str, form: str) -> int:
+    return len(introduction_spans(target, form))
 
 
 def eligible(blocks: list[dict[str, Any]], form: str) -> list[str]:
@@ -72,7 +87,7 @@ def eligible(blocks: list[dict[str, Any]], form: str) -> list[str]:
             if placement_spans(block.get("target") or "", form)]
 
 
-def _owner(blocks: list[dict[str, Any]], form: str, pinned: str) -> str:
+def _owner(blocks: list[dict[str, Any]], form: str, pinned: str, first_form: str = "") -> str:
     """The pinned block when it can carry the introduction, else the first that can.
 
     Stated once, here. The nickname is never expanded to make a block eligible:
@@ -80,7 +95,9 @@ def _owner(blocks: list[dict[str, Any]], form: str, pinned: str) -> str:
     and overwriting it to satisfy a placement rule is the drift this whole area
     exists to prevent.
     """
-    usable = eligible(blocks, form)
+    usable = [block["id"] for block in blocks
+              if placement_spans(block.get("target") or "", form) or
+              (first_form and introduction_count(block.get("target") or "", first_form))]
     if pinned in usable:
         return pinned
     return usable[0] if usable else ""
@@ -92,7 +109,7 @@ def owner_of(entry: dict[str, Any], blocks: list[dict[str, Any]]) -> str:
     The whole-book case of :func:`plan`, for a caller holding one entry and one
     list of blocks. Both go through :func:`_owner`, so there is one rule.
     """
-    return _owner(blocks, gl.canonical(entry), entry.get("first_block_id") or "")
+    return _owner(blocks, gl.canonical(entry), entry.get("first_block_id") or "", entry.get("first_form") or "")
 
 
 def groups(book: dict[str, Any], policy: str) -> list[tuple[str, list[dict[str, Any]]]]:
@@ -128,7 +145,7 @@ def plan(glossary: dict[str, Any], book: dict[str, Any]) -> dict[str, Any]:
         pinned = entry.get("first_block_id") or ""
         places = []
         for group_key, blocks in divided:
-            owner = _owner(blocks, later_form, pinned)
+            owner = _owner(blocks, later_form, pinned, first_form)
             places.append({
                 "group": group_key,
                 "owner": owner,
@@ -168,14 +185,20 @@ def flatten_in_prose(target: str, first_form: str,
     verbatim span is literal content — an identifier, a command, a quoted
     string — so rewriting inside one changes what the book says the literal is.
     """
-    spans = ir.parse_markup(target)
-    replaced = 0
+    spans, _ = _prose_view(target)
+    matches = introduction_spans(target, first_form)
+    if not matches:
+        return target, 0
+    deletions = [(start + len(later_form), end) for start, end in matches]
+    offset = 0
     for span in spans:
-        if span["verbatim"] or span["footnote"]:
-            continue
-        replaced += span["text"].count(first_form)
-        span["text"] = span["text"].replace(first_form, later_form)
-    return (ir.render_spans(spans) if replaced else target), replaced
+        body = span.get("text") or ""
+        end = offset + (1 if span.get("footnote") else len(body))
+        if not span.get("footnote") and not span.get("verbatim"):
+            span["text"] = "".join(char for index, char in enumerate(body, offset)
+                                  if not any(start <= index < stop for start, stop in deletions))
+        offset = end
+    return ir.render_spans(spans), len(matches)
 
 
 def introduce_in_prose(target: str, later_form: str,
@@ -188,21 +211,21 @@ def introduce_in_prose(target: str, later_form: str,
     them, because a name sitting after a ``/`` satisfies every word-boundary test
     and a URL with a parenthetical spliced into it is a dead link.
     """
-    spans = ir.parse_markup(target)
+    if introduction_count(target, first_form):
+        return target
+    found = placement_spans(target, later_form)
+    if not found:
+        return None
+    start, end = found[0]
+    spans, _ = _prose_view(target)
     offset = 0
     for span in spans:
         body = span.get("text") or ""
-        if span.get("footnote"):
-            continue
-        if not span.get("verbatim"):
-            masked, keep = falint.mask_literals(body)
-            found = gl.standalone_spans(masked, later_form)
-            if found:
-                start, end = found[0]
-                span["text"] = falint.unmask_literals(
-                    masked[:start] + first_form + masked[end:], keep)
-                return ir.render_spans(spans)
-        offset += len(body)
+        stop = offset + (1 if span.get("footnote") else len(body))
+        if offset <= start < stop and not span.get("footnote"):
+            span["text"] = body[:start-offset] + first_form + body[end-offset:]
+            return ir.render_spans(spans)
+        offset = stop
     return None
 
 
@@ -242,9 +265,12 @@ def enforce_first_mentions(glossary: dict[str, Any],
             continue
 
         first_form, later_form = record["first_form"], record["later_form"]
+        owners = {place["owner"] for place in record["places"]} if policy != "never" else set()
         for block in blocks:
             target = block.get("target") or ""
-            if first_form not in target:
+            if not introduction_count(target, first_form):
+                continue
+            if block["id"] in owners and introduction_count(target, first_form) == 1:
                 continue
             block["target"], replaced = flatten_in_prose(target, first_form,
                                                          later_form)
