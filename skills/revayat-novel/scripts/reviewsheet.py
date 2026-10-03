@@ -78,7 +78,7 @@ def escape_payload(text: str) -> str:
     lines = []
     for line in text.split("\n"):
         bare = line.lstrip().lstrip("\\")
-        if _CONTROL.match(bare) or bare.startswith("~ ") or bare.startswith("<!-- revayat-novel"):
+        if PAYLOAD_ESCAPE.match("\\" + bare):
             indent = line[:len(line) - len(line.lstrip())]
             line = indent + "\\" + line[len(indent):]
         lines.append(line)

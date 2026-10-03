@@ -17,8 +17,9 @@ End with exactly one `!! reviewed sheet_NNNN` claim for that sheet. A no-finding
 review still echoes the request and makes the claim. No control records follow it.
 
 Every control-looking line is parsed or rejected. In payload, put one backslash
-before a literal line beginning `??`, `++`, `!!`, `@@`, `~ ` or this skill's own
-HTML comments. Escape an existing escape again; reading removes exactly one layer.
+before a literal line beginning `??`, `++`, `!!`, `@@`, `~` plus whitespace
+(including a tab), or this skill's own HTML comment prefix, even with zero spaces
+or tabs after `<!--`. Escape an existing escape again; reading removes exactly one layer.
 Ordinary diagnostic prose and unrelated HTML comments remain payload.
 
 ## Explicit review states

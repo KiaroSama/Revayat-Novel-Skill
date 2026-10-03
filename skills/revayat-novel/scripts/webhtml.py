@@ -28,12 +28,16 @@ def chapter_html(raw, selector, title, resolve_asset):
     selected = matches[0]
     excluded = "script,style,nav,form,button,template,[hidden],[aria-hidden=true]"
     unsupported = {"table", "iframe", "object", "video", "audio", "svg", "canvas", "embed"}
-    if any(node is selected for node in soup.select(excluded)) or selected.name in unsupported:
+    if any(node is selected or any(node is parent for parent in selected.parents)
+           for node in soup.select(excluded)) or selected.name in unsupported:
         raise ValueError("selected chapter root is hidden, excluded or unsupported; supply a faithful narrative container")
     list_owner = selected.find_parent(["ol", "ul"])
     root = deepcopy(selected)
     for junk in root.select(excluded):
         junk.decompose()
+    if root.name.rsplit(":", 1)[-1].lower() == "math" or root.find(
+            lambda tag: tag.name.rsplit(":", 1)[-1].lower() == "math"):
+        raise ValueError("chapter contains unsupported MathML structure; supply a verified faithful supported source")
     if root.find(list(unsupported)):
         raise ValueError("chapter contains unsupported structured or embedded content; inspect and supply a faithful saved chapter")
     if not root.get_text(strip=True):
@@ -164,7 +168,7 @@ def chapter_html(raw, selector, title, resolve_asset):
             if not isinstance(child, Tag):
                 return
             if child.name == "br":
-                flush()
+                append(output.new_tag("br", attrs=attributes(child)), wrappers)
             elif child.name == "img":
                 flush()
                 result.append(standalone(child, wrappers))

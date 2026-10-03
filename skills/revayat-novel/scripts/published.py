@@ -41,6 +41,7 @@ of those could not be the one the typography fixer uses.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import bookir as ir
@@ -230,7 +231,7 @@ def pending(book: dict[str, Any]) -> list[dict[str, Any]]:
 
 def digest_of(records: list[dict[str, Any]], *,
               sides: tuple[str, ...] = ("source", "target"),
-              tag: str = "pub1") -> str:
+              tag: str = "pub2") -> str:
     """One digest over an inventory. ``sides`` picks which halves it covers.
 
     The bilingual review is a statement about pairs, so it hashes both sides; the
@@ -243,15 +244,19 @@ def digest_of(records: list[dict[str, Any]], *,
     — changes what a reader is looking at even when the words do not, and a
     review of it as the other thing is not a review of this.
     """
-    lines = ["\x00".join([record["id"], record["kind"], record["part"],
-                          record["origin"], str(record.get("anchor") or "")]
-                         + ([str(record.get("context") or "")] if "source" in sides else [])
-                         + [str(record.get(side) or "") for side in sides])
-             for record in records]
-    return f"{tag}:" + ir.sha256_bytes("\x1e".join(lines).encode("utf-8"))
+    fields = ["id", "kind", "part", "origin", "anchor"]
+    if "source" in sides:
+        fields.append("context")
+    fields.extend(sides)
+    framed = {"domain": "published", "version": tag, "sides": sides,
+              "fields": fields,
+              "records": [[record.get(field) for field in fields] for record in records]}
+    raw = json.dumps(framed, ensure_ascii=False, sort_keys=True,
+                     separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return f"{tag}:" + ir.sha256_bytes(raw)
 
 
 def digest(book: dict[str, Any], *, sides: tuple[str, ...] = ("source", "target"),
-           tag: str = "pub1") -> str:
+           tag: str = "pub2") -> str:
     """:func:`digest_of` over this book's published inventory."""
     return digest_of(units(book), sides=sides, tag=tag)

@@ -74,7 +74,7 @@ SCHEMA = "revayat-novel/fluency@2"
 
 #: Tagged like every other digest here, so a reader that cannot recompute this
 #: formula refuses instead of guessing which side is stale.
-DIGEST_VERSION = "fluency3"
+DIGEST_VERSION = "fluency4"
 
 
 #: Units per sheet, and the Persian neighbours each one is shown for context.

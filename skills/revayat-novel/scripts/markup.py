@@ -102,7 +102,7 @@ def normalise_source(text: str) -> str:
         parts.append(prose(value[cursor:]))
         return "".join(parts)
 
-    return clean(text or "").strip()
+    return clean(text or "").strip(" \t")
 
 
 def escape_markup(text: str) -> str:

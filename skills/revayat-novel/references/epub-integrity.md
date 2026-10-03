@@ -26,6 +26,15 @@ linear reading order, but may supply referenced notes. A linked local notes
 content document belongs in the EPUB spine, normally with `linear="no"`.
 Pictures or other structured content inside a literal pre/code region refuse
 rather than disappearing; provide a faithful supported source structure.
+Explicit `br` retains line structure within paragraphs, headings, quotes, lists,
+captions and notes, including blank lines and edge breaks. `wbr` adds no hard break.
+Source-bound segment assembly restores only newline separators proven by a complete
+live source partition; ordinary gaps keep the historical one-space join. Recut
+an affected older workspace separately and regenerate replies, never relabel stale
+responses or overwrite accepted translations. Unselected stale siblings do not
+invalidate a current selected owner.
+MathML (also namespace-prefixed) is refused before a replacement book is published;
+supply a verified supported representation, not flattened expression text.
 Note block boundaries retain word separation. Only explicitly identified
 backlinks are removed; an arrow-shaped ordinary link is still source content. Ordinary links to entire files or
 unavailable targets retain their words and report their unavailable destination.

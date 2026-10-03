@@ -13,6 +13,7 @@ and a ``TOC`` field whose cached result is a list of internal hyperlinks.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
 
 from docx.opc.constants import CONTENT_TYPE as CT, RELATIONSHIP_TYPE as RT
@@ -54,6 +55,14 @@ def _escape(value: Any) -> str:
 
 def xml_text(value: str) -> str:
     return (value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def run_text_xml(text: str) -> str:
+    """Native ordered controls, also for runs without a python-docx wrapper."""
+    return "".join("<w:br/>" if part in {"\r\n", "\r", "\n"} else
+                   "<w:tab/>" if part == "\t" else
+                   f'<w:t xml:space="preserve">{xml_text(part)}</w:t>'
+                   for part in re.split(r"(\r\n|\r|\n|\t)", text) if part)
 
 
 # --------------------------------------------------------------------------- #
@@ -222,7 +231,7 @@ def add_internal_link(paragraph, anchor: str, text: str, *, rtl: bool = True,
     paragraph._p.append(parse_xml(
         f'<w:hyperlink {_WNS} w:anchor="{_escape(anchor)}" w:history="1">'
         f'<w:r><w:rPr><w:rStyle w:val="{style}"/>{direction}</w:rPr>'
-        f'<w:t xml:space="preserve">{xml_text(text)}</w:t></w:r>'
+        f'{run_text_xml(text)}</w:r>'
         f"</w:hyperlink>"
     ))
 
@@ -393,7 +402,7 @@ def _span_xml(span: dict[str, Any], *, persian_font: str, rtl: bool) -> str:
         properties.append(f'<w:rFonts w:cs="{_escape(persian_font)}"/><w:rtl/>'
                           f'<w:lang w:bidi="fa-IR"/>')
     prefix = f"<w:rPr>{''.join(properties)}</w:rPr>" if properties else ""
-    return f'<w:r>{prefix}<w:t xml:space="preserve">{xml_text(span["text"])}</w:t></w:r>'
+    return f'<w:r>{prefix}{run_text_xml(span["text"])}</w:r>'
 
 
 def ensure_footnote_styles(document, *, persian_font: str, size_pt: float) -> None:

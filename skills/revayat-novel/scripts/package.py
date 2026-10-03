@@ -104,7 +104,7 @@ def _expected_notes(book: dict[str, Any]) -> list[str]:
     walking the blocks, so the sequence of note texts is the correspondence —
     not the numeric ids, which Word allocates and renumbers as it pleases.
     """
-    bodies = {note["id"]: str(note.get("target") or note.get("text") or "").strip()
+    bodies = {note["id"]: str(note.get("target") or note.get("text") or "")
               for note in book.get("footnotes") or []}
     wanted: list[str] = []
     for block in ir.iter_text_blocks(book):
@@ -152,7 +152,12 @@ def _check_footnotes(package: opc.Package, book: dict[str, Any] | None,
                    f"declared as {declared or '(nothing)'!r}; Word opens a part by "
                    f"its declared content type, so the notes are unreachable")
 
-    bodies = opc.footnote_bodies(package.xml(name))
+    notes_root = package.xml(name)
+    if any(any(char in (node.text or "") for char in "\r\n\t")
+           for node in notes_root.iter(opc.qname("w", "t"))):
+        report.add(ERROR, "footnote-control-text", name,
+                   "note layout controls are raw text rather than native Word breaks/tabs; rebuild from book.json")
+    bodies = opc.footnote_bodies(notes_root)
     for identifier, times in sorted(Counter(references).items()):
         if identifier not in bodies:
             report.add(ERROR, "footnote-body-missing", str(identifier),
@@ -176,7 +181,7 @@ def _check_footnotes(package: opc.Package, book: dict[str, Any] | None,
     # every id-based check — the ids line up perfectly and the note says something
     # the translator never wrote.
     placed = [bodies.get(identifier, "") for identifier in references]
-    if [_normalised(text) for text in placed] != [_normalised(text) for text in expected]:
+    if placed != [ir.plain_text(text).replace("\r\n", "\n").replace("\r", "\n") for text in expected]:
         report.add(ERROR, "footnote-text-mismatch", "word/footnotes.xml",
                    f"the notes in the document are not the notes in the book: "
                    f"{len(expected)} expected, {len(placed)} placed, first "
@@ -194,6 +199,29 @@ def _first_difference(placed: list[str], expected: list[str]) -> str:
         if _normalised(left) != _normalised(right):
             return f"note {position}"
     return f"note {min(len(placed), len(expected)) + 1}"
+
+
+def _check_link_controls(package: opc.Package, book: dict[str, Any] | None,
+                         report: Report) -> None:
+    document = package.xml("word/document.xml")
+    relationships = package.relationships("word/document.xml")
+    labels: dict[str, set[str]] = {}
+    for block in (book or {}).get("blocks", []):
+        for link in block.get("links") or []:
+            labels.setdefault(link.get("href") or "", set()).add((link.get("text") or "").strip())
+    for link in document.iter(opc.qname("w", "hyperlink")):
+        if any(any(char in (node.text or "") for char in "\r\n\t")
+               for node in link.iter(opc.qname("w", "t"))):
+            report.add(ERROR, "link-control-text", "word/document.xml",
+                       "link layout controls are raw text; rebuild from book.json")
+        anchor = link.get(opc.qname("w", "anchor"))
+        identifier = link.get(opc.qname("r", "id"))
+        href = "#" + anchor if anchor else relationships.get(identifier, {}).get("target", "")
+        expected = labels.get(href, set())
+        if any("\n" in text or "\t" in text or "\r" in text for text in expected):
+            if opc.text_of(link) not in {text.replace("\r\n", "\n").replace("\r", "\n") for text in expected}:
+                report.add(ERROR, "link-text-mismatch", "word/document.xml",
+                           "link text or layout controls differ from the book; rebuild from book.json")
 
 
 def _text_width_pt(book: dict[str, Any] | None) -> float:
@@ -386,6 +414,7 @@ def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
         try:
             document = package.read("word/document.xml").decode("utf-8", "replace")
             _check_footnotes(package, book, report)
+            _check_link_controls(package, book, report)
             _check_image_geometry(package, book, report)
         except opc.Damaged as damaged:
             report.add(ERROR, damaged.code, str(path), damaged.detail)

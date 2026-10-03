@@ -232,7 +232,35 @@ def fit_jobs(
     return [(group, render(group)) for group in groups]
 
 
-def rejoin(units: dict[str, str]) -> dict[str, str]:
+def source_separators(source: str, records: list[dict]) -> dict[str, str]:
+    """Newline runs at validated source cuts, never reconstructed source words."""
+    ordered = sorted(records, key=lambda record: record["offset"])
+    if coverage_errors := _source_coverage(source, ordered):
+        raise ValueError(coverage_errors)
+    found = {}
+    for record in ordered[1:]:
+        boundary = record["offset"]
+        start = end = boundary
+        while start and source[start - 1].isspace():
+            start -= 1
+        while end < len(source) and source[end].isspace():
+            end += 1
+        gap = source[start:end]
+        if "\n" in gap or "\r" in gap:
+            found[record["id"]] = gap.replace("\r\n", "\n").replace("\r", "\n")
+    return found
+
+
+def _source_coverage(source: str, records: list[dict]) -> str:
+    cursor = 0
+    for record in records:
+        if record["offset"] != cursor or record["length"] < 0:
+            return "source segments do not form an ordered complete partition"
+        cursor += record["length"]
+    return "" if cursor == len(source) else "source segment coverage is incomplete"
+
+
+def rejoin(units: dict[str, str], *, separators: dict[str, str] | None = None) -> dict[str, str]:
     """Fold every segment back into its unit, in index order.
 
     Called once, between validating a worksheet's headers and writing anything
@@ -256,8 +284,10 @@ def rejoin(units: dict[str, str]) -> dict[str, str]:
         # cut fell on is not recoverable and pretending otherwise would join two
         # sentences into one word. The split guarantees no word was broken; the
         # join puts a single space where a word boundary was.
-        whole[base] = " ".join(value.strip() for _, value in sorted(found)
-                               if value.strip())
+        values = [(index, value.strip()) for index, value in sorted(found) if value.strip()]
+        whole[base] = "".join(("" if position == 0 else
+                              (separators or {}).get(segment_id(base, index), " ")) + value
+                             for position, (index, value) in enumerate(values))
     return whole
 
 

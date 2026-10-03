@@ -188,6 +188,36 @@ def addressing(book: dict[str, Any]) -> Callable[[str], tuple[dict[str, Any], st
     return resolve
 
 
+def rejoin_units(book: dict[str, Any], answered: dict[str, str], manifest: dict) -> dict[str, str]:
+    """Assemble answers with only line boundaries proven by live source spans."""
+    import provenance
+
+    owners = {segments.base_of(unit_id) for unit_id in answered if segments.SEGMENT.fullmatch(unit_id)}
+    records = {}
+    for entry in manifest.get("chunks", []):
+        for record in entry.get("unit_spans") or []:
+            if record["owner"] in owners and segments.SEGMENT.fullmatch(record["id"]):
+                records.setdefault(record["owner"], {})[record["id"]] = record
+    sources = {unit_id: text for unit_id, _, text in
+               provenance.translatable_units(book, [b["id"] for b in book["blocks"]])}
+    separators = {}
+    for owner, items in records.items():
+        if owner in sources:
+            separators.update(segments.source_separators(sources[owner], list(items.values())))
+    joined = segments.rejoin(answered, separators=separators)
+    for owner, text in joined.items():
+        source = sources.get(owner, "")
+        leading = source[:len(source) - len(source.lstrip())]
+        trailing = source[len(source.rstrip()):]
+        if text.strip():
+            if "\n" in leading or "\r" in leading:
+                text = leading.replace("\r\n", "\n").replace("\r", "\n") + text.lstrip("\r\n")
+            if "\n" in trailing or "\r" in trailing:
+                text = text.rstrip("\r\n") + trailing.replace("\r\n", "\n").replace("\r", "\n")
+            joined[owner] = text
+    return joined
+
+
 def apply_units(book: dict[str, Any], units: dict[str, str]) -> dict[str, Any]:
     """Write translations onto the book. Returns a report of what landed.
 
@@ -198,8 +228,8 @@ def apply_units(book: dict[str, Any], units: dict[str, str]) -> dict[str, Any]:
     applied, unknown, blank = [], [], []
 
     for unit_id, value in units.items():
-        text = value.strip()
-        if not text:
+        text = value.strip(" \t")
+        if not text.strip():
             blank.append(unit_id)
             continue
 
@@ -391,7 +421,7 @@ def merge(
     if accepted or new_notes or retired:
         book["footnotes"] = [note for note in book.get("footnotes", [])
                              if note["id"] not in retired] + new_notes
-        outcome = apply_units(book, segments.rejoin(accepted))
+        outcome = apply_units(book, rejoin_units(book, accepted, manifest))
         report["units_applied"] = len(outcome["applied"])
         if outcome["unknown"]:
             # The manifest named a unit this book does not have. Nothing landed

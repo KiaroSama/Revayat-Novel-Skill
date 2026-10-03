@@ -63,7 +63,7 @@ STAGE = "meaning"
 #: Tagged, because a digest whose formula is unknown cannot be compared — only
 #: recomputed or refused. The page route learned this the hard way: two modules
 #: wrote different hashes under one key and each believed the other's.
-DIGEST_VERSION = "meaning3"
+DIGEST_VERSION = "meaning4"
 
 #: What the reviewer is asked, why a machine cannot be asked it instead, and one
 #: contrastive pair each. The examples are the calibration: a rubric without them
