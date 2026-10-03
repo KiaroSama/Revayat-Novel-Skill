@@ -75,6 +75,7 @@ def render_worksheet(
         "",
     ]
 
+    context_start = len(lines)
     # The blocks *this worksheet* carries, not every block in the run. A run
     # that renders over the budget becomes several worksheets sharing one
     # ``ids``, and handing each the whole run told every one of them that it
@@ -113,6 +114,8 @@ def render_worksheet(
         if next_head:
             lines += [f"After: {next_head}…", ""]
 
+    # Escape the completed context, including line breaks inside dynamic values.
+    lines[context_start:] = [escape_payload(line) for line in lines[context_start:]]
     lines += ["## Translate", ""]
     for unit_id, kind, text in units:
         block = lookup.get(unit_id.split("#")[0])

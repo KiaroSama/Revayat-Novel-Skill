@@ -248,7 +248,7 @@ def read_epub(
                     raw = archive.read(member)
                 except KeyError as error:
                     raise ValueError(f"EPUB document is missing: {member}") from error
-                soup = BeautifulSoup(raw, "html.parser")
+                soup = BeautifulSoup(raw, "html.parser", preserve_whitespace_tags=VERBATIM_TAGS | {"textarea"})
                 for junk in soup.find_all(list(SKIP_TAGS)):
                     junk.decompose()
                 soups[member] = soup

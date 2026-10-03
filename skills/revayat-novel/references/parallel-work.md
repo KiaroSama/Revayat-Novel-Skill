@@ -72,6 +72,14 @@ summaries; the coordinator writes the shared log, avoiding competing appenders.
 After interruption, inspect actual replies and current request identities rather
 than trusting an old roster's completed label.
 
+After a source-intake or worksheet-transport repair, an unchanged snapshot hash
+is not proof that the old Book IR preserved its source. Reimport original snapshots
+into a separate workspace; compare unit order, literal text, note edges and assets.
+Carry forward only targets whose source and dependencies are verified unchanged.
+Keep previous replies and review evidence, regenerate affected worksheets, and
+never rename or copy old replies into current request slots. Renew affected
+meaning, fluency, package and visual approvals before resuming dispatch.
+
 The coordinator checks terminology/voice across neighboring parts, then runs the
 same semantic, typography, package and visual gates as serial work. Delivery is
 blocked until required responses are valid and no task-owned worker remains live.

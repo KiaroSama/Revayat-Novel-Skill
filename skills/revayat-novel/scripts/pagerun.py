@@ -71,6 +71,7 @@ from pageidentity import (  # noqa: F401
     translation_hash,
 )
 from pagesheet import (  # noqa: F401  (re-exported: pagecli and the tests)
+    validate_context_limit,
     MAX_TERMS,
     MAX_VOICE_CARDS,
     NEIGHBOUR_CHARS,
@@ -176,6 +177,7 @@ def build(
     bring under the budget refuses while the worksheets already on disk still
     match the manifest beside them.
     """
+    validate_context_limit(neighbour_chars)
     book = ir.load_book(book_path)
     glossary = gl.load(glossary_path) if glossary_path else gl.new_glossary()
     lookup = ir.blocks_by_id(book)

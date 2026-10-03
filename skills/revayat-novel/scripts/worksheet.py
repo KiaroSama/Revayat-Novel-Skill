@@ -156,7 +156,7 @@ def escape_payload(text: str) -> str:
     """
     out: list[str] = []
     for line in text.split("\n"):
-        if reserved(line.strip().lstrip("\\")):
+        if reserved(line.strip().lstrip("\\")) or ESCAPED_HEADER.match(line):
             indent = line[:len(line) - len(line.lstrip())]
             out.append(f"{indent}\\{line[len(indent):]}")
         else:

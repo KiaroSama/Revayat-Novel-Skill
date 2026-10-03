@@ -23,7 +23,10 @@ BLOCK_TAGS = {"p", "div", "blockquote", "li", "figcaption", "h1", "h2", "h3",
 def literal_text(node: Tag) -> str:
     if node.find(["img", "image", "svg", "math", "table"]):
         raise ValueError("EPUB literal contains unsupported structured content; supply a faithful source")
-    return node.get_text()
+    return "".join("\n" if isinstance(child, Tag) and child.name == "br" else str(child)
+                   for child in node.descendants
+                   if (isinstance(child, NavigableString) and not isinstance(child, Comment))
+                   or (isinstance(child, Tag) and child.name == "br"))
 
 
 def _span(text: str, *, bold: bool = False, italic: bool = False,
@@ -55,6 +58,11 @@ def _inline_spans(node: Tag, bold: bool = False, italic: bool = False,
                   notes: dict[int, str] | None = None
                   ) -> list[dict[str, Any]]:
     """Flatten an element's inline content into span dicts."""
+    if node.name in VERBATIM_TAGS:
+        body = literal_text(node)
+        if "`" in body:
+            raise ValueError("EPUB verbatim content contains an unrepresentable backtick")
+        return [_span(body, bold=bold, italic=italic, verbatim=True)] if body else []
     spans: list[dict[str, Any]] = []
     for child in node.children:
         if isinstance(child, Comment):
@@ -161,6 +169,11 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
                     links[identity] = {"text": "", "href": href}
                 links[identity]["text"] += display
 
+        def carry_anchors(block):
+            if anchors:
+                block["bookmarks"] = list(dict.fromkeys([*anchors, *block.get("bookmarks", [])]))
+                anchors.clear()
+
         def flush():
             if any(span["text"].strip() or span.get("footnote") or
                    (span.get("verbatim") and span["text"]) for span in buffer):
@@ -170,11 +183,8 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
                            for item in links.values() if item["text"].strip()]
                 if carried:
                     extra["links"] = carried
-                if anchors:
-                    extra["bookmarks"] = list(dict.fromkeys(anchors))
-                emit(kind, text=text, **extra)
+                carry_anchors(emit(kind, text=text, **extra))
             buffer.clear()
-            anchors.clear()
             links.clear()
 
         def visit(child, strong=bold, emphasis=italic, active=inherited_link):
@@ -194,12 +204,15 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
             if name in {"img", "image"}:
                 flush()
                 image(child)
+                carry_anchors(emitted[-1])
                 if child.get("id"):
                     emitted[-1].setdefault("bookmarks", []).append(child["id"])
                 return
             if name == "hr":
                 flush()
-                emit("separator")
+                if child.get("id"):
+                    anchors.append(child["id"])
+                carry_anchors(emit("separator"))
                 return
             if name == "br":
                 append([_span(" ", bold=strong, italic=emphasis)], active)
@@ -230,7 +243,11 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
                     new_kind, new_fields = "caption", {}
                 elif kind not in {"listitem", "blockquote"}:
                     new_kind, new_fields = "paragraph", {}
-                flow(child, new_kind, new_fields, strong, emphasis, depth + 1, active)
+                start = len(emitted)
+                pending = flow(child, new_kind, new_fields, strong, emphasis, depth + 1, active)
+                if len(emitted) > start:
+                    carry_anchors(emitted[start])
+                anchors.extend(pending)
                 return
             if child.get("id"):
                 anchors.append(child["id"])
@@ -244,16 +261,25 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
         for child in container.children:
             visit(child)
         flush()
-        if container.get("id") and len(emitted) > first:
-            target = emitted[first].setdefault("bookmarks", [])
-            if container["id"] not in target:
-                target.insert(0, container["id"])
+        if container.get("id"):
+            if len(emitted) > first:
+                target = emitted[first].setdefault("bookmarks", [])
+                if container["id"] not in target:
+                    target.insert(0, container["id"])
+            else:
+                anchors.insert(0, container["id"])
+        # Empty inline/block anchors await the next concrete block, including
+        # across container boundaries; do not invent prose just to carry an id.
+        return anchors
 
-    flow(node)
+    pending = flow(node)
+    if pending and emitted:
+        # At end of the document the last block is the available IR location.
+        emitted[-1]["bookmarks"] = list(dict.fromkeys([
+            *emitted[-1].get("bookmarks", []), *pending]))
 
 
 def _ordered(item: Tag) -> bool:
     parent = item.find_parent(["ol", "ul"])
     return bool(parent and parent.name == "ol")
-
 

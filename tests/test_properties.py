@@ -79,6 +79,8 @@ PIECES = [
     "```",                                  # an unbalanced fence
     "~~~python",                            # the other fence, with a language
     "\\@@ b00007 para",                     # a literal backslash before one
+    r"\@@ not-a-header",                    # decoder prefix, not a complete header
+    r"  \\<!-- revayat-novel: unfinished",   # already escaped incomplete comment
     "<!-- revayat-novel: scaffolding -->",  # our own comment, echoed back
     "Supercalifragilisticexpialidociousandthensome" * 3,   # one long word
     "   leading and trailing spaces   ",

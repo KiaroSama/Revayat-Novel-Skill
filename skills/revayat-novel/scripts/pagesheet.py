@@ -17,6 +17,7 @@ from typing import Any
 
 import bookir as ir
 import glossary as gl
+from worksheet import comment, escape_payload
 
 #: Hard maximum characters of adjacent-page prose shown per side. Neighbour text
 #: is for resolving a pronoun, not for translating; without a ceiling the two
@@ -28,6 +29,12 @@ NEIGHBOUR_CHARS = 600
 MAX_TERMS = 24
 MAX_VOICE_CARDS = 6
 
+def validate_context_limit(limit: int) -> None:
+    """Refuse invalid input before a page run can replace any evidence."""
+    if type(limit) is not int or limit < 0:
+        raise ValueError("--neighbour-chars must be a nonnegative whole number; 0 disables context")
+
+
 def neighbour_context(book: dict[str, Any], jobs: list[dict[str, Any]],
                       index: int, limit: int = NEIGHBOUR_CHARS) -> tuple[str, str]:
     """``(before, after)`` prose from the adjacent pages, hard-capped.
@@ -36,6 +43,9 @@ def neighbour_context(book: dict[str, Any], jobs: list[dict[str, Any]],
     says not to translate it, and the blocks it came from are owned by *their*
     page, never by this one.
     """
+    validate_context_limit(limit)
+    if limit == 0:
+        return "", ""
     lookup = ir.blocks_by_id(book)
 
     def blob(ids: list[str]) -> str:
@@ -66,13 +76,14 @@ def render_worksheet(
     page = job["page"]
 
     lines: list[str] = [
-        f"<!-- revayat-novel page worksheet {page:04d}/{total:04d} "
-        f"| page {page} | units {len(units)} | {len(source_blob)} source chars -->",
-        "<!-- Reply with the same @@ headers, in the same order, Persian text "
-        "underneath each. Do not add, drop, merge or reorder headers. -->",
+        comment(f"page worksheet {page:04d}/{total:04d} | page {page} "
+                f"| units {len(units)} | {len(source_blob)} source chars"),
+        comment("Reply with the same @@ headers, in the same order, Persian text "
+                "underneath each. Do not add, drop, merge or reorder headers."),
         "",
     ]
 
+    context_start = len(lines)
     entries = gl.entries_for_text(glossary, source_blob)[:MAX_TERMS]
     table = gl.render_term_table(entries, glossary.get("policy", {}),
                                  block_ids=job["block_ids"])
@@ -107,17 +118,19 @@ def render_worksheet(
         if next_head:
             lines += [f"After (page {page + 1}): {next_head}…", ""]
 
+    # Context is payload too: a glossary/OCR/neighbour line cannot own a unit.
+    lines[context_start:] = [escape_payload(line) for line in lines[context_start:]]
     lines += [f"## Translate — page {page}", ""]
     for unit_id, kind, text in units:
         block = lookup.get(unit_id.split("#")[0])
         if block is not None and block["type"] == "image":
-            lines.append(
-                f"<!-- illustration {block['asset']} is anchored here; the "
+            lines.append(comment(
+                f"illustration {block['asset']} is anchored here; the "
                 f"picture itself needs nothing from you. The alt header below "
-                f"is its caption text and does need translating. -->"
-            )
+                f"is its caption text and does need translating."
+            ))
         lines.append(f"@@ {unit_id} {kind}")
-        lines.append(text)
+        lines.append(escape_payload(text))
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

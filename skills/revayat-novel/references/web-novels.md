@@ -67,6 +67,28 @@ and check the final document. Write agent progress and corrections beside the
 translated file as required by preservation-and-logging.md. Offer optional parallel
 translation/editing through [parallel-work.md](parallel-work.md).
 
+## Preserve source nodes, not just visible words
+
+A source link or note reference remains one semantic node across its styled
+text runs. Do not split a formatted note label into multiple notes, manufacture
+duplicate IDs from one source element, or flatten nested list depth. Literal
+`pre`/`code`/`kbd`/`samp`/`tt` text keeps its original whitespace and one literal
+span; unsupported structured literal content is refused, not silently discarded.
+Formatting can repeat across a paragraph/image boundary, but its source ID is
+emitted once. Real duplicate IDs on different source nodes remain invalid.
+Empty link destinations are attached to the next real Book IR block; a trailing
+destination uses the final block because Book IR bookmarks are block-level.
+Check retained chapter content and referenced destinations before dispatch.
+
+For a page-oriented run, `pages build --neighbour-chars 0` disables both context
+sides. Positive values bound each side independently. Negative or non-integer
+limits refuse before changing the run. A previous-page edit cannot invalidate
+another page through context that was explicitly disabled.
+Page and chunk routes share the worksheet comment/escape grammar: generated
+illustration descriptions are not prose, while author-written comment/header-like
+lines remain payload. Rebuild old page worksheets after this transport fix; do
+not relabel old answers as current or remove author text to satisfy a parser.
+
 ## Resume without overwriting translation
 
 ```bash
@@ -85,3 +107,11 @@ The native downloader limits chapters, response/total bytes, redirects and time,
 accepts only public credential-free HTTP(S), validates every destination and pins
 the connected address while verifying HTTPS hostnames. Failures are structured
 JSON with exit 2. Missing content never counts as successfully translated content.
+
+A successful resume validates an existing snapshot's identity, not the semantic
+correctness of the importer that originally produced it. After an intake fix,
+reimport affected retained source into a **new** workspace and compare source
+units, literal spans, note counts and destinations. Migrate only verified matching
+translations, rebuild request-bound worksheets, and renew affected meaning,
+fluency, package and visual approvals. Never rewrite the cached source or erase
+an existing translation to make a resume check pass.
