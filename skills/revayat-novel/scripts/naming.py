@@ -178,7 +178,7 @@ def place_for(plan_record: dict[str, Any], group_key: str) -> dict[str, Any] | N
 # --------------------------------------------------------------------------- #
 
 def flatten_in_prose(target: str, first_form: str,
-                     later_form: str) -> tuple[str, int]:
+                     later_form: str, *, keep_first: bool = False) -> tuple[str, int]:
     """Long form down to short form, in prose spans only.
 
     Returns the rewritten string and how many occurrences were replaced. A
@@ -187,6 +187,11 @@ def flatten_in_prose(target: str, first_form: str,
     """
     spans, _ = _prose_view(target)
     matches = introduction_spans(target, first_form)
+    if keep_first:
+        # Preserve the owning occurrence itself, including the separate styles
+        # of its name and parenthetical. Removing then reinserting it would
+        # assign the name's style to the whole introduction.
+        matches = matches[1:]
     if not matches:
         return target, 0
     deletions = [(start + len(later_form), end) for start, end in matches]
@@ -240,9 +245,10 @@ def enforce_first_mentions(glossary: dict[str, Any],
     owning chunk to introduce the name; this is the pass that makes it true
     regardless of what came back.
 
-    Mechanical and idempotent: flatten every introduction down to the later form,
-    then write exactly one back, in the block :func:`plan` names. Run it twice and
-    the second run changes nothing.
+    Mechanical and idempotent: retain the owning introduction exactly where
+    :func:`plan` places it, flatten only redundant occurrences, and insert a
+    first introduction only when none exists there. Run it twice and the second
+    run changes nothing; removing a repeat must not restyle the retained name.
 
     ``first_per_chapter`` changes only how many places "once" means — a reader who
     opens at chapter nine never saw chapter one's parenthetical. ``never``
@@ -272,8 +278,8 @@ def enforce_first_mentions(glossary: dict[str, Any],
                 continue
             if block["id"] in owners and introduction_count(target, first_form) == 1:
                 continue
-            block["target"], replaced = flatten_in_prose(target, first_form,
-                                                         later_form)
+            block["target"], replaced = flatten_in_prose(
+                target, first_form, later_form, keep_first=block["id"] in owners)
             report["flattened"] += replaced
 
         if policy == "never":

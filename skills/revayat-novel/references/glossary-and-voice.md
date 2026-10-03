@@ -179,3 +179,13 @@ $PY scripts/revayat-novel.py glossary count --glossary work/glossary.json --book
 Chunks already translated are not re-translated automatically. Decide whether
 the new name appeared earlier in the book; if it did, re-run those chunks.
 `qa check --glossary` will tell you where a locked name is missing.
+
+### Preserve the retained introduction's typography
+
+When the owning block already contains a valid introduction, remove only its
+later redundant parentheticals. Do not flatten the owning occurrence and insert
+it again: that can assign the name's emphasis to a separately styled original
+spelling. For `first_per_chapter`, retain one existing introduction in each
+planned owning block; `never` retains none. The shared prose eligibility rules
+still exclude URLs, literals and fragments of larger words. Verify one-pass
+convergence, a byte-stable second pass and agreement with the naming QA gate.
