@@ -1,0 +1,132 @@
+name: Prepare verified transport audit
+on:
+  push:
+    branches: [fix/lossless-review-transport-20261004]
+    paths: [.github/workflows/prepare-transport-audit.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.repository == 'KiaroSama/Revayat-Novel-Skill' && github.actor == 'KiaroSama'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: e60e3822dc0b923c26f1bf6e26c68538b5687bae
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare tested objects with explicit commit identity; never update refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          """Create exact tested objects, without changing branches or PR states."""
+          from __future__ import annotations
+          import base64
+          import gzip
+          import hashlib
+          import json
+          import logging
+          import os
+          from pathlib import Path
+          import subprocess
+          import urllib.request
+
+          logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(levelname)s] %(message)s')
+          LOG = logging.getLogger('transport-audit')
+          REPO = 'KiaroSama/Revayat-Novel-Skill'
+          BASE = 'e60e3822dc0b923c26f1bf6e26c68538b5687bae'
+          BASE_TREE = '8e9f4d811e95b30243a8c4382424fe19ce3f507a'
+          EXPECTED_TREE = '85bd56729844a6b345f980758eee6c0455d7ba94'
+          PATCH_SHA = '635c6611880badef2377cd2d199568da5071d3dd83fbf224db5eee4720728e86'
+          PARTS = ['a359b7390f952e6c43cb88b870e1218a247cc78e',
+                   'ed063303073d1f686b2cf09bd84f905fab614624',
+                   '8166dcf5ad3abf5c59c812b62dddb5f8d6f2a966',
+                   'cc335d2dcb17b8a65f842ee43e08cd5a39201531']
+          PATHS = ['AGENTS.md', 'skills/revayat-novel/SKILL.md',
+              'skills/revayat-novel/references/payload-format.md',
+              'skills/revayat-novel/references/review-contracts.md',
+              'skills/revayat-novel/scripts/chunksheet.py',
+              'skills/revayat-novel/scripts/eligible.py',
+              'skills/revayat-novel/scripts/fluency.py',
+              'skills/revayat-novel/scripts/fluencysheet.py',
+              'skills/revayat-novel/scripts/meaning.py',
+              'skills/revayat-novel/scripts/merge.py',
+              'skills/revayat-novel/scripts/pagesheet.py',
+              'skills/revayat-novel/scripts/payloadtext.py',
+              'skills/revayat-novel/scripts/provenance.py',
+              'skills/revayat-novel/scripts/reviewsheet.py',
+              'skills/revayat-novel/scripts/segments.py',
+              'skills/revayat-novel/scripts/worksheet.py',
+              'tests/test_pagerun.py', 'tests/test_payload_line_contract.py',
+              'tests/test_properties.py', 'tests/test_worksheet_transport.py']
+          EMAIL = 'Kiaro.Sama.Dev@gmail.com'
+
+          def api(endpoint: str, data: dict | None = None) -> dict:
+              request = urllib.request.Request('https://api.github.com/repos/' + REPO + endpoint,
+                  data=None if data is None else json.dumps(data).encode('utf-8'),
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json', 'User-Agent': 'Revayat-audit'})
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  return json.load(response)
+
+          def git(*args: str, content: bytes | None = None) -> str:
+              return subprocess.run(['git', *args], input=content, check=True,
+                  stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.decode().strip()
+
+          def main() -> None:
+              LOG.info('Preparing the exact clean-checkout-tested transport repair')
+              if git('rev-parse', 'HEAD') != BASE:
+                  raise ValueError('Unexpected checkout')
+              parts = []
+              for sha in PARTS:
+                  raw = base64.b64decode(api('/git/blobs/' + sha)['content'])
+                  check = hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
+                  if check != sha:
+                      raise ValueError('Transport blob identity mismatch')
+                  parts.append(raw)
+              patch = gzip.decompress(b''.join(parts))
+              if hashlib.sha256(patch).hexdigest() != PATCH_SHA:
+                  raise ValueError('Patch digest mismatch')
+              git('apply', '--index', '-', content=patch)
+              changed = git('diff', '--cached', '--name-only').splitlines()
+              if changed != PATHS or git('write-tree') != EXPECTED_TREE:
+                  raise ValueError('Patch differs from the tested paths or tree')
+              LOG.debug('Verified exact patch, paths and locally tested tree')
+              entries = []
+              for path in changed:
+                  mode, local_sha, _ = git('ls-files', '-s', '--', path).split(maxsplit=2)
+                  blob = api('/git/blobs', {'encoding': 'base64',
+                      'content': base64.b64encode(Path(path).read_bytes()).decode()})
+                  if blob['sha'] != local_sha:
+                      raise ValueError('Published source blob mismatch')
+                  entries.append({'path': path, 'mode': mode, 'type': 'blob', 'sha': blob['sha']})
+              tree = api('/git/trees', {'base_tree': BASE_TREE, 'tree': entries})
+              if tree['sha'] != EXPECTED_TREE:
+                  raise ValueError('Published tree mismatch')
+              identity = {'name': 'KiaroSama', 'email': EMAIL}
+              commit = api('/git/commits', {
+                  'message': 'fix: isolate review context and preserve exact worksheet payloads',
+                  'tree': EXPECTED_TREE, 'parents': [BASE], 'author': identity, 'committer': identity})
+              if (commit['author']['email'] != EMAIL or commit['committer']['email'] != EMAIL
+                      or [p['sha'] for p in commit['parents']] != [BASE]):
+                  raise ValueError('Published commit identity or ancestry mismatch')
+              Path('prepared-commit.json').write_text(json.dumps(commit, indent=2) + '\n', encoding='utf-8')
+              LOG.warning('Only unattached objects were created; no branch or PR state was changed')
+              LOG.info('Prepared verified commit %s', commit['sha'])
+
+          if __name__ == '__main__':
+              try:
+                  main()
+              except Exception:
+                  LOG.error('Preparation failed; no refs or PR states were changed')
+                  raise
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: prepared-transport-audit
+          path: prepared-commit.json
+          if-no-files-found: error
+          retention-days: 7
