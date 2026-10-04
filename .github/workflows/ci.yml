@@ -293,6 +293,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
       - name: Install into every agent layout (POSIX)
         if: runner.os != 'Windows'
         shell: bash
@@ -373,7 +377,7 @@ jobs:
           # published scripts when this went in, two of them left behind by
           # refactors that moved the code but not the import — the kind of thing
           # nothing else here would ever have mentioned.
-          ruff check skills/revayat-novel/scripts tests evaluation
+          ruff check skills/revayat-novel/scripts tests evaluation install
 
       - name: Every plugin manifest is valid JSON and agrees on version
         run: |

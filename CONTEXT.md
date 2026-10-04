@@ -27,3 +27,18 @@ changes, review decisions and the workflow log when workers run in parallel.
 
 **Worker assignment**: An exclusive set of worksheet/review replies bound to one
 stage and source revision; it grants no authority to change the shared book.
+
+**Installation plan**: The complete selected set of skill destinations and instruction
+changes accepted together before any existing installation is replaced.
+
+**Owned pointer region**: The one explicitly delimited instruction section maintained
+by Revayat; surrounding instructions belong to the user.
+
+**Retained backup**: An unchanged previous installation or instruction file kept for
+recovery and owner inspection, not automatically discarded after replacement.
+
+**Committed receipt**: A record that the entire installation plan was published;
+unfinished receipt housekeeping does not mean that publication was rolled back.
+
+**Recovery conflict**: A persisted or current state that differs from both recorded
+states, requiring preservation and explicit resolution rather than guessed recovery.

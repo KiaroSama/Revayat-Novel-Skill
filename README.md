@@ -86,7 +86,16 @@ By default this installs into every agent it finds — Claude Code, Kiro, Codex,
 Cursor, Cline, Hermes, OpenCode and Antigravity. OpenCode and Antigravity also
 get an `AGENTS.md` pointer, because that is how they discover instructions.
 Use `--agent claude` for one, and `--scope project --path <dir>` for a single
-project. Both installers behave identically on Linux, macOS and Windows.
+project. Both wrappers require **Python 3.10+ before installation** and use one
+standard-library engine. Updating an existing copy requires `--force` / `-Force`
+in automation; interactive confirmation defaults to **No**, including EOF.
+
+Installation verifies the complete selected payload before replacing any copy.
+Old copies and instruction files are retained in a protected local state area;
+the next invocation recovers an interrupted transaction or refuses conflicting
+edits. Only the owned `AGENTS.md` section changes; surrounding bytes remain exact.
+See [installer safety and recovery](install/README.md) for logs, retained backups,
+inventory maintenance and the limits of multi-directory recovery.
 
 ### As a Claude Code plugin
 

@@ -96,7 +96,7 @@ def test_the_shell_installer_puts_a_user_scope_opencode_skill_where_opencode_loo
 
     done = subprocess.run(
         [_bash(), str(SH), "--scope", "user", "--agent", "opencode", "--force"],
-        cwd=str(ROOT), env=env, capture_output=True, text=True,
+        cwd=str(ROOT), env=env, capture_output=True, text=True, encoding="utf-8",
         timeout=INSTALL_TIMEOUT, stdin=subprocess.DEVNULL,
     )
     assert done.returncode == 0, done.stdout + done.stderr
@@ -123,7 +123,7 @@ def test_the_shell_installer_keeps_project_scope_opencode_in_dot_opencode(tmp_pa
     done = subprocess.run(
         [_bash(), str(SH), "--scope", "project", "--path", str(project),
          "--agent", "opencode", "--force"],
-        cwd=str(ROOT), env=env, capture_output=True, text=True,
+        cwd=str(ROOT), env=env, capture_output=True, text=True, encoding="utf-8",
         timeout=INSTALL_TIMEOUT, stdin=subprocess.DEVNULL,
     )
     assert done.returncode == 0, done.stdout + done.stderr
@@ -141,7 +141,7 @@ def test_the_powershell_installer_puts_a_user_scope_opencode_skill_where_opencod
         [_pwsh(), "-NoLogo", "-NoProfile", "-NonInteractive",
          "-ExecutionPolicy", "Bypass", "-File", str(PS1),
          "-Agent", "opencode", "-Scope", "user", "-Force"],
-        cwd=str(ROOT), env=env, capture_output=True, text=True,
+        cwd=str(ROOT), env=env, capture_output=True, text=True, encoding="utf-8",
         timeout=INSTALL_TIMEOUT, stdin=subprocess.DEVNULL,
     )
     assert done.returncode == 0, done.stdout + done.stderr
