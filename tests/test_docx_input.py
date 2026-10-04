@@ -623,7 +623,7 @@ def test_a_document_with_no_links_or_heads_warns_about_neither(tmp_path):
     assert not list(ir.iter_running_pieces(book))
 
 
-def test_a_note_part_declaring_an_entity_is_read_without_expanding_it(tmp_path):
+def test_a_note_part_declaring_an_entity_is_refused_without_expanding_it(tmp_path):
     """The note parts are parsed past python-docx, so they need its parser's rules.
 
     A .docx is an archive from whoever sent the book — the same reason the zip
@@ -665,13 +665,7 @@ def test_a_note_part_declaring_an_entity_is_read_without_expanding_it(tmp_path):
     destination = tmp_path / "entities.docx"
     document.save(destination)
 
-    book = read_docx(str(destination), tmp_path / "assets")
-
-    # Whatever came back, the entity was not expanded into it. The book must
-    # still be a book — a refused note part is dropped, not a crash.
-    text = " ".join(note.get("text", "") for note in book.get("footnotes", []))
-    assert "AAAAAAAAAAAA" not in text, (
-        "the entity was expanded, so the note part is still being parsed with "
-        "lxml's default parser rather than one with resolve_entities=False"
-    )
-    assert isinstance(book.get("footnotes"), list)
+    # Fail closed: not expanding an entity is necessary, but silently dropping
+    # the referenced note would still shorten the source and mislead translation.
+    with pytest.raises(ValueError, match="note.*DTD"):
+        read_docx(str(destination), tmp_path / "assets")
