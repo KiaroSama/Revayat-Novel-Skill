@@ -68,4 +68,4 @@ def test_readonly_source_is_flushed_before_readonly_mode(tmp_path):
         assert not (stage / "SKILL.md").stat().st_mode & 0o200
     finally:
         if (stage / "SKILL.md").exists():
-            os.chmod(stage / "SKILL.md", 0o666)
+            os.chmod(stage / "SKILL.md", 0o600)

@@ -91,4 +91,4 @@ def test_native_wrapper_preserves_instruction_bytes(tmp_path, wrapper, scenario)
         assert pointer.read_bytes() == result
         assert len(list((base / ".revayat-novel-installer").glob("installer_*.log"))) == 2
         backups = list((base / ".revayat-novel-installer").glob("backup-*"))
-        assert any(p.is_dir() and (p / "owner.txt").read_bytes() == b"old sentinel" for p in backups)
+        assert any((p / "owner.txt").is_file() and (p / "owner.txt").read_bytes() == b"old sentinel" for p in backups)

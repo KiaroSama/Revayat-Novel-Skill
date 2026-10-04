@@ -308,7 +308,7 @@ def publish(base: Path, destinations: list[Path], snapshot: dict, *, pointer=Non
             _persist(journal, record)
             if observer:
                 observer("committed", -1)
-        except BaseException:
+        except (Exception, KeyboardInterrupt, SystemExit):
             # The on-disk marker, not the exception, decides whether rollback is legal.
             disk = strict_json(journal.read_bytes())
             if disk["phase"] == "committed":

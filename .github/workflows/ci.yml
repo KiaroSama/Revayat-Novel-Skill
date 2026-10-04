@@ -303,7 +303,8 @@ jobs:
         run: |
           set -euo pipefail
           bash -n install/install.sh
-          target="$(mktemp -d)"
+          target="$(mktemp -d "$GITHUB_WORKSPACE/.pytest-tmp-install-XXXXXX")"
+          trap 'rm -rf -- "$target"' EXIT
           for dir in .claude .kiro .codex .cursor .cline .hermes .opencode .agents; do
             mkdir -p "$target/$dir"
           done

@@ -161,7 +161,7 @@ def write_new(path: Path, content: bytes, mode: int = 0o600) -> None:
 
 def atomic_bytes(path: Path, content: bytes) -> None:
     admit(path)
-    fd, name = tempfile.mkstemp(prefix=".revayat-write-", dir=path.parent)
+    fd, name = tempfile.mkstemp(prefix=".revayat-novel-write-", dir=path.parent)
     temp = Path(name)
     try:
         with os.fdopen(fd, "wb") as handle:

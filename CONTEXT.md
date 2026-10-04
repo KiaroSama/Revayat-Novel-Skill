@@ -32,7 +32,7 @@ stage and source revision; it grants no authority to change the shared book.
 changes accepted together before any existing installation is replaced.
 
 **Owned pointer region**: The one explicitly delimited instruction section maintained
-by Revayat; surrounding instructions belong to the user.
+by Revayat Novel; surrounding instructions belong to the user.
 
 **Retained backup**: An unchanged previous installation or instruction file kept for
 recovery and owner inspection, not automatically discarded after replacement.

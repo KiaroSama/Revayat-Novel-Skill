@@ -124,7 +124,8 @@ def test_source_destination_overlap_refuses():
         disjoint(source, source.parent)
 
 
-@pytest.mark.parametrize("value", [b'{"a":1,"a":2}', b'{"a":NaN}', b'[]' * (600 * 1024)])
+@pytest.mark.parametrize("value", [b'{"a":1,"a":2}', b'{"a":NaN}', b'[]' * (600 * 1024)],
+                         ids=["duplicate-key", "nonfinite", "oversized"])
 def test_recovery_json_rejects_ambiguous_or_oversized_values(value):
     from install_files import strict_json
     with pytest.raises(ValueError):

@@ -21,7 +21,7 @@ Interactive replacement requires `y` or `yes`; Enter, EOF and unavailable input 
 **No**. Force does not bypass malformed instructions, unsafe paths or recovery
 conflicts. No prompt occurs after publication begins.
 
-Only the exact standalone BEGIN/END Revayat pointer region in `AGENTS.md` is owned.
+Only the exact standalone BEGIN/END Revayat Novel pointer region in `AGENTS.md` is owned.
 Unowned prefix/suffix bytes, UTF-8 BOM, line endings and final-newline behavior are
 preserved. Malformed/duplicate/nested markers or invalid UTF-8 refuse before skill
 replacement. One combined pointer describes installed pointer agents; repeating an
