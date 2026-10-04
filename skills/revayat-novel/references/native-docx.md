@@ -23,6 +23,16 @@ native reader preserved or could not represent. Do not silently accept/reject
 editorial changes or claim exact preservation of unsupported objects. Obtain a
 settled source or resolve the specific missing content before delivery.
 
+## Native intake fidelity and refusals
+
+Read `docx-intake-integrity.md` for the event-order contract and recovery. A native
+run can contain prose, several drawings, a page break and a note reference; these
+must be consumed in XML order rather than treating the first drawing as the whole
+run. Footnote and endnote IDs are separate namespaces, and every occurrence must
+retain its own source position. Missing or malformed referenced content refuses
+extraction instead of producing a shortened success. Resolve unsupported source
+objects in a separate faithful copy; never delete them merely to clear a gate.
+
 ## Translate the structured book
 
 Keep Book IR authoritative. Use normal chunks, shared names/voice, merge,

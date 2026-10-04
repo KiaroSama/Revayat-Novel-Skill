@@ -10,6 +10,13 @@ on:
   pull_request:
     paths:
       - ".github/workflows/audit-replay.yml"
+      # A repair's exact checkout and wheels must be reproducible before merge,
+      # not only after someone edits the exporter or dispatches it manually.
+      - "skills/revayat-novel/scripts/**"
+      - "tests/**"
+      - "skills/revayat-novel/requirements*.txt"
+      - "constraints-ci.txt"
+      - "requirements-lint.txt"
 
 permissions:
   contents: read
@@ -55,8 +62,8 @@ jobs:
           retention-days: 7
 
   wheelhouse:
-    # This is opt-in by workflow dispatch or changing this workflow, not part
-    # of normal source pushes. It does not replace the existing CI matrix.
+    # Runs alongside source replay for relevant PRs or an explicit dispatch;
+    # it does not replace the existing CI matrix or its no-skip gates.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

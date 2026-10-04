@@ -18,20 +18,28 @@ was never the alternative to dropping it.
 from __future__ import annotations
 
 import re
+import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Iterator
 
 from docx import Document
-from docx.enum.section import WD_ORIENT
-from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.hyperlink import Hyperlink
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
-from lxml import etree
 
 import bookir as ir
+from docxnotes import NOTE_PARTS, note_key, read_notes
+from docxfurniture import running_of
+from docxfurniture import (  # noqa: F401
+    _pt, section_geometry, _column_count, _alignment, _running_runs,
+    _running_pieces, _run_style,
+)
+
+LOG = logging.getLogger(__name__)
 
 EMU_PER_PT = ir.EMU_PER_PT
 
@@ -45,10 +53,15 @@ def column_span(tc) -> int:
     if properties is None:
         return 1
     grid = properties.find(qn("w:gridSpan"))
-    try:
-        return max(1, int(grid.get(qn("w:val"))))
-    except (AttributeError, TypeError, ValueError):
+    if grid is None:
         return 1
+    try:
+        width = int(grid.get(qn("w:val")))
+    except (TypeError, ValueError) as error:
+        raise ValueError("invalid DOCX table grid span") from error
+    if width < 1:
+        raise ValueError("invalid DOCX table grid span")
+    return width
 
 
 def _vertical_merge(tc) -> str | None:
@@ -61,6 +74,26 @@ def _vertical_merge(tc) -> str | None:
         return None
     # A bare <w:vMerge/> means continue; only "restart" opens a new span.
     return "restart" if merge.get(qn("w:val")) == "restart" else "continue"
+
+
+def _continuation_is_empty(tc) -> bool:
+    """Allow generated empty paragraphs, never discard authored live content."""
+    for child in tc:
+        if child.tag == qn("w:tcPr"):
+            continue
+        if child.tag != qn("w:p"):
+            return False
+        for item in child:
+            if item.tag == qn("w:pPr"):
+                continue
+            if item.tag != qn("w:r"):
+                return False
+            for part in item:
+                if part.tag == qn("w:rPr"):
+                    continue
+                if part.tag != qn("w:t") or part.text:
+                    return False
+    return True
 
 
 def table_cells(table) -> list[dict[str, Any]]:
@@ -92,17 +125,36 @@ def table_cells(table) -> list[dict[str, Any]]:
     open_at: dict[int, dict[str, Any]] = {}
 
     for row_number, tr in enumerate(table._tbl.findall(qn("w:tr")), start=1):
-        column = 0
+        properties = tr.find(qn("w:trPr"))
+        before = properties.find(qn("w:gridBefore")) if properties is not None else None
+        try:
+            column = int(before.get(qn("w:val"))) if before is not None else 0
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid DOCX table leading grid offset") from error
+        if column < 0:
+            raise ValueError("invalid DOCX table leading grid offset")
+        following: dict[int, dict[str, Any]] = {}
         for tc in tr.findall(qn("w:tc")):
             width = column_span(tc)
-            if _vertical_merge(tc) == "continue" and column in open_at:
-                open_at[column]["row_span"] += 1
+            merge = _vertical_merge(tc)
+            if merge == "continue":
+                record = open_at.get(column)
+                if record is None or record["col_span"] != width:
+                    raise ValueError("invalid DOCX table vertical merge continuation")
+                if not _continuation_is_empty(tc):
+                    raise ValueError("populated DOCX table vertical merge continuation")
+                record["row_span"] += 1
+                following[column] = record
             else:
                 record = {"tc": _Cell(tc, table), "row": row_number,
                           "cell": column + 1, "row_span": 1, "col_span": width}
                 found.append(record)
-                open_at[column] = record
+                if merge == "restart":
+                    following[column] = record
             column += width
+        # Only a restarted/continued span in the immediately preceding row is
+        # eligible. Ordinary or absent cells must never seed a later merge.
+        open_at = following
     return found
 
 
@@ -149,40 +201,6 @@ def has_page_break(run: Run) -> bool:
                for node in run._r.findall(qn("w:br")))
 
 
-def _pt(length) -> float | None:
-    """Points, rounded like the rest of the page setup; ``None`` when unset."""
-    return None if length is None else round(length.pt, 2)
-
-
-def section_geometry(section) -> dict[str, Any]:
-    """One ``w:sectPr`` as page setup, in the field names ``book["page"]`` uses.
-
-    The names match deliberately: the first section *is* ``book["page"]``, so
-    everything that already reads that key keeps working while the rest of the
-    sections travel beside it in the same shape.
-
-    ``start_type`` is kept as the raw XML token rather than an enum member so
-    the value survives a JSON round trip and goes back into the built document
-    unchanged.
-    """
-    start = section._sectPr.find(qn("w:type"))
-    token = start.get(qn("w:val")) if start is not None else None
-    return {
-        "start_type": token or "nextPage",   # Word's default when w:type is absent
-        "orientation": ("landscape" if section.orientation == WD_ORIENT.LANDSCAPE
-                        else "portrait"),
-        "width_pt": _pt(section.page_width),
-        "height_pt": _pt(section.page_height),
-        "margin_top_pt": _pt(section.top_margin),
-        "margin_bottom_pt": _pt(section.bottom_margin),
-        "margin_inner_pt": _pt(section.left_margin),
-        "margin_outer_pt": _pt(section.right_margin),
-        "gutter_pt": _pt(section.gutter),
-        "header_distance_pt": _pt(section.header_distance),
-        "footer_distance_pt": _pt(section.footer_distance),
-    }
-
-
 def ends_section(paragraph: Paragraph) -> bool:
     """True when this paragraph carries the ``w:sectPr`` that closes a section.
 
@@ -192,111 +210,6 @@ def ends_section(paragraph: Paragraph) -> bool:
     """
     properties = paragraph._p.find(qn("w:pPr"))
     return properties is not None and properties.find(qn("w:sectPr")) is not None
-
-
-def _column_count(section) -> int:
-    columns = section._sectPr.find(qn("w:cols"))
-    try:
-        return max(1, int(columns.get(qn("w:num"))))
-    except (AttributeError, TypeError, ValueError):
-        return 1
-
-
-def _alignment(paragraph: Paragraph) -> str | None:
-    """The paragraph's ``w:jc`` token, kept raw like ``start_type``.
-
-    Raw because Word reads ``left`` as *start* in a right-to-left paragraph, so
-    a running head the author pushed to the outside edge stays on the outside
-    edge in Persian without this having to know which edge that is.
-    """
-    properties = paragraph._p.find(qn("w:pPr"))
-    if properties is None:
-        return None
-    node = properties.find(qn("w:jc"))
-    return None if node is None else node.get(qn("w:val"))
-
-
-def _running_runs(paragraph: Paragraph, note) -> Iterator[Any]:
-    """Every ``w:r`` and ``w:fldSimple`` of one header paragraph, in order.
-
-    Descends into ``w:hyperlink`` for the same reason :func:`iter_runs` does —
-    the words inside one would otherwise vanish without a sound — but the target
-    cannot be rebuilt here, so each is named.
-    """
-    for node in paragraph._p:
-        if node.tag == qn("w:hyperlink"):
-            note("running-head-link-dropped",
-                 "the words are carried; a running head is not clickable in "
-                 "print and the target has nowhere on the page to live")
-            yield from (child for child in node
-                        if child.tag in (qn("w:r"), qn("w:fldSimple")))
-        elif node.tag in (qn("w:r"), qn("w:fldSimple")):
-            yield node
-
-
-def _running_pieces(paragraph: Paragraph, allocate, note) -> list[dict[str, Any]]:
-    """One header paragraph as prose, tabs and fields, in reading order.
-
-    Order is the whole content of a running head: "Chapter One → 7" and
-    "7 → Chapter One" are different pages. So a field cannot be collected into a
-    list beside the text and put back at a guess; it keeps its place in the line.
-
-    A field is carried as its instruction alone. Its *cached* result is whatever
-    Word last computed — for a ``STYLEREF`` that is the English chapter title,
-    which is precisely the thing that must not reach a Persian page — and the
-    built document already asks Word to recompute fields when it opens.
-    """
-    pieces: list[dict[str, Any]] = []
-    spans: list[tuple[str, bool, bool]] = []
-    depth = 0                 # nested fields: only the outermost is carried
-    in_result = False
-    instruction: list[str] = []
-
-    def flush() -> None:
-        text = ir.render_markup(spans).strip()
-        spans.clear()
-        if text:
-            pieces.append({"id": allocate(), "text": text, "target": None})
-
-    for node in _running_runs(paragraph, note):
-        if node.tag == qn("w:fldSimple"):
-            flush()
-            pieces.append({"field": node.get(qn("w:instr")) or ""})
-            continue
-
-        run = Run(node, paragraph)
-        if node.find(f".//{qn('w:drawing')}") is not None or \
-                node.find(f".//{qn('w:pict')}") is not None:
-            note("running-head-picture-dropped",
-                 "a picture in a running head is not carried; the words beside "
-                 "it are")
-
-        for child in node:
-            tag = child.tag
-            if tag == qn("w:fldChar"):
-                marker = child.get(qn("w:fldCharType"))
-                if marker == "begin":
-                    if depth == 0:
-                        flush()
-                        instruction, in_result = [], False
-                    depth += 1
-                elif marker == "separate":
-                    in_result = True
-                elif marker == "end":
-                    depth = max(0, depth - 1)
-                    if depth == 0:
-                        pieces.append({"field": "".join(instruction)})
-                        in_result = False
-            elif tag == qn("w:instrText") and depth and not in_result:
-                instruction.append(child.text or "")
-            elif tag == qn("w:t") and not depth:
-                bold, italic = _run_style(run)
-                spans.append((child.text or "", bold, italic))
-            elif tag == qn("w:tab") and not depth:
-                flush()
-                pieces.append({"tab": True})
-    flush()
-    return pieces
 
 
 def _ilvl(element) -> int | None:
@@ -353,87 +266,36 @@ def _heading_level(style_name: str) -> int | None:
     return None
 
 
-def _run_style(run) -> tuple[bool, bool]:
-    """Effective bold/italic, falling back to the run's style definition."""
-    bold, italic = run.bold, run.italic
-    if bold is None or italic is None:
-        style = getattr(run, "style", None)
-        font = getattr(style, "font", None) if style is not None else None
-        if font is not None:
-            bold = font.bold if bold is None else bold
-            italic = font.italic if italic is None else italic
-    return bool(bold), bool(italic)
-
-
-#: The note parts are read past python-docx, which models neither, so this is
-#: the one place in the project that parses a stranger's XML itself. It matches
-#: what python-docx does for every part it *does* own (`docx/oxml/parser.py`):
-#: entities off. A .docx is an archive from whoever sent the book - the same
-#: reason `bookir.check_archive_limits` refuses one before inflating it - and
-#: an entity expansion is consumed memory before any exception exists, so the
-#: `except` below would never see it.
-_NOTE_PARSER = etree.XMLParser(resolve_entities=False)
-
-#: The two ways Word stores a note. They are the same shape and the same loss
-#: if missed - a book that puts its notes at the back rather than the foot of
-#: the page came through with every one of them gone, and nothing said so.
-#: Both become footnotes in the Persian edition, because that is where a
-#: Persian reader looks, and because it is what the builder writes.
-NOTE_PARTS = (("footnote", RT.FOOTNOTES, "w:footnote", "w:footnoteReference"),
-              ("endnote", RT.ENDNOTES, "w:endnote", "w:endnoteReference"))
-
-
 def _read_notes(document) -> dict[str, str]:
-    """``"<kind>:<id>" -> plain text``, from both note parts.
-
-    Keyed by kind as well as id because the two id spaces are separate: an
-    endnote 1 and a footnote 1 are different notes, and merging them on the
-    number alone silently drops one of the two.
-
-    Word reserves ids -1 and 0 for the separator marks; they carry no content.
-    """
-    notes: dict[str, str] = {}
-    for kind, relationship, tag, _ in NOTE_PARTS:
-        try:
-            part = document.part.part_related_by(relationship)
-        except KeyError:
-            continue
-        try:
-            root = etree.fromstring(part.blob, parser=_NOTE_PARSER)
-        except Exception:
-            continue
-        for node in root.findall(qn(tag)):
-            note_id = node.get(qn("w:id"))
-            if note_id is None or int(note_id) <= 0:
-                continue
-            pieces = [t.text or "" for t in node.iter(qn("w:t"))]
-            text = re.sub(r"\s+", " ", "".join(pieces)).strip()
-            if text:
-                notes[f"{kind}:{note_id}"] = text
-    return notes
+    """Native note markup, keyed by note kind and normalized numeric ID."""
+    return read_notes(document, _run_style)
 
 
-def _picture(run, document) -> dict[str, Any] | None:
+def _picture_element(element, document) -> dict[str, Any]:
     """Image bytes and the author's rendered size, from an inline drawing."""
-    blips = run._r.findall(f".//{qn('a:blip')}")
-    if not blips:
-        return None
+    blips = element.findall(f".//{qn('a:blip')}")
+    if len(blips) != 1:
+        raise ValueError("DOCX drawing is not one supported embedded picture")
     rel_id = blips[0].get(qn("r:embed"))
     if not rel_id:
-        return None
+        raise ValueError("DOCX picture has no embedded image relationship")
     try:
         image_part = document.part.related_parts[rel_id]
-    except KeyError:
-        return None
+    except KeyError as error:
+        raise ValueError("DOCX picture relationship is missing") from error
 
     width_pt = height_pt = None
-    extent = run._r.find(f".//{qn('wp:extent')}")
+    extent = element.find(f".//{qn('wp:extent')}")
     if extent is not None:
         try:
             width_pt = round(int(extent.get("cx")) / EMU_PER_PT, 2)
             height_pt = round(int(extent.get("cy")) / EMU_PER_PT, 2)
-        except (TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as error:
+            raise ValueError("DOCX picture has invalid source dimensions") from error
+        if width_pt <= 0 or height_pt <= 0:
+            raise ValueError("DOCX picture has nonpositive source dimensions")
+    else:
+        raise ValueError("DOCX picture has no source dimensions")
 
     blob = image_part.blob
     return {
@@ -457,6 +319,17 @@ def read_docx(
     # declares. Refused here first, before any member is inflated.
     ir.check_archive_limits(path)
     document = Document(path)
+    # python-docx's paragraph/run iterators do not expose these source nodes.
+    # Refuse their presence rather than certify an apparently complete book
+    # with the hidden subtree removed. Resolve revisions/unsupported objects in
+    # a separate faithful source copy before importing again.
+    unsupported = {qn(name) for name in (
+        "w:sdt", "w:ins", "w:del", "w:moveFrom", "w:moveTo", "w:altChunk",
+        "w:fldSimple", "w:customXml", "m:oMath", "m:oMathPara")}
+    for element in document.element.body.iter():
+        if element.tag in unsupported:
+            LOG.error("Refused unsupported DOCX source node %s", element.tag)
+            raise ValueError(f"unsupported DOCX source content: {element.tag}")
     notes = _read_notes(document)
     core = document.core_properties
 
@@ -485,7 +358,6 @@ def read_docx(
     blocks: list[dict[str, Any]] = []
     footnotes: list[dict[str, Any]] = []
     seen_assets: dict[str, str] = {}
-    used_notes: set[str] = set()
     counter = 0
 
     # Only the bookmarks an in-document link actually points at are carried.
@@ -508,60 +380,10 @@ def read_docx(
     warnings: list[dict[str, Any]] = []
     running_count = 0
 
-    def running_of(section, index: int, even_and_odd: bool) -> dict[str, Any]:
-        """This section's own headers and feet, ``{"headers": …, "footers": …}``.
-
-        Only the slots Word actually *shows*: a first-page header the section
-        never turns on, or an even-page one the document does not ask for, is a
-        definition nobody sees, and carrying it would put a running head on the
-        Persian edition that the source never printed.
-        """
+    def allocate_running() -> str:
         nonlocal running_count
-        slots = ["default"]
-        if section.different_first_page_header_footer:
-            slots.append("first")
-        if even_and_odd:
-            slots.append("even")
-
-        def allocate() -> str:
-            nonlocal running_count
-            running_count += 1
-            return f"rh{running_count:04d}"
-
-        # Carried rather than inferred from the slots below: a section may say
-        # "my first page is different" and still inherit the header that page
-        # shows, so the switch and the definition are two separate facts.
-        carried: dict[str, Any] = {
-            "different_first_page": bool(section.different_first_page_header_footer)}
-        for part, key in ir.RUNNING_PARTS:
-            found: dict[str, Any] = {}
-            for slot in slots:
-                container = getattr(
-                    section, ir.RUNNING_ACCESSOR[slot].format(part=part))
-                # Settled before the paragraphs are asked for: python-docx
-                # *creates* a definition for an inherited header the moment its
-                # content is read, which would turn "this section inherits" into
-                # "this section has an empty one of its own".
-                if container.is_linked_to_previous:
-                    continue
-                where = f"section {index} {part} ({slot})"
-                if container.tables:
-                    warnings.append({
-                        "kind": "running-head-table-dropped", "where": where,
-                        "detail": "a table in a running head is not carried; "
-                                  "its cells are laid out by the header itself "
-                                  "and the Persian edition sets one line",
-                    })
-                found[slot] = {"paragraphs": [
-                    {"align": _alignment(paragraph),
-                     "pieces": _running_pieces(
-                         paragraph, allocate,
-                         lambda kind, detail, where=where: warnings.append(
-                             {"kind": kind, "where": where, "detail": detail}))}
-                    for paragraph in container.paragraphs
-                ]}
-            carried[key] = found
-        return carried
+        running_count += 1
+        return f"rh{running_count:04d}"
 
     def keep_anchors(paragraph, first: int) -> None:
         """File the paragraph's linked-to bookmarks on the block it became.
@@ -585,67 +407,119 @@ def read_docx(
     def read_paragraph(paragraph, **extra: Any) -> None:
         first_block = len(blocks)
         spans: list[tuple[str, bool, bool]] = []
-        pending_notes: list[str] = []
-        # A link belongs to the prose of this paragraph, never to a picture
-        # that happens to sit inside it, so the two branches carry different
-        # context.
-        links = hyperlinks(paragraph)
-        prose = {**extra, "links": links} if links else extra
+        links: dict[Any, dict[str, str]] = {}
+        active_link = None
 
-        for run in iter_runs(paragraph):
-            picture = _picture(run, document)
-            if picture is not None:
-                _flush(spans, pending_notes, paragraph, add, footnotes,
-                       used_notes, notes, prose)
-                spans, pending_notes = [], []
-                digest = picture["sha256"]
-                if digest in seen_assets:
-                    asset_name = seen_assets[digest]
-                else:
-                    asset_name = f"d{len(seen_assets) + 1:04d}-{picture['name']}"
-                    (asset_dir / asset_name).write_bytes(picture["blob"])
-                    seen_assets[digest] = asset_name
-                add("image", page=0, asset=asset_name, sha256=digest, bbox=None,
-                    width_pt=picture["width_pt"], height_pt=picture["height_pt"],
-                    pixel_width=None, pixel_height=None, alt="", target_alt=None,
-                    **extra)
-                continue
+        def append(text, bold, italic):
+            spans.append((text, bold, italic))
+            if active_link is not None:
+                identity, target = active_link
+                links.setdefault(identity, {"text": "", "href": target})["text"] += text
 
-            for kind, _, _, reference in NOTE_PARTS:
-                for ref in run._r.findall(qn(reference)):
-                    key = f"{kind}:{ref.get(qn('w:id'))}"
-                    if key in notes:
-                        pending_notes.append(key)
+        def flush():
+            carried = [{**link, "text": link["text"].strip(" ")} for link in links.values()
+                       if link["text"].strip()]
+            prose = {**extra, "links": carried} if carried else extra
+            _flush(spans, paragraph, add, footnotes, prose)
+            spans.clear()
+            links.clear()
 
-            text = run.text
-            if text:
-                bold, italic = _run_style(run)
-                spans.append((text, bold, italic))
+        def linked_runs():
+            for item in paragraph.iter_inner_content():
+                if isinstance(item, Run):
+                    yield item, None
+                elif isinstance(item, Hyperlink):
+                    target = item.address or ""
+                    if item.fragment:
+                        target += "#" + item.fragment
+                    for run in item.runs:
+                        yield run, (item._hyperlink, target) if target else None
 
-            if has_page_break(run):
-                _flush(spans, pending_notes, paragraph, add, footnotes,
-                       used_notes, notes, prose)
-                spans, pending_notes = [], []
-                add("pagebreak", page=0, soft=False)
-
-        _flush(spans, pending_notes, paragraph, add, footnotes, used_notes,
-               notes, prose)
+        reference_kinds = {qn(reference): kind for kind, _, _, reference in NOTE_PARTS}
+        for run, active_link in linked_runs():
+            bold, italic = _run_style(run)
+            # A run may interleave text, pictures, breaks and note references.
+            # Neither aggregate run.text nor a single first-picture lookup can
+            # express that sequence; consume each child exactly once instead.
+            for child in run._r:
+                if child.tag in reference_kinds:
+                    kind = reference_kinds[child.tag]
+                    key = note_key(kind, child.get(qn("w:id")))
+                    if key not in notes or not notes[key].strip():
+                        raise ValueError(f"unresolved or empty DOCX note {key}")
+                    note = ir.make_footnote(len(footnotes) + 1, anchor_block="",
+                                           text=notes[key], origin="source")
+                    # These are authored native controls, not extractor noise.
+                    note["text"] = notes[key]
+                    footnotes.append(note)
+                    spans.append((f"[[fn:{note['id']}]]", False, False))
+                elif child.tag == qn("w:drawing"):
+                    flush()
+                    if active_link is not None:
+                        warnings.append({"kind": "image-hyperlink-dropped",
+                                         "detail": "image bytes and placement are retained; "
+                                                   "the image's clickable target is not represented"})
+                    placements = [node for node in child if node.tag in
+                                  {qn("wp:inline"), qn("wp:anchor")}]
+                    if not placements:
+                        raise ValueError("DOCX drawing has no supported image placement")
+                    for placement in placements:
+                        picture = _picture_element(placement, document)
+                        digest = picture["sha256"]
+                        if digest in seen_assets:
+                            asset_name = seen_assets[digest]
+                        else:
+                            # Content identity, not encounter order: an import that
+                            # later refuses must never replace an older book's image.
+                            asset_name = f"d-{digest}{Path(picture['name']).suffix.lower()}"
+                            destination = asset_dir / asset_name
+                            if destination.exists() and destination.read_bytes() != picture["blob"]:
+                                raise ValueError("DOCX asset content disagrees with its identity")
+                            if not destination.exists():
+                                temporary = None
+                                try:
+                                    with tempfile.NamedTemporaryFile(dir=asset_dir, suffix=".tmp", delete=False) as handle:
+                                        temporary = Path(handle.name)
+                                        handle.write(picture["blob"])
+                                        handle.flush()
+                                        os.fsync(handle.fileno())
+                                    os.replace(temporary, destination)
+                                finally:
+                                    if temporary is not None:
+                                        temporary.unlink(missing_ok=True)
+                            seen_assets[digest] = asset_name
+                        add("image", page=0, asset=asset_name, sha256=digest, bbox=None,
+                            width_pt=picture["width_pt"], height_pt=picture["height_pt"],
+                            pixel_width=None, pixel_height=None, alt="", target_alt=None,
+                            **extra)
+                elif child.tag == qn("w:br") and child.get(qn("w:type")) == "page":
+                    flush()
+                    add("pagebreak", page=0, soft=False, **extra)
+                elif child.tag == qn("w:t"):
+                    append(child.text or "", bold, italic)
+                elif child.tag in {qn("w:tab"), qn("w:cr"), qn("w:noBreakHyphen")}:
+                    value = {qn("w:tab"): "\t", qn("w:cr"): "\n",
+                             qn("w:noBreakHyphen"): "\u2011"}[child.tag]
+                    append(value, bold, italic)
+                elif child.tag == qn("w:br"):
+                    if child.get(qn("w:type"), "textWrapping") != "textWrapping":
+                        raise ValueError("unsupported DOCX run break type")
+                    append("\n", bold, italic)
+                elif child.tag == qn("w:softHyphen"):
+                    append("\u00ad", bold, italic)
+                elif child.tag not in {qn("w:" + name) for name in (
+                        "rPr", "lastRenderedPageBreak", "fldChar", "instrText",
+                        "commentReference", "footnoteRef", "endnoteRef")}:
+                    raise ValueError(f"unsupported DOCX run content: {child.tag}")
+        flush()
         keep_anchors(paragraph, first_block)
 
-    def read_table(table, table_id: str, depth: int = 0) -> int:
+
+    def read_table(table, table_id: str, **parent: Any) -> int:
         """One table's cells, each read exactly once. Returns the row count.
 
-        Two traps, both of which used to be live.
-
-        ``row.cells`` *expands* merges: a cell spanning two columns comes back
-        twice, and a vertically merged one comes back on every row it covers —
-        the same `w:tc` object each time. Since every cell becomes its own
-        worksheet unit, that meant a merged cell's sentence was translated
-        twice and printed twice. Cells are therefore keyed by the identity of
-        the underlying element, and the span is recorded instead.
-
-        And a table nested in a cell is not in ``document.iter_inner_content``
-        at all, so its text vanished exactly as every table's did before.
+        Raw cells avoid python-docx's expanded merge aliases. Their children
+        are read in XML order, with nested tables owned by the immediate cell.
         """
         rows = 0
         merges = 0
@@ -655,12 +529,17 @@ def read_docx(
                     if record[name] > 1}
             merges += bool(span)
             cell = record["tc"]
-            for paragraph in cell.paragraphs:
-                read_paragraph(paragraph, table=table_id, row=record["row"],
-                               cell=record["cell"], **span)
-            for inner_number, inner in enumerate(cell.tables, start=1):
-                read_table(inner, f"{table_id}-{record['row']}"
-                                  f"{record['cell']}n{inner_number}", depth + 1)
+            inner_number = 0
+            for element in cell._tc:
+                if element.tag == qn("w:p"):
+                    read_paragraph(Paragraph(element, cell), table=table_id, row=record["row"],
+                                   cell=record["cell"], **span, **parent)
+                elif element.tag == qn("w:tbl"):
+                    inner_number += 1
+                    read_table(Table(element, cell), f"{table_id}-{record['row']}"
+                                    f"{record['cell']}n{inner_number}",
+                               parent_table=table_id, parent_row=record["row"],
+                               parent_cell=record["cell"])
         if merges:
             warnings.append({
                 "kind": "table-merged-cells", "table": table_id,
@@ -708,7 +587,7 @@ def read_docx(
     book["sections"] = [
         {"index": number, "start_block": start_block(number),
          **section_geometry(section),
-         **running_of(section, number, even_and_odd)}
+         **running_of(section, number, even_and_odd, allocate_running, warnings)}
         for number, section in enumerate(document.sections)
     ]
     linked = sum(len(block.get("links") or []) for block in blocks)
@@ -744,27 +623,19 @@ def read_docx(
 
     if warnings:
         book["source"]["docx_warnings"] = warnings
+    LOG.info("DOCX extracted: %d blocks, %d native notes", len(blocks), len(footnotes))
     return book
 
 
-def _flush(spans, pending_notes, paragraph, add, footnotes, used_notes, notes,
+def _flush(spans, paragraph, add, footnotes,
            extra: dict[str, Any] | None = None) -> None:
     """Emit the accumulated runs of one paragraph as a block."""
     if not spans:
         return
-    text = ir.render_markup(spans).strip()
-    if not text:
+    text = ir.render_markup(spans).strip(" ")
+    if not text.strip():
         return
     extra = dict(extra or {})
-
-    for note_id in pending_notes:
-        if note_id in used_notes:
-            continue
-        used_notes.add(note_id)
-        note = ir.make_footnote(len(footnotes) + 1, anchor_block="",
-                                text=notes[note_id], origin="source")
-        footnotes.append(note)
-        text = f"{text}[[fn:{note['id']}]]"
 
     style_name = getattr(paragraph.style, "name", "") or ""
     # The style records the paragraph's role; the numbering properties record
@@ -783,6 +654,7 @@ def _flush(spans, pending_notes, paragraph, add, footnotes, used_notes, notes,
     else:
         block = add("paragraph", page=0, text=text, **extra)
 
+    block["text"] = text
     for note in footnotes:
         if not note["anchor_block"] and note["id"] in ir.footnote_refs(text):
             note["anchor_block"] = block["id"]

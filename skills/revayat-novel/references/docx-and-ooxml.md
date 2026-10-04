@@ -37,6 +37,14 @@ original pagination would leave large gaps mid-chapter.
 
 Everything below is a real Word structure, not a visual imitation.
 
+**Ordered tables.** Ordinary Book IR blocks retain their cell coordinates and
+spans. Multiple paragraphs, drawings, note markers and source-break events are
+written in order inside the owning cell; nested tables retain their immediate
+parent-cell ownership. See [docx-intake-integrity.md](docx-intake-integrity.md)
+for native intake refusals and separate-workspace migration. A cell-scoped hard
+break is emitted with `--page-breaks source`, but final pagination remains the
+viewer’s layout decision.
+
 **Right-to-left, at three levels.** `w:bidi` in the section properties makes the
 section RTL; `w:bidi` on each paragraph sets its base direction; `w:rtl` on each
 Persian run marks its characters. Latin runs deliberately carry no `w:rtl`, so
