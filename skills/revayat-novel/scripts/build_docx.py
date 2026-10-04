@@ -191,8 +191,9 @@ class Builder(BodyWriter):
 
     # -- writing ------------------------------------------------------------ #
 
-    def paragraph(self, style: str = "Normal", *, align=None):
-        paragraph = self.document.add_paragraph(style=style)
+    def paragraph(self, style: str = "Normal", *, align=None, container=None):
+        owner = self.document if container is None else container
+        paragraph = owner.add_paragraph(style=style)
         ooxml.set_paragraph_rtl(paragraph, self.options.rtl)
         if align is not None:
             paragraph.alignment = align
@@ -240,14 +241,14 @@ class Builder(BodyWriter):
         if not links:
             return {}
         prose = ir.plain_text(markup)
-        shared = Counter((link.get("text") or "").strip() for link in links)
+        shared = Counter((link.get("text") or "") for link in links)
         placeable: dict[str, str] = {}
 
         for link in links:
-            display = (link.get("text") or "").strip()
+            display = (link.get("text") or "")
             href = (link.get("href") or "").strip()
             occurrences = prose.count(display) if display else 0
-            if not display or not href:
+            if not display.strip() or not href:
                 reason = "the link has no display text or no target"
             elif shared[display] > 1:
                 reason = "two links carry these same words and nothing tells them apart"
@@ -286,8 +287,8 @@ class Builder(BodyWriter):
         if note is None:
             self.warnings.append(f"footnote {note_id} referenced but not defined")
             return
-        body = (note.get("target") or note.get("text") or "").strip()
-        if not body:
+        body = (note.get("target") or note.get("text") or "")
+        if not body.strip():
             self.warnings.append(f"footnote {note_id} has no text")
             return
         spans: list[dict[str, Any]] = []
@@ -307,13 +308,12 @@ class Builder(BodyWriter):
 
     def front_matter(self) -> None:
         meta = self.book.get("meta", {})
-        title = (meta.get("title_target") or meta.get("title") or "").strip()
-        author = (meta.get("author_target") or meta.get("author") or "").strip()
-        if not title:
-            return
-        paragraph = self.paragraph("Title", align=WD_ALIGN_PARAGRAPH.CENTER)
-        self.write_markup(paragraph, title)
-        if author:
+        title = (meta.get("title_target") or meta.get("title") or "")
+        author = (meta.get("author_target") or meta.get("author") or "")
+        if title.strip():
+            paragraph = self.paragraph("Title", align=WD_ALIGN_PARAGRAPH.CENTER)
+            self.write_markup(paragraph, title)
+        if author.strip():
             byline = self.paragraph("Subtitle" if _has_style(self.document, "Subtitle")
                                     else "Normal", align=WD_ALIGN_PARAGRAPH.CENTER)
             self.write_markup(byline, author)
@@ -454,8 +454,8 @@ class Builder(BodyWriter):
         used to be dropped wholesale, and it still decides what happens when one
         of them comes back untranslated.
         """
-        target = (piece.get("target") or "").strip()
-        if not target:
+        target = (piece.get("target") or "")
+        if not target.strip():
             self.warnings.append(
                 f"running {part} {piece['id']} is untranslated and was left "
                 f"out: {ir.plain_text(piece.get('text') or '')[:60]!r}"

@@ -202,31 +202,25 @@ def ocr_state(block_ids: list[str],
 
 
 
-PAGE_DIGEST_VERSION = "page3"
+PAGE_DIGEST_VERSION = "page4"
+
+# Persisted presentation fields consumed by the native builder. Diagnostic
+# notes and transient TOC caches are intentionally absent: they do not print.
+_VISUAL_BLOCK_FIELDS = (
+    "id", "type", "text", "target", "alt", "target_alt", "level", "ordered",
+    "table", "row", "cell", "row_span", "col_span", "parent_table", "parent_row", "parent_cell",
+    "bookmarks", "links", "font_size_pt", "asset", "width_pt", "height_pt",
+    "pixel_width", "pixel_height", "soft",
+)
 
 
 def translation_hash(book_path: Path, page: int) -> str:
-    """Identity of one page's rendered content **and the source it answers**.
+    """Identity of this page's source, published text, structure and actual assets.
 
-    **One definition, for everyone who records or checks it.** The page record
-    has a single ``translation`` hash and it used to be written two different
-    ways — ``merge_page`` hashed the worksheet *answers* while ``renderqa``
-    hashed the page's *texts as laid out*. Two formulas under one key always
-    disagree, and the way this pair disagreed was silent: every merge looked
-    like a changed translation, which is exactly the signal the retry cap and the
-    acceptance check read.
-
-    **Both sides, since `page3`.** Until then this hashed only the Persian, so
-    re-extracting the source — a corrected OCR line, a re-read PDF — left every
-    page's digest identical while its translation now answered text that had
-    changed. `accept` then passed a page whose Persian belonged to a source
-    nobody had compared it against. It is the same defect the chunk route fixed
-    by moving from `units:` to `units2:`, and it survived here because a digest
-    over the target alone *looks* like it covers the page.
-
-    ``pagecheck`` is imported here rather than at the top because it imports this
-    module; the dependency points one way at import time, and this is the one
-    place that needs to look back along it.
+    page4 replaces delimiter-concatenated strings and target-only prose with a
+    typed projection. Moving a table cell, changing a heading/list kind or a
+    running-header field is a changed page even when every word is unchanged.
+    Old approvals require new rendering, never a version-prefix substitution.
     """
     import pagecheck
 
@@ -234,75 +228,36 @@ def translation_hash(book_path: Path, page: int) -> str:
     expected = pagecheck.expectations(book, page)
     job = next((j for j in owners(book) if j["page"] == page), None)
     lookup = ir.blocks_by_id(book)
-    ids = set(job["block_ids"]) | set(job["image_ids"]) if job else set()
-
-    # Everything that decides what the sheet looks like, not only its paragraphs.
-    # `expectations()["texts"]` is the body prose alone, so a retranslated
-    # footnote, a corrected running head, a rewritten caption or a changed page
-    # width all left this digest identical — and a page accepted on that evidence
-    # had passed QA against a sheet that no longer exists.
-    parts: list[str] = ["body"] + list(expected["texts"])
-
-    # The English this page's Persian is an answer to. `expectations()["texts"]`
-    # is targets only, by design — it is what a rendered page must *show* — so
-    # the source has to be taken from the blocks directly, under the same
-    # ownership rule the job used.
-    parts.append("source")
-    for block_id in (job or {}).get("block_ids") or []:
-        block = lookup.get(block_id) or {}
-        if block.get("type") in ir.TEXT_TYPES:
-            parts.append(f"{block_id}\x00{block.get('text') or ''}")
-
-    parts.append("geometry")
-    setup = expected.get("setup") or {}
-    parts += [f"{key}={setup[key]!r}" for key in sorted(setup)]
-
-    parts.append("notes")
-    referenced = {ref for text in expected["texts"]
-                  for ref in ir.ANY_FOOTNOTE_TOKEN.findall(text)}
-    for note in book.get("footnotes", []):
-        if note.get("id") in referenced:
-            # Source beside target, for the reason given above: a corrected note
-            # in English changes what its Persian has to say.
-            parts.append(f"{note['id']}\x00{note.get('text') or ''}"
-                         f"\x00{note.get('target') or ''}")
-
-    parts.append("figures")
-    # The asset's identity is read from the **file**, not from a field on the
-    # block. My first version hashed `block["asset_sha256"]` — a name nothing in
-    # this project ever writes, so it contributed the empty string for every
-    # figure and replacing a picture under the same filename changed nothing.
-    # The test agreed with the bug because it set that same invented key by hand.
-    # Assets live beside `book.json`, which is the convention `qa check` uses.
+    block_ids = (job or {}).get("block_ids") or []
+    ids = set(block_ids)
+    blocks = [lookup[identifier] for identifier in block_ids if identifier in lookup]
+    note_ids = set((job or {}).get("footnote_ids") or [])
+    for block in blocks:
+        for field in ("text", "target", "alt", "target_alt"):
+            note_ids.update(ir.footnote_refs(block.get(field) or ""))
     assets = Path(book_path).parent / "assets"
-    for block_id in sorted(ids):
-        block = lookup.get(block_id) or {}
-        if block.get("type") != "image":
-            continue
-        name = block.get("asset") or ""
-        picture = assets / name if name else None
-        if picture is not None and picture.is_file():
-            identity = ir.sha256_file(picture)
-        else:
-            identity = "absent"
-        parts.append(f"{block_id}\x00{name}\x00{identity}"
-                     f"\x00{block.get('target_alt') or ''}"
-                     f"\x00{block.get('width_pt')}x{block.get('height_pt')}")
-
-    # Every head this page actually prints, which is every head of every section
-    # the page's blocks fall in — not only a head whose section *opens* on this
-    # page. Under the old rule a corrected running head moved the digest of the
-    # section's first page and no other, so pages 2..n of a chapter kept an
-    # accepted verdict while the header at the top of them had changed.
-    parts.append("running")
+    figures = []
+    for block in blocks:
+        if block.get("type") == "image":
+            name = block.get("asset") or ""
+            picture = assets / name if name else None
+            identity = ir.sha256_file(picture) if picture is not None and picture.is_file() else "absent"
+            figures.append({"id": block["id"], "asset": name, "sha256": identity})
+    section_fields = ("start_block", "start_type", "orientation", "width_pt", "height_pt",
+                      "margin_top_pt", "margin_bottom_pt", "margin_inner_pt", "margin_outer_pt",
+                      "different_first_page", "headers", "footers")
     showing = ir.sections_covering(book, ids)
-    for unit_id, _kind, piece, section in ir.iter_running_pieces(book):
-        if not ids or any(section is shown for shown in showing):
-            parts.append(f"{unit_id}\x00{piece.get('text') or ''}"
-                         f"\x00{piece.get('target') or ''}")
-
-    return f"{PAGE_DIGEST_VERSION}:" + ir.sha256_bytes(
-        "\n".join(parts).encode("utf-8"))
+    payload = {
+        "page": page,
+        "geometry": expected.get("setup") or {},
+        "blocks": [{key: block[key] for key in _VISUAL_BLOCK_FIELDS if key in block} for block in blocks],
+        "notes": [{key: note.get(key) for key in ("id", "text", "target", "origin", "anchor_block")}
+                  for note in book.get("footnotes", []) if note.get("id") in note_ids],
+        "figures": figures,
+        "sections": [{key: section[key] for key in section_fields if key in section} for section in showing],
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return PAGE_DIGEST_VERSION + ":" + ir.sha256_bytes(encoded)
 
 
 def _translation_moved(book_path: Path, page: int,

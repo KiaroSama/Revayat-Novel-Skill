@@ -32,6 +32,7 @@ documents.
 | `image-unexpected` | a placed illustration's bytes are not any picture the book expects — substituted or edited after the build | re-build; never edit the document |
 | `untranslated-alt` | an illustration's caption still holds the source language. A caption whose every span is `` `verbatim` `` is exempt: it is meant to survive as it is | translate that `#alt` unit |
 | `ir-invalid` | `book.json` does not pass its own validator — a duplicate block id, a reference to a footnote that does not exist. Every other check reads the structure this one validates | the message names it; fix the IR before reading anything else |
+| `table-cell-terminal-paragraph` | a Word table cell ends in a nested table or has no final native paragraph | rebuild with the current writer; retain a final empty `w:p` after terminal nested content, including inside merged cells |
 | `docx-invalid` | a required part of the package is absent (`word/document.xml`, `[Content_Types].xml`, the document relationships) | re-build; Word will not open this file |
 | `part-root-wrong` | a required part parses but its root element is not the one the format specifies | re-build; something rewrote the part |
 | `part-malformed` / `part-unreadable` | a required part is not well-formed XML, or could not be read out of the archive at all | re-build; a truncated part used to pass every check, because a regex over broken XML simply finds fewer matches |

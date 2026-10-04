@@ -8,6 +8,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.shared import Pt
 
 import bookir as ir
+from docx.oxml.ns import qn
 import ooxml
 
 ASSUMED_DPI = 96.0
@@ -65,16 +66,16 @@ class BodyWriter:
             elif kind == "pagebreak":
                 self._pagebreak(block)
             elif kind == "separator":
-                paragraph = self.paragraph("Normal", align=WD_ALIGN_PARAGRAPH.CENTER)
-                self.write_markup(paragraph, "❖")
+                self._separator(block)
             elif kind in ir.TEXT_TYPES:
                 self._text_block(block)
 
-    def _heading(self, block: dict[str, Any], first: bool) -> None:
+    def _heading(self, block: dict[str, Any], first: bool, *, container=None) -> None:
         level = min(6, max(1, int(block.get("level", 1))))
         paragraph = self.paragraph(
             f"Heading {level}",
             align=WD_ALIGN_PARAGRAPH.CENTER if level == 1 else None,
+            container=container,
         )
         if level == 1 and self.options.page_breaks != "none" and not first:
             ooxml.page_break_before(paragraph)
@@ -182,23 +183,43 @@ class BodyWriter:
                     if placeholder is not None and not placeholder.text and len(placeholder._p) == 0:
                         cell._tc.remove(placeholder._p)
 
+            # Word requires every cell to end in a native paragraph. A nested
+            # table's temporary trailing paragraph is removed while appending
+            # events, so restore it only after the cell's final event is known.
+            checked = set()
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell._tc in checked:
+                        continue
+                    checked.add(cell._tc)
+                    if len(cell._tc) == 0 or cell._tc[-1].tag != qn("w:p"):
+                        self.paragraph(container=cell)
+
         for block in stray:
-            self._text_block(block)
+            self._text_block(block, container=container)
 
     def _cell_event(self, cell, block: dict[str, Any]) -> None:
-        if block["type"] == "image":
+        """Use the same semantic writers inside cells as in the document body."""
+        kind = block["type"]
+        if kind == "image":
             self._image(block, container=cell)
-            return
-        paragraph = cell.add_paragraph()
-        ooxml.set_paragraph_rtl(paragraph, self.options.rtl)
-        if block["type"] == "pagebreak":
-            if not block.get("soft") and self.options.page_breaks == "source":
-                paragraph.add_run().add_break(WD_BREAK.PAGE)
-        else:
-            self.write_markup(paragraph, self._text_of(block), block.get("links"))
+        elif kind == "heading":
+            # A cell heading is semantic, but must not start a body chapter.
+            self._heading(block, True, container=cell)
+        elif kind == "pagebreak":
+            self._pagebreak(block, container=cell)
+        elif kind == "separator":
+            self._separator(block, container=cell)
+        elif kind in ir.TEXT_TYPES:
+            self._text_block(block, container=cell)
+
+    def _separator(self, block: dict[str, Any], *, container=None) -> None:
+        paragraph = self.paragraph("Normal", align=WD_ALIGN_PARAGRAPH.CENTER,
+                                   container=container)
+        self.write_markup(paragraph, "❖")
         self._place_bookmarks(paragraph, block)
 
-    def _text_block(self, block: dict[str, Any]) -> None:
+    def _text_block(self, block: dict[str, Any], *, container=None) -> None:
         text = self._text_of(block)
         if not text.strip():
             return
@@ -216,16 +237,16 @@ class BodyWriter:
         elif kind in ("caption", "verse"):
             align = WD_ALIGN_PARAGRAPH.CENTER
 
-        paragraph = self.paragraph(style, align=align)
+        paragraph = self.paragraph(style, align=align, container=container)
         self.write_markup(paragraph, text, block.get("links"))
         self._place_bookmarks(paragraph, block)
 
     def _text_of(self, block: dict[str, Any]) -> str:
-        target = (block.get("target") or "").strip()
-        if target:
+        target = block.get("target") or ""
+        if target.strip():
             return target
-        source = (block.get("text") or "").strip()
-        if source:
+        source = block.get("text") or ""
+        if source.strip():
             self.warnings.append(f"block {block['id']} is untranslated")
         return source
 
@@ -250,8 +271,9 @@ class BodyWriter:
             self.warnings.append(f"could not place {block['asset']}: {error}")
             return
 
-        alt = (block.get("target_alt") or block.get("alt") or "").strip()
-        if alt and self.options.captions:
+        self._place_bookmarks(paragraph, block)
+        alt = block.get("target_alt") or block.get("alt") or ""
+        if alt.strip() and self.options.captions:
             style = "Caption" if _has_style(self.document, "Caption") else "Normal"
             caption = (container.add_paragraph(style=style) if container is not None else
                        self.paragraph(style, align=WD_ALIGN_PARAGRAPH.CENTER))
@@ -280,11 +302,14 @@ class BodyWriter:
             width = available
         return width, height
 
-    def _pagebreak(self, block: dict[str, Any]) -> None:
-        if self.options.page_breaks != "source" or block.get("soft"):
+    def _pagebreak(self, block: dict[str, Any], *, container=None) -> None:
+        visible = self.options.page_breaks == "source" and not block.get("soft")
+        if not visible and not block.get("bookmarks"):
             return
-        paragraph = self.paragraph("Normal")
-        paragraph.add_run().add_break(WD_BREAK.PAGE)
+        paragraph = self.paragraph("Normal", container=container)
+        if visible:
+            paragraph.add_run().add_break(WD_BREAK.PAGE)
+        self._place_bookmarks(paragraph, block)
 
     # -- run ---------------------------------------------------------------- #
 

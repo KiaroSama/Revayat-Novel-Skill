@@ -43,9 +43,8 @@ import bookir as ir
 import opc
 from findings import ERROR, WARNING, Report
 
-#: Bookmarks and internal links are still read lexically, and that is honest: both
-#: are attributes on elements this project writes itself, in one place, and the
-#: regex is over a part `opc` has already proved parses.
+#: Legacy lexical helpers remain for import compatibility. Package validation
+#: reads bookmark and hyperlink elements by namespace, not by the chosen prefix.
 _BOOKMARK = re.compile(r'<w:bookmarkStart[^>]*w:name="([^"]+)"')
 _ANCHOR = re.compile(r'<w:hyperlink[^>]*w:anchor="([^"]+)"')
 _BLIP = re.compile(r'<a:blip[^>]*r:embed="([^"]+)"')
@@ -181,12 +180,13 @@ def _check_footnotes(package: opc.Package, book: dict[str, Any] | None,
     # every id-based check — the ids line up perfectly and the note says something
     # the translator never wrote.
     placed = [bodies.get(identifier, "") for identifier in references]
-    if placed != [ir.plain_text(text).replace("\r\n", "\n").replace("\r", "\n") for text in expected]:
+    wanted = [ir.plain_text(text).replace("\r\n", "\n").replace("\r", "\n") for text in expected]
+    if placed != wanted:
         report.add(ERROR, "footnote-text-mismatch", "word/footnotes.xml",
                    f"the notes in the document are not the notes in the book: "
                    f"{len(expected)} expected, {len(placed)} placed, first "
                    f"difference at "
-                   f"{_first_difference(placed, expected)} — rebuild from book.json")
+                   f"{_first_difference(placed, wanted)} — rebuild from book.json")
 
 
 def _normalised(text: str) -> str:
@@ -196,7 +196,7 @@ def _normalised(text: str) -> str:
 
 def _first_difference(placed: list[str], expected: list[str]) -> str:
     for position, (left, right) in enumerate(zip(placed, expected), start=1):
-        if _normalised(left) != _normalised(right):
+        if left != right:
             return f"note {position}"
     return f"note {min(len(placed), len(expected)) + 1}"
 
@@ -208,7 +208,7 @@ def _check_link_controls(package: opc.Package, book: dict[str, Any] | None,
     labels: dict[str, set[str]] = {}
     for block in (book or {}).get("blocks", []):
         for link in block.get("links") or []:
-            labels.setdefault(link.get("href") or "", set()).add((link.get("text") or "").strip())
+            labels.setdefault(link.get("href") or "", set()).add((link.get("text") or ""))
     for link in document.iter(opc.qname("w", "hyperlink")):
         if any(any(char in (node.text or "") for char in "\r\n\t")
                for node in link.iter(opc.qname("w", "t"))):
@@ -371,6 +371,14 @@ def _check_bookmarks(names: list[str], book: dict[str, Any] | None,
                    f"has nothing to link to — rebuild")
 
 
+def _check_cell_termination(package: opc.Package, report: Report) -> None:
+    """A valid cell ends in a paragraph even when its last authored item is a table."""
+    for index, cell in enumerate(package.xml("word/document.xml").iter(opc.qname("w", "tc")), start=1):
+        if len(cell) == 0 or cell[-1].tag != opc.qname("w", "p"):
+            report.add(ERROR, "table-cell-terminal-paragraph", f"cell {index}",
+                       "table cell has no final native paragraph; rebuild without deleting its required terminator")
+
+
 #: The parts a Word package cannot open without, and the root each must have.
 REQUIRED = (
     ("[Content_Types].xml", ("ct", "Types")),
@@ -415,14 +423,19 @@ def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
             document = package.read("word/document.xml").decode("utf-8", "replace")
             _check_footnotes(package, book, report)
             _check_link_controls(package, book, report)
+            _check_cell_termination(package, report)
             _check_image_geometry(package, book, report)
         except opc.Damaged as damaged:
             report.add(ERROR, damaged.code, str(path), damaged.detail)
             return report
 
-        bookmark_names = _BOOKMARK.findall(document)
+        document_root = package.xml("word/document.xml")
+        bookmark_names = [node.get(opc.qname("w", "name"), "")
+                          for node in document_root.iter(opc.qname("w", "bookmarkStart"))]
         bookmarks = set(bookmark_names)
-        for anchor in sorted(set(_ANCHOR.findall(document))):
+        anchors = {node.get(opc.qname("w", "anchor"))
+                   for node in document_root.iter(opc.qname("w", "hyperlink"))}
+        for anchor in sorted(anchors - {None, ""}):
             if anchor not in bookmarks:
                 report.add(ERROR, "dead-link", anchor,
                            "internal link has no matching bookmark")

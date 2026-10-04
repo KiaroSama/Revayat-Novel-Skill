@@ -72,3 +72,27 @@ Primary references:
 
 The repair retains this project's Book IR and native builder. It does not add a
 conversion backend or replace the owner's local Rules and Spec Kit workflow.
+
+## Publication is part of source preservation
+
+The final writer must retain reviewed leading/trailing line breaks, tabs and
+spaces as content on body, cell, title/byline, caption, running and note surfaces.
+A whitespace test may decide whether prose exists; it must not trim the text that
+is actually written. Compare native controls as well as words. A note mismatch
+reports the first literal mismatch, not a whitespace-normalized approximation.
+
+Cells use the same heading, quote, caption, list and separator writers as body
+blocks. A cell heading retains its TOC bookmark and style without automatically
+opening a new body chapter. Images, separators and retained source breaks carry
+their source bookmarks. The final child of every table cell is a native paragraph,
+including a cell whose last authored object is a nested table. That structural
+terminator is not translatable prose and must not be deleted to remove a blank
+line. Package QA checks it and resolves anchors by XML namespace, independent of
+prefix choices. Keep genuine in-cell paragraphs in their original order.
+
+Page visual identities use `page4`: ordered block type/placement/span ownership,
+links/bookmarks, authored controls, relevant section/running structure, source
+and target contents, and actual image bytes are framed in typed JSON. A page3
+approval is not migrated by editing its prefix. Rebuild/render affected pages,
+inspect every emitted page and record new evidence; unrelated-page prose edits
+and transient builder caches must not invalidate a current page.
