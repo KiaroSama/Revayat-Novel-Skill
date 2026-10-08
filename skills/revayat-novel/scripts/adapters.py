@@ -22,6 +22,7 @@ three functions. Nothing here knows about format detection, OCR routing or the
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -114,11 +115,14 @@ def _mineru_bbox(bbox: Any, page: dict[str, Any]) -> list[float] | None:
     Discarding this was throwing away the one thing the MinerU path exists to
     provide — an illustration's real size and position on a scanned page.
     """
-    if not bbox or len(bbox) != 4:
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
         return None
     try:
         left, top, right, bottom = (float(v) for v in bbox)
     except (TypeError, ValueError):
+        return None
+    if (not all(math.isfinite(v) for v in (left, top, right, bottom))
+            or not 0 <= left < right <= 1000 or not 0 <= top < bottom <= 1000):
         return None
     width = float(page.get("width_pt") or 0) or 595.3
     height = float(page.get("height_pt") or 0) or 841.9
@@ -169,67 +173,129 @@ def merge_mineru_figures(
         import pymupdf
         document = pymupdf.open(source_pdf)
 
-    for item in content:
-        if item.get("type") not in {"image", "table"}:
-            continue
-        relative = item.get("img_path")
-        if not relative:
-            continue
-        source = base / relative.replace("/", os.sep)
-        if not source.exists():
-            matches = sorted(source.parent.glob(source.name + "*"))
-            if not matches:
+    try:
+        for item in content:
+            if item.get("type") not in {"image", "table"}:
                 continue
-            source = matches[0]
-
-        page = int(item.get("page_idx", 0)) + 1 + page_offset
-        box = _mineru_bbox(item.get("bbox"), page_size)
-
-        # MinerU's exported crop is a re-encode of its own render, at whatever
-        # resolution it happened to work at. The detection is what it is good
-        # for; the pixels should come from the book. Cutting the same box out
-        # of the page's own raster keeps the plate at the resolution the scan
-        # actually holds.
-        cut = None
-        if document is not None and box:
-            candidate = asset_dir / f"m{page:04d}-fig{len(seen) + 1:03d}.png"
-            try:
-                cut = crop_from_source(document, page, box, candidate)
-            except Exception as error:  # a damaged page must not lose the figure
-                cut = None
-                degraded.append(f"page {page}: {type(error).__name__}")
-            if cut:
-                data = candidate.read_bytes()
-                asset_name = candidate.name
-                seen[asset_name] = ir.sha256_bytes(data)
-
-        if cut is None:
-            asset_name = _copy_asset(source, asset_dir, seen, page)
-            if not asset_name:
+            relative = item.get("img_path")
+            if not relative:
                 continue
+            source = base / relative.replace("/", os.sep)
+            if not source.exists():
+                matches = sorted(source.parent.glob(source.name + "*"))
+                if not matches:
+                    continue
+                source = matches[0]
 
-        captions = [c for c in (item.get("image_caption") or []) if str(c).strip()]
-        figures.setdefault(page, []).append({
-            "asset": asset_name,
-            "sha256": seen[asset_name],
-            "bbox": box,
-            "width_pt": round(box[2] - box[0], 2) if box else None,
-            "height_pt": round(box[3] - box[1], 2) if box else None,
-            "top": box[1] if box else 0.0,
-            "caption": captions[0] if captions else "",
-            "pixel_width": (cut or {}).get("pixel_width"),
-            "pixel_height": (cut or {}).get("pixel_height"),
-            "crop": (cut or {}).get("crop"),
-            "source": "source-raster" if cut else "mineru",
-        })
+            page = int(item.get("page_idx", 0)) + 1 + page_offset
+            if page < 1 or (document is not None and page > len(document)):
+                raise ExtractError("MinerU figure page is outside the source inventory")
+            geometry = dict(page_size)
+            geometry.update((book.get("source", {}).get("page_geometry", {})
+                             .get("pages", {}).get(str(page), {})))
+            if document is not None:
+                geometry.update(width_pt=document[page - 1].rect.width,
+                                height_pt=document[page - 1].rect.height)
+            box = _mineru_bbox(item.get("bbox"), geometry)
 
-    if document is not None:
-        document.close()
+            # MinerU's exported crop is a re-encode of its own render, at whatever
+            # resolution it happened to work at. The detection is what it is good
+            # for; the pixels should come from the book. Cutting the same box out
+            # of the page's own raster keeps the plate at the resolution the scan
+            # actually holds.
+            cut = None
+            if document is not None and box:
+                candidate = asset_dir / f"m{page:04d}-fig{len(seen) + 1:03d}.png"
+                try:
+                    cut = _source_figure_crop(document, page, box, candidate)
+                except Exception as error:  # a damaged page must not lose the figure
+                    cut = None
+                    degraded.append(f"page {page}: {type(error).__name__}")
+                if cut:
+                    data = candidate.read_bytes()
+                    asset_name = candidate.name
+                    seen[asset_name] = ir.sha256_bytes(data)
+
+            if cut is None:
+                asset_name = _copy_asset(source, asset_dir, seen, page)
+                if not asset_name:
+                    continue
+
+            captions = [c for c in (item.get("image_caption") or []) if str(c).strip()]
+            figures.setdefault(page, []).append({
+                "asset": asset_name,
+                "sha256": seen[asset_name],
+                "bbox": box,
+                "width_pt": round(box[2] - box[0], 2) if box else None,
+                "height_pt": round(box[3] - box[1], 2) if box else None,
+                "top": box[1] if box else 0.0,
+                "caption": captions[0] if captions else "",
+                "pixel_width": (cut or {}).get("pixel_width"),
+                "pixel_height": (cut or {}).get("pixel_height"),
+                "crop": (cut or {}).get("crop"),
+                "source": "source-raster" if cut else "mineru",
+            })
+    finally:
+        if document is not None:
+            document.close()
 
     report = _place_figures(book, figures)
     if degraded:
         report["fell_back_to_mineru_crop"] = degraded
     return report
+
+
+def _source_figure_crop(document, page_number: int, box: list[float],
+                        destination: Path) -> dict[str, Any] | None:
+    """Map a visual MinerU box to the source's native coordinates and pixels."""
+    page = document[page_number - 1]
+    native = box
+    if page.rotation:
+        import pymupdf
+        native = list(pymupdf.Rect(box) * page.derotation_matrix)
+    # The embedded fast path only understands upright, unmirrored image axes.
+    # Refuse it for another transform rather than silently cutting wrong pixels.
+    draws = page.get_image_info(xrefs=True)
+    unsupported = any(abs(item["transform"][1]) > 0.01
+                      or abs(item["transform"][2]) > 0.01
+                      or item["transform"][0] <= 0 or item["transform"][3] <= 0
+                      for item in draws)
+    if unsupported:
+        import io
+        from rasters import CROP_RENDER_DPI
+        ir.check_render_area(box[2] - box[0], box[3] - box[1], CROP_RENDER_DPI)
+        import pymupdf
+        image = ir.open_image(io.BytesIO(page.get_pixmap(
+            dpi=CROP_RENDER_DPI, clip=pymupdf.Rect(box)).tobytes("png")))
+        image.save(destination, format="PNG")
+        return {"pixel_width": image.width, "pixel_height": image.height,
+                "crop": {"method": "rendered-page", "source_page": page_number,
+                         "bbox_pt": box, "dpi": CROP_RENDER_DPI, "resized": False}}
+    result = crop_from_source(document, page_number, native, destination)
+    if result and page.rotation and result.get("crop", {}).get("method") == "rendered-page":
+        # The shared fallback already renders the rotated page; its native box
+        # would cut the wrong visual region, so replace that fallback explicitly.
+        import io
+        import pymupdf
+        from rasters import CROP_RENDER_DPI
+        ir.check_render_area(box[2] - box[0], box[3] - box[1], CROP_RENDER_DPI)
+        image = ir.open_image(io.BytesIO(page.get_pixmap(
+            dpi=CROP_RENDER_DPI, clip=pymupdf.Rect(box)).tobytes("png")))
+        image.save(destination, format="PNG")
+        return {"pixel_width": image.width, "pixel_height": image.height,
+                "crop": {"method": "rendered-page", "source_page": page_number,
+                         "bbox_pt": box, "dpi": CROP_RENDER_DPI, "resized": False}}
+    if result and page.rotation:
+        from PIL import Image
+        with ir.open_image(destination) as image:
+            operation = {90: Image.Transpose.ROTATE_270,
+                         180: Image.Transpose.ROTATE_180,
+                         270: Image.Transpose.ROTATE_90}[page.rotation]
+            oriented = image.transpose(operation)
+        oriented.save(destination, format="PNG")
+        result.update(pixel_width=oriented.width, pixel_height=oriented.height)
+        result["crop"].update(display_bbox_pt=box, page_rotation=page.rotation)
+    return result
 
 
 #: A figure of the same size in the same spot on at least this share of pages
@@ -287,6 +353,10 @@ def _place_figures(book: dict[str, Any],
                 "furniture_dropped": furniture_dropped}
 
     blocks = book.get("blocks", [])
+    uncertain_pages = sorted({int(block.get("page") or 0) for block in blocks
+                              if block["type"] == "image"
+                              and block.get("source_role") == "unknown-page-raster"
+                              and int(block.get("page") or 0) in figures})
     highest = max(
         (int(b["id"][1:]) for b in blocks if b["id"][1:].isdigit()), default=0
     )
@@ -300,7 +370,7 @@ def _place_figures(book: dict[str, Any],
         page = int(block.get("page") or 0)
         if page in figures and page not in handled:
             # A whole-page scan on this page is exactly what the crops replace.
-            if block["type"] == "image":
+            if block["type"] == "image" and block.get("source_role") == "scan":
                 replaced += 1
                 handled.add(page)
                 for figure in sorted(figures[page], key=lambda f: f["top"]):
@@ -335,6 +405,8 @@ def _place_figures(book: dict[str, Any],
         "page_scans_replaced": replaced,
         "furniture_dropped": furniture_dropped,
     }
+    if uncertain_pages:
+        report["replacement_uncertain_pages"] = uncertain_pages
     if unplaced:
         # Said out loud rather than absorbed: a figure at the end of a page
         # because nothing could be measured looks identical to one that

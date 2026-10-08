@@ -104,7 +104,7 @@ def envelope(out_dir, entry, reply):
 
 
 def freshness(entry, *, book, glossary, glossary_named, book_path=None,
-              manifest=None, source_prints=None, out_dir=None):
+              manifest=None, source_prints=None, out_dir=None, context=None):
     if book is None:
         return "unverified", "the book is missing or unreadable; restore it or rebuild"
     if glossary_named and glossary is None:
@@ -120,11 +120,13 @@ def freshness(entry, *, book, glossary, glossary_named, book_path=None,
         if form == provenance.SOURCE_DIGEST_VERSION:
             current = provenance.source_fingerprint(book, entry["block_ids"], spans,
                 glossary=glossary, neighbours=entry.get("neighbour_ids"))
-        elif form == "page-request1" and book_path is not None:
+        elif book_path is not None:
             import pageidentity
+            if form != pageidentity.REQUEST_DIGEST_VERSION:
+                return "unverified", f"unknown or legacy source digest {form}; rebuild to revalidate it"
             current = pageidentity.request_fingerprint(book, entry, glossary=glossary,
                 book_path=book_path, neighbour_chars=(manifest or {}).get("neighbour_chars", 600),
-                source_prints=source_prints, out_dir=out_dir)
+                source_prints=source_prints, out_dir=out_dir, context=context)
         else:
             return "unverified", f"unknown or legacy source digest {form}; rebuild to revalidate it"
     except (OSError, ValueError, KeyError, TypeError) as error:
@@ -159,7 +161,7 @@ def candidate_problems(book, entry, transport, companions=(), manifest=None):
 
 def eligibility(out_dir, entry, *, book=None, glossary=None, glossary_named=False,
                 book_path=None, manifest=None, source_prints=None, revalidate_unbound=False,
-                check_candidate=True):
+                check_candidate=True, context=None):
     identity = entry.get("id", "unknown") if isinstance(entry, dict) else "unknown"
     try:
         _validate_entry(entry)
@@ -180,7 +182,8 @@ def eligibility(out_dir, entry, *, book=None, glossary=None, glossary_named=Fals
                 state = check
         if state in ("answered", worksheet.NOTHING_TO_TRANSLATE):
             check, why = freshness(entry, book=book, glossary=glossary, glossary_named=glossary_named,
-                                  book_path=book_path, manifest=manifest, source_prints=source_prints, out_dir=out_dir)
+                                  book_path=book_path, manifest=manifest, source_prints=source_prints,
+                                  out_dir=out_dir, context=context)
             if check:
                 state, detail = check, why
         if state == "answered" and check_candidate:
@@ -196,7 +199,7 @@ def eligibility(out_dir, entry, *, book=None, glossary=None, glossary_named=Fals
 
 
 def every(out_dir, manifest=None, *, book_path=None, book=None, glossary=None,
-          glossary_path=None, revalidate_unbound=False) -> list[dict[str, Any]]:
+          glossary_path=None, revalidate_unbound=False, context=None) -> list[dict[str, Any]]:
     manifest = read_manifest(out_dir) if manifest is None else _validate_manifest(manifest)
     named_book, named_glossary = _book_and_glossary(out_dir, manifest)
     named_book = Path(book_path) if book_path is not None else named_book
@@ -220,13 +223,17 @@ def every(out_dir, manifest=None, *, book_path=None, book=None, glossary=None,
             prints = sourcepages.page_fingerprints(reference, {e["page"] for e in manifest["chunks"] if "page" in e})
     import segments
 
+    if context is None and book is not None:
+        import pageidentity
+        context = pageidentity.operation_context(book)
     jobs = manifest["chunks"]
     split_owners = [set(segments.segments_by_owner(job["unit_ids"])) for job in jobs]
     proofs = [eligibility(out_dir, entry, book=book, glossary=glossary,
                         glossary_named=bool(manifest.get("glossary") or glossary_path),
                         book_path=named_book, manifest=manifest, source_prints=prints,
                         revalidate_unbound=revalidate_unbound,
-                        check_candidate=not split_owners[index]) for index, entry in enumerate(jobs)]
+                        check_candidate=not split_owners[index], context=context)
+              for index, entry in enumerate(jobs)]
     pending = {index for index, owners in enumerate(split_owners) if owners}
     while pending:
         group = {pending.pop()}

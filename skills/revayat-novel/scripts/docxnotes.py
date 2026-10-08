@@ -13,6 +13,7 @@ from docx.text.run import Run
 from lxml import etree
 
 import bookir as ir
+from docxproperties import emphasis_spans
 
 LOG = logging.getLogger(__name__)
 NOTE_PARTS = (("footnote", RT.FOOTNOTES, "w:footnote", "w:footnoteReference"),
@@ -46,7 +47,7 @@ def _body(node, document, run_style: Callable) -> str:
                     continue
                 if item.tag != qn("w:r"):
                     raise ValueError("DOCX note contains unsupported paragraph content")
-                bold, italic = run_style(Run(item, paragraph))
+                run = Run(item, paragraph)
                 for part in item:
                     if part.tag in _RUN_METADATA:
                         continue
@@ -63,7 +64,7 @@ def _body(node, document, run_style: Callable) -> str:
                         text = "\u00ad"
                     else:
                         raise ValueError("DOCX note contains unsupported run content")
-                    spans.append((text, bold, italic))
+                    spans.extend(emphasis_spans(run, text))
         visit(child)
         paragraphs.append(ir.render_markup(spans))
     return "\n".join(paragraphs)

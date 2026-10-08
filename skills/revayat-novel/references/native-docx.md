@@ -41,6 +41,23 @@ route with a Markdown round-trip: that loses note identity and page/image geomet
 Translate metadata and running heads too. Revisions after approval require renewed
 review; package validation alone cannot establish semantic fidelity.
 
+## Authored structure without prose
+
+Source tables have an optional validated `tables` inventory describing actual grids,
+occupied/merged cells and immediate parent-cell ownership. Ordered `table` events
+place even empty or child-only tables. `layout` events retain authored empty or
+control-only paragraphs, including additional blank paragraphs inside cells. A
+cell's final mandatory empty terminator is recorded separately from those authored
+boundaries. Neither is a translation unit; never invent empty replies.
+Legacy books without the inventory keep the old table path with disclosed limits,
+not guessed empty shape. Page previews select the relevant structural closure.
+
+Applicable complex-script emphasis uses bounded native style/default chains and
+explicit false overrides, not an OR of Latin and complex-script flags. Native
+control text includes tabs, line breaks and nonbreaking/soft hyphens. Mirrored
+margins belong to document settings; gutter stays section-local. Normal widow
+control is explicitly false, not an inherited accidental template value.
+
 ## Build using the native writer
 
 Use the main skill's build command. The existing builder and OOXML helpers own

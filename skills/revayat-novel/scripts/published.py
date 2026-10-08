@@ -45,6 +45,7 @@ import json
 from typing import Any
 
 import bookir as ir
+from bookstructure import projection as structure  # noqa: F401
 
 #: Stable ids for the two metadata units. They are not block ids and never can
 #: be, so they are spelled with the same ``#`` convention as an image's alt text:

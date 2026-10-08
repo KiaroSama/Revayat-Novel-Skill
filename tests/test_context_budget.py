@@ -151,7 +151,7 @@ def test_every_sub_job_still_belongs_to_the_one_source_page(tmp_path):
             range(1, len(entries) + 1))
         assert {entry["parts"] for entry in entries} == {len(entries)}
         # Ownership is page-wide; request digests distinguish each exact cut.
-        assert all(entry["source_sha256"].startswith("page-request1:") for entry in entries)
+        assert all(entry["source_sha256"].startswith("page-request2:") for entry in entries)
         assert len({entry["source_sha256"] for entry in entries}) == len(entries)
 
     # …and acceptance is still counted in pages, not in jobs.

@@ -2,7 +2,7 @@
 
 Both native wrappers require Python 3.10+ **before installation**, with no third-party
 installer dependencies. Keep `installer.py`, `install_files.py`,
-`install_transaction.py` and `payload.json` beside the wrappers. Python 3.10 remains
+`install_transaction.py`, `install_status.py` and `payload.json` beside the wrappers. Python 3.10 remains
 a tested compatibility floor, not a recommendation to use an EOL interpreter.
 
 ```bash
@@ -56,6 +56,28 @@ directories are synchronized. No universal power-loss, network-filesystem, ACL/A
 copying or equally privileged hostile-race guarantee is made. Windows permissions
 verification covers its native writable/read-only bit; POSIX ordinary mode bits.
 
+## Read-only recovery status
+
+Use `bash install/install.sh --status --scope project --path <project> --agent claude`
+or `./install/install.ps1 -Status -Scope project -Path <project> -Agent claude`.
+The same user/project mapping applies. Status creates no directory, lock, log,
+receipt or installation and never calls recovery or prunes retained backups.
+`--force` does not change inspection behavior.
+
+JSON `status` is `absent`, `committed`, `prepared`, `cleanup_pending`, `conflict`,
+`unstable` or `unknown`. Stable absent/committed observations exit 0; all other
+observations exit 2. Only finite counts/phase and named causes are printed;
+participant bodies, filenames, paths and journal contents are not displayed.
+Regular participant bytes are hashed locally, never decoded, with limits of
+20,000 filesystem objects/256 MiB per observation and 1 MiB per state record.
+Unsafe links/reparse points, overbounds and unreadable state remain unknown.
+Two consecutive identities must agree; a changed observation is unstable.
+This detects ordinary concurrent changes, not an atomic snapshot or lock ownership.
+A stable existing lock file cannot establish either busy or idle: lock ownership is
+unknown to this read-only view. A committed observation is not permission to steal
+that lock or delete state. A pending journal is always pending, even when its bytes
+are presently stable.
+
 ## Explicit payload
 
 `payload.json` lists exactly the sorted tracked files under `skills/revayat-novel`.
@@ -70,7 +92,8 @@ source overlap and cross-filesystem destinations are refused even with force.
 
 ## Diagnostic logs
 
-Each engine invocation writes a unique UTF-8 log in protected installer state:
+Each mutating engine invocation writes a unique UTF-8 log in protected installer state
+(read-only `--status` never initializes logging):
 `installer_YYYY-MM-DD_HH-mm-ss_UTC_<collision-suffix>.log`. Entries are UTC
 `[YYYY-MM-DD HH:mm:ss UTC] [LEVEL] [installer] Message`; INFO records startup,
 participant transitions, commit/rollback, duration and exit, ERROR records sanitized

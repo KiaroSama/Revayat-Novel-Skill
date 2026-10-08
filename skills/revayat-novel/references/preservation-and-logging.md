@@ -32,6 +32,18 @@ not the agent's translation/review reasoning; the workflow log is still required
 Without this setting the CLI does not invent a global log directory. Console
 logging warnings must be recorded and resolved by the using agent.
 
+Supplemental files are exclusively created as
+`revayat-novel_YYYY-MM-DD_HH-mm-ss_UTC.log` (unique suffix on collision), UTF-8,
+with `[YYYY-MM-DD HH:mm:ss UTC] [LEVEL] [pipeline] Message` entries. The dispatcher
+records a finite stage identity; expected refusals record only an allowlisted
+cause/error type. Native extraction events record bounded block/note/asset
+counts through exact static message templates. No raw arguments, paths, reports,
+exception bodies, environment values or manuscript text enter these logs.
+Nested dispatch writes one file, and the owned handler closes/restores module
+logging on exit. Logs are retained without automatic pruning; there is no
+payload-dump verbosity mode. For support, manually review and sanitize the one
+relevant log rather than upload the translation workspace.
+
 ## Preserve page and book dimensions
 
 Capture original physical width, height, orientation and section/page variants

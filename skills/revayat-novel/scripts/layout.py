@@ -124,8 +124,7 @@ def apply_paragraph_styles(document, profile: Profile, *, rtl: bool = True) -> l
         # In an RTL paragraph the first-line indent is still w:firstLine; Word
         # applies it to the reading-order start, which is the right-hand edge.
         _set(properties, "ind", firstLine=twips(profile.first_line_indent_pt))
-        if profile.widow_control:
-            _set(properties, "widowControl", val="1")
+        _set(properties, 'widowControl', val='1' if profile.widow_control else '0')
         touched.append("Normal")
 
     for level in range(1, 7):
@@ -176,13 +175,8 @@ def apply_section(section, profile: Profile) -> None:
     """Mirrored margins, gutter and header/footer distances."""
     properties = section._sectPr
 
-    if profile.mirror_margins:
-        # Mirrored margins make the *inside* margin the binding edge on both
-        # sides, which is what a printed book needs and what "inner/outer"
-        # in the page setup actually means.
-        for existing in properties.findall(qn("w:mirrorMargins")):
-            properties.remove(existing)
-        properties.insert(0, parse_xml(f'<w:mirrorMargins {_WNS}/>'))
+    for existing in properties.findall(qn('w:mirrorMargins')):
+        properties.remove(existing)
 
     page_margin = properties.find(qn("w:pgMar"))
     if page_margin is not None:
@@ -226,6 +220,19 @@ def add_page_numbers(document, section, *, rtl: bool = True) -> bool:
 def apply(document, section, profile: Profile, *, rtl: bool = True) -> dict[str, Any]:
     """Apply the whole profile. Returns what was done, for the build report."""
     styles = apply_paragraph_styles(document, profile, rtl=rtl)
+    settings = document.settings.element
+    for existing in settings.findall(qn('w:mirrorMargins')):
+        settings.remove(existing)
+    mirror = parse_xml(f'<w:mirrorMargins {_WNS} w:val="{int(profile.mirror_margins)}"/>')
+    # Native settings order places this after saveFormsData and before all
+    # following settings. Keep the template's other setting order untouched.
+    preceding = {qn('w:' + name) for name in (
+        'writeProtection', 'view', 'zoom', 'removePersonalInformation', 'removeDateAndTime',
+        'doNotDisplayPageBoundaries', 'displayBackgroundShape', 'printPostScriptOverText',
+        'printFractionalCharacterWidth', 'printFormsData', 'embedTrueTypeFonts',
+        'embedSystemFonts', 'saveSubsetFonts', 'saveFormsData')}
+    position = next((i for i, node in enumerate(settings) if node.tag not in preceding), len(settings))
+    settings.insert(position, mirror)
     apply_section(section, profile)
     numbered = add_page_numbers(document, section, rtl=rtl) if profile.page_numbers else False
     return {

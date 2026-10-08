@@ -9,6 +9,7 @@ from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
 import bookir as ir
+from docxproperties import emphasis_spans, run_style as _run_style  # noqa: F401
 
 
 def _pt(length) -> float | None:
@@ -104,10 +105,12 @@ def _running_pieces(paragraph: Paragraph, allocate, note) -> list[dict[str, Any]
     instruction: list[str] = []
 
     def flush() -> None:
-        text = ir.render_markup(spans).strip()
+        text = ir.render_markup(spans)
         spans.clear()
-        if text:
+        if text.strip():
             pieces.append({"id": allocate(), "text": text, "target": None})
+        elif text:
+            pieces.append({'controls': ir.plain_text(text)})
 
     for node in _running_runs(paragraph, note):
         if node.tag == qn("w:fldSimple"):
@@ -141,25 +144,19 @@ def _running_pieces(paragraph: Paragraph, allocate, note) -> list[dict[str, Any]
             elif tag == qn("w:instrText") and depth and not in_result:
                 instruction.append(child.text or "")
             elif tag == qn("w:t") and not depth:
-                bold, italic = _run_style(run)
-                spans.append((child.text or "", bold, italic))
-            elif tag == qn("w:tab") and not depth:
+                spans.extend(emphasis_spans(run, child.text or ""))
+            elif tag in {qn("w:tab"), qn("w:ptab")} and not depth:
                 flush()
                 pieces.append({"tab": True})
+            elif not depth and tag in {qn("w:br"), qn("w:cr"),
+                                       qn("w:noBreakHyphen"), qn("w:softHyphen")}:
+                if tag == qn("w:br") and child.get(qn("w:type"), "textWrapping") != "textWrapping":
+                    raise ValueError("unsupported DOCX running break type")
+                value = {qn("w:br"): "\n", qn("w:cr"): "\n",
+                         qn("w:noBreakHyphen"): "‑", qn("w:softHyphen"): "­"}[tag]
+                spans.extend(emphasis_spans(run, value))
     flush()
     return pieces
-
-
-def _run_style(run) -> tuple[bool, bool]:
-    """Effective bold/italic, falling back to the run's style definition."""
-    bold, italic = run.bold, run.italic
-    if bold is None or italic is None:
-        style = getattr(run, "style", None)
-        font = getattr(style, "font", None) if style is not None else None
-        if font is not None:
-            bold = font.bold if bold is None else bold
-            italic = font.italic if italic is None else italic
-    return bool(bold), bool(italic)
 
 
 def running_of(section, index: int, even_and_odd: bool, allocate, warnings) -> dict[str, Any]:

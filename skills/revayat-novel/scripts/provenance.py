@@ -25,6 +25,7 @@ stale answer is fresh.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import bookir as ir
@@ -36,7 +37,7 @@ from worksheet import SCAFFOLD_COMMENT, request_line
 #: Characters of neighbouring source a worker is shown, and therefore the width
 #: of the window the dependency facet has to hash.
 CONTEXT_CHARS = 450
-SOURCE_DIGEST_VERSION = "units4"
+SOURCE_DIGEST_VERSION = "units5"
 
 #: The worksheet's name for each block type, and the kind a heading's level is
 #: built into. Defined in `published`, because the same name has to appear on the
@@ -289,6 +290,10 @@ def source_fingerprint(book: dict[str, Any], block_ids: list[str],
     # Everything else the worker was told. Without it, freshness answered only
     # "did these units' own characters change" — so an approved alias, a new voice
     # card or an edit to the paragraph next door all left the digest still.
+    parts.append("structure\x00" + json.dumps(
+        published.structure(book, [block for block in book.get("blocks", [])
+                                   if block.get("id") in set(block_ids)]),
+        ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     ours = {record["owner"] for record in records}
     parts += dependency_facet(
         book, [(unit_id, kind, text) for unit_id, kind, text in

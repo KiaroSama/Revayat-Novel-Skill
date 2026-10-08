@@ -24,13 +24,13 @@ how every caller and every test already reaches them.
 
 from __future__ import annotations
 
-import re
 import zipfile
 from pathlib import Path
 from typing import Any
 
 import qa
 import opc
+from docxproperties import Styles, Unresolved
 
 
 def document_text(docx: Path) -> str:
@@ -50,16 +50,26 @@ def document_text(docx: Path) -> str:
     with zipfile.ZipFile(docx) as archive:
         body = opc.Package(archive).xml("word/document.xml")
     paragraphs = []
+    parents = {child: parent for parent in body.iter() for child in parent}
     for block in body.iter(opc.qname("w", "p")):
+        ancestor = parents.get(block)
+        nested = False
+        while ancestor is not None:
+            if ancestor.tag == opc.qname('w', 'p'):
+                nested = True
+                break
+            ancestor = parents.get(ancestor)
+        if nested:
+            continue
         style = block.find("w:pPr/w:pStyle", opc.NS)
         if style is not None and style.get(opc.qname("w", "val"), "").startswith("TOC"):
             continue
         if any((part.text or "").strip().startswith("TOC ")
                for part in block.iter(opc.qname("w", "instrText"))):
             continue
-        pieces = [part.text or "" for part in block.iter(opc.qname("w", "t"))]
-        if pieces:
-            paragraphs.append("".join(pieces))
+        text = opc.text_of(block)
+        if text:
+            paragraphs.append(text)
     return " ".join(paragraphs)
 
 
@@ -76,23 +86,11 @@ def requested_fonts(docx: Path) -> dict[str, str]:
     Empty strings when the document does not say - a state, not a failure: a
     .docx from somewhere else need not carry any of this.
     """
-    try:
-        with zipfile.ZipFile(docx) as archive:
-            styles = archive.read("word/styles.xml").decode("utf-8")
-    except (OSError, KeyError, zipfile.BadZipFile, UnicodeDecodeError):
-        return {"complex": "", "ascii": ""}
-
-    defaults = re.search(r"<w:docDefaults>.*?</w:docDefaults>", styles, re.S)
-    if not defaults:
-        return {"complex": "", "ascii": ""}
-    element = re.search(r"<w:rFonts\b[^>]*/>", defaults.group(0))
-    if not element:
-        return {"complex": "", "ascii": ""}
-    found = {}
-    for key, attribute in (("complex", "w:cs"), ("ascii", "w:ascii")):
-        match = re.search(rf'{attribute}="([^"]*)"', element.group(0))
-        found[key] = match.group(1) if match else ""
-    return found
+    with zipfile.ZipFile(docx) as archive:
+        styles = opc.Package(archive).xml('word/styles.xml')
+    element = styles.find('w:docDefaults/w:rPrDefault/w:rPr/w:rFonts', opc.NS)
+    return {key: element.get(opc.qname('w', attribute), '') if element is not None else ''
+            for key, attribute in [('complex', 'cs'), ('ascii', 'ascii')]}
 
 
 def check_direction_in_document(docx: Path) -> list[dict[str, Any]]:
@@ -105,22 +103,17 @@ def check_direction_in_document(docx: Path) -> list[dict[str, Any]]:
     Word actually obeys.
     """
     findings: list[dict[str, Any]] = []
-    with zipfile.ZipFile(docx) as archive:
-        document = archive.read("word/document.xml").decode("utf-8")
-        styles = archive.read("word/styles.xml").decode("utf-8")
-
-    normal = re.search(r'<w:style [^>]*w:styleId="Normal".*?</w:style>',
-                       styles, re.S)
-    inherits = bool(normal and "<w:bidi" in normal.group(0))
-
-    paragraphs = [p for p in re.findall(r"<w:p.*?</w:p>", document, re.S)
-                  if "<w:t" in p]
-    without = [p for p in paragraphs if "<w:bidi" not in p]
-    if without and not inherits:
-        findings.append({
-            "severity": qa.ERROR, "code": "document-not-rtl", "unit": "document",
-            "detail": f"{len(without)} of {len(paragraphs)} paragraphs carry no "
-                      f"w:bidi and the Normal style does not supply one, so "
-                      f"Word will set them left-to-right",
-        })
+    try:
+        with zipfile.ZipFile(docx) as archive:
+            package = opc.Package(archive)
+            document = package.xml('word/document.xml')
+            styles = Styles(package.xml('word/styles.xml'))
+        paragraphs = [p for p in document.iter(opc.qname('w', 'p')) if opc.text_of(p).strip()]
+        without = sum(not styles.paragraph_bidi(p) for p in paragraphs)
+        if without:
+            findings.append({'severity': qa.ERROR, 'code': 'document-not-rtl', 'unit': 'document',
+                             'detail': f'{without} of {len(paragraphs)} text paragraphs have effective left-to-right direction'})
+    except (OSError, zipfile.BadZipFile, opc.Damaged, Unresolved) as error:
+        findings.append({'severity': qa.ERROR, 'code': 'document-direction-unverified', 'unit': 'document',
+                         'detail': f'native direction evidence is invalid or unresolved ({type(error).__name__})'})
     return findings

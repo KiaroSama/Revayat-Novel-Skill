@@ -88,6 +88,11 @@ def check_book(
     # error in one place and invisible in the other.
     for problem in notegraph.problems(book):
         report.add(ERROR, "note-graph", problem.partition(":")[0], problem)
+    coverage = (book.get("source") or {}).get("ocr_coverage")
+    if coverage is not None and (not isinstance(coverage, dict)
+            or coverage.get("complete") is not True or coverage.get("unknown_pages")):
+        report.add(ERROR if require_complete else WARNING, "ocr-coverage-unverified",
+                   "source", "source page coverage is unknown or incomplete; resolve OCR page roles")
     _check_coverage(book, report, require_complete)
     _check_structure_parity(book, report, strict)
     _check_lengths(book, report)
@@ -127,7 +132,7 @@ def _check_coverage(book: dict[str, Any], report: Report, require_complete: bool
               "paragraphs": 0, "paragraphs_translated": 0,
               "running_heads": 0, "running_heads_translated": 0}
     for unit_id, kind, piece, _ in ir.iter_running_pieces(book):
-        if not (piece.get("text") or "").strip():
+        if not _prose(piece.get("text") or "").strip():
             continue
         totals["running_heads"] += 1
         if (piece.get("target") or "").strip():
@@ -136,7 +141,7 @@ def _check_coverage(book: dict[str, Any], report: Report, require_complete: bool
             report.add(severity, "untranslated-running-head", unit_id,
                        f"{kind}: {ir.plain_text(piece['text'])[:120]}")
     for block in ir.iter_text_blocks(book):
-        if not (block.get("text") or "").strip():
+        if not _prose(block.get("text") or "").strip():
             continue
         group = "headings" if block["type"] == "heading" else "paragraphs"
         totals[group] += 1

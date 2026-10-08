@@ -14,6 +14,7 @@ Run it directly, or let CI run it on Linux, macOS and Windows.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import sys
@@ -39,6 +40,7 @@ import qa                      # noqa: E402
 import signoff                 # noqa: E402
 import worksheet as worksheet_module  # noqa: E402
 from tests_support import png_bytes, review_reply   # noqa: E402
+import e2e_evidence                               # noqa: E402
 
 #: Deliberately mentions the same character several times, in and out of
 #: sentence-initial position, so the glossary scan has something real to find
@@ -224,6 +226,9 @@ def main() -> int:
     ir.use_utf8_stdio()
     work = _workspace()
     passed = False
+    stage = "source"
+    status = 1
+    evidence_files = ["book.json", "assets/fig.png"]
     try:
         print(f"working in {work}")
 
@@ -234,6 +239,8 @@ def main() -> int:
               f"{source['stats']['images']} images")
 
         # 2. glossary ------------------------------------------------------ #
+        stage = "glossary"
+        evidence_files.append("glossary.json")
         glossary_path = work / "glossary.json"
         glossary = gl.new_glossary()
         proposals = gl.scan(source, minimum=2)
@@ -254,6 +261,8 @@ def main() -> int:
               f"{first['first_block_id']}")
 
         # 3. chunk --------------------------------------------------------- #
+        stage = "chunk"
+        evidence_files.append("chunks/manifest.json")
         chunks = work / "chunks"
         manifest = chunking.build(book_path, chunks, glossary_path=glossary_path,
                                   budget=1300)
@@ -268,6 +277,9 @@ def main() -> int:
               f"first-mention announced once")
 
         # 4. translate + merge --------------------------------------------- #
+        stage = "merge"
+        evidence_files.extend("chunks/" + entry[key] for entry in manifest["chunks"]
+                              for key in ("file", "output"))
         for entry in manifest["chunks"]:
             worksheet = (chunks / entry["file"]).read_text(encoding="utf-8")
             ir.write_text(chunks / entry["output"], translate(worksheet))
@@ -287,6 +299,7 @@ def main() -> int:
         # sees and therefore what an approval is about. Run after the reviews —
         # which is the order this script used to follow — and the approvals
         # describe text that has since changed.
+        stage = "typography"
         translated = ir.load_book(book_path)
         fixed = falint.fix_book(translated)
         once = json.dumps(translated, ensure_ascii=False)
@@ -312,8 +325,12 @@ def main() -> int:
         # valid the moment the translation moves. The judgement itself is not
         # simulated — a blank report with the sheet claimed read is exactly what
         # "the reviewer found nothing" looks like.
+        stage = "meaning"
+        evidence_files.extend(["review/manifest.json", "review/review.json"])
         review_dir = work / "review"
         sheets = meaning.write_sheets(book_path, review_dir)
+        evidence_files.extend("review/" + prefix + sheet + ".md"
+                              for sheet in sheets["sheets"] for prefix in ("", "out_"))
         check(sheets["units"] > 0, "the review sheets cover no units")
         first = (review_dir / f"{sheets['sheets'][0]}.md").read_text(encoding="utf-8")
         source_one = ir.load_book(book_path)["blocks"][0]
@@ -336,9 +353,13 @@ def main() -> int:
         # Part of the documented sequence, and the stage a run is most tempted to
         # skip because the bilingual review already "read" the prose. It cannot
         # have: it could see the English behind every sentence.
+        stage = "fluency"
+        evidence_files.extend(["fluency/manifest.json", "fluency/fluency.json"])
         fluency_dir = work / "fluency"
         blind = fluency.write_sheets(book_path, fluency_dir, review_dir)
         check(blind.get("ok"), f"the blind pass was refused: {json.dumps(blind)[:300]}")
+        evidence_files.extend("fluency/" + prefix + sheet + ".md"
+                              for sheet in blind["sheets"] for prefix in ("", "out_"))
         for sheet_id in blind["sheets"]:
             text = (fluency_dir / f"{sheet_id}.md").read_text(encoding="utf-8")
             for block in ir.load_book(book_path)["blocks"]:
@@ -357,6 +378,7 @@ def main() -> int:
         # 5. typography already settled ------------------------------------- #
         # The check that step 4a held, which is what the recipe asks for at this
         # point: nothing left to fix, so no approval is about stale text.
+        stage = "typography"
         left = falint.lint_book(ir.load_book(book_path))
         check(not left.get("findings"),
               f"typography still needs fixing after the reviews: "
@@ -364,6 +386,7 @@ def main() -> int:
         print("  5 typography  : nothing left to fix, approvals are about this text")
 
         # 6. QA, semantic verdicts enforced --------------------------------- #
+        stage = "qa"
         translated = ir.load_book(book_path)
         summary = qa.check_book(translated, assets=work / "assets",
                                 glossary=gl.load(glossary_path)).summary()
@@ -383,6 +406,8 @@ def main() -> int:
               f"both semantic verdicts current")
 
         # 7. build ---------------------------------------------------------- #
+        stage = "build"
+        evidence_files.append("book.fa.docx")
         import argparse
         parser = argparse.ArgumentParser()
         build_docx.add_arguments(parser)
@@ -403,6 +428,7 @@ def main() -> int:
               f"{built['footnotes']} footnotes")
 
         # 8. verify the package --------------------------------------------- #
+        stage = "package"
         package = qa.check_docx(output, translated).summary()
         check(package["ok"], f"package QA failed: {json.dumps(package)[:500]}")
         with zipfile.ZipFile(output) as archive:
@@ -421,6 +447,7 @@ def main() -> int:
         # string is in the document, and the approvals still hold for the book it
         # was built from — the no-edit case, which is the one that silently
         # passes when the chain is only asserted rather than compared.
+        stage = "delivery"
         with zipfile.ZipFile(output) as archive:
             printed = "".join(
                 archive.read(part).decode("utf-8")
@@ -447,6 +474,10 @@ def main() -> int:
         print("\nend-to-end pipeline OK")
         passed = True
         return 0
+    except BaseException as error:
+        if isinstance(error, SystemExit) and type(error.code) is int and 1 <= error.code <= 255:
+            status = error.code
+        raise
     finally:
         # A failed run keeps its working directory, and says where. Deleting it
         # unconditionally destroyed the only evidence at exactly the moment it
@@ -458,6 +489,17 @@ def main() -> int:
             shutil.rmtree(work, ignore_errors=True)
         else:
             print(f"\nkept for diagnosis: {work}")
+            try:
+                ir.write_text(work / "status.json", json.dumps({"stage": stage, "exit_code": status,
+                                                              "synthetic": True}) + "\n")
+                candidates = [*evidence_files, "status.json"]
+                selected = [name for name in candidates if (work / name).exists()]
+                sha = os.environ.get("GITHUB_SHA")
+                if sha is not None:
+                    e2e_evidence.prepare(work, REPO / ".pytest-tmp/e2e-artifact", stage=stage,
+                                         exit_code=status, job_sha=sha, files=selected)
+            except Exception:
+                print("Synthetic failure evidence could not be prepared; original failure retained.")
 
 
 if __name__ == "__main__":

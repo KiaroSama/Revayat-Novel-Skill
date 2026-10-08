@@ -197,10 +197,13 @@ def counted_ocr(monkeypatch, tmp_path):
     """
     calls: list[dict] = []
 
-    def fake_run_ocr(source, destination, *, kind, language, deskew, timeout):
+    def fake_run_ocr(source, destination, *, kind, language, deskew, timeout, **extras):
         calls.append({"source": Path(source).read_bytes()[:16],
                       "language": language})
         doc = pymupdf.open(source)
+        for page in doc:
+            if not page.get_text().strip() and page.get_image_info():
+                page.insert_text((54, 90), "Recognized source sentence.", render_mode=3)
         doc.save(str(destination))
         doc.close()
         return {"engine": "stub", "pages": 1}

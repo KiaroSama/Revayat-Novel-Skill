@@ -25,7 +25,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import bookir as ir
 import eligible
+import pageidentity
 import reviewstate
 import runstate
 from pageidentity import _translation_moved
@@ -65,8 +67,24 @@ def qa_report_path(work_dir: Path, page: int) -> Path:
 _FRESHNESS_CHECKED = frozenset({"merged", "qa_passed", "accepted"})
 
 
+def _observation(out_dir, book_path=None):
+    manifest = load_manifest(out_dir)
+    book_path = book_path or eligible._book_and_glossary(out_dir, manifest)[0]
+    book = None
+    if book_path is not None:
+        try:
+            book = ir.load_book(book_path)
+        except (OSError, ValueError, UnicodeError):
+            pass  # The shared eligibility resolver reports an unreadable dependency.
+    context = pageidentity.operation_context(book) if book is not None else None
+    proofs = {proof["id"]: proof for proof in eligible.every(
+        out_dir, manifest, book_path=book_path, book=book, context=context)}
+    return {"manifest": manifest, "book_path": book_path, "book": book,
+            "context": context, "proofs": proofs}
+
+
 @reviewstate.guarded
-def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
+def status(out_dir: Path, book_path: Path | None = None, *, observation=None) -> dict[str, Any]:
     """Where every page stands, and which one to work on next.
 
     Reported per source page, not per job: a page split into sub-jobs is still
@@ -80,11 +98,10 @@ def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
     label cannot bypass current translation/dependency checks. Changed or unknown
     evidence returns the page to the unfinished queue without modifying its record.
     """
-    manifest = load_manifest(out_dir)
+    observation = observation or _observation(out_dir, book_path)
+    manifest, proofs = observation["manifest"], observation["proofs"]
+    book_path = observation["book_path"]
     state = runstate.RunState(out_dir.parent)
-    proofs = {proof["id"]: proof for proof in eligible.every(out_dir, manifest, book_path=book_path)}
-    if book_path is None:
-        book_path = eligible._book_and_glossary(out_dir, manifest)[0]
 
     pages: list[dict[str, Any]] = []
     for number in dict.fromkeys(entry["page"] for entry in manifest["chunks"]):
@@ -93,7 +110,8 @@ def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
         reported = record.get("state", "pending")
         stale = ""
         if book_path is not None and reported in _FRESHNESS_CHECKED:
-            refusal, detail = _translation_moved(Path(book_path), number, record)
+            refusal, detail = _translation_moved(Path(book_path), number, record,
+                book=observation["book"], context=observation["context"])
             if refusal:
                 stale, reported = refusal, "stale"
         dependencies = [proofs[entry["id"]] for entry in entries
@@ -132,7 +150,7 @@ def status(out_dir: Path, book_path: Path | None = None) -> dict[str, Any]:
 
 
 def _job_to_do(out_dir: Path,
-               entries: list[dict[str, Any]]) -> tuple[dict[str, Any], str]:
+               entries: list[dict[str, Any]], *, proofs=None) -> tuple[dict[str, Any], str]:
     """``(the sub-job that still needs work, why)`` — merge's own answer.
 
     The test used to be ``bool(the reply file)``, which is weaker than the one
@@ -148,7 +166,7 @@ def _job_to_do(out_dir: Path,
     share. Missing dependencies remain unverified and unusable, so they cannot
     silently disappear from the unfinished queue.
     """
-    proofs = {proof["id"]: proof for proof in eligible.every(out_dir)}
+    proofs = proofs if proofs is not None else _observation(out_dir)["proofs"]
     for entry in entries:
         verdict = proofs[entry["id"]]
         if not verdict["usable"]:
@@ -169,13 +187,14 @@ def next_page(out_dir: Path) -> dict[str, Any] | None:
     same page comes back with its next part until the page is complete — and
     when one part's reply is the problem, that part is the one handed back.
     """
-    progress = status(out_dir)
+    observation = _observation(out_dir)
+    progress = status(out_dir, observation=observation)
     if progress.get("ok") is False:
         return progress
     if progress["next"] is None:
         return None
-    entries = jobs_for(load_manifest(out_dir), progress["next"])
-    entry, reason = _job_to_do(out_dir, entries)
+    entries = jobs_for(observation["manifest"], progress["next"])
+    entry, reason = _job_to_do(out_dir, entries, proofs=observation["proofs"])
     record = next(p for p in progress["pages"] if p["page"] == entry["page"])
     return {
         "page": entry["page"],

@@ -404,6 +404,7 @@ def attach(book: dict[str, Any], sidecar: dict[str, Any], *,
     matched = unmatched = disputed = 0
     counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
     for block in ir.iter_text_blocks(book):
+        block.pop("ocr", None)  # this attachment owns confidence, not source provenance
         box = block.get("bbox")
         candidates = by_page.get(int(block.get("page") or 0), [])
         best = max((c for c in candidates if c.get("bbox")),

@@ -134,7 +134,8 @@ def chapter_html(raw, selector, title, resolve_asset):
                         (item.name == "a" and _is_note_link(item)) or
                         any(_is_note_link(link) for link in item.find_all("a")) or
                         (item.name in LITERALS and bool(item.get_text())) or
-                        any(literal.get_text() for literal in item.find_all(list(LITERALS))))
+                        any(literal.get_text() for literal in item.find_all(list(LITERALS))) or
+                        item.name == 'br' or item.find('br'))
                        if isinstance(item, Tag) else str(item).strip() for item in buffer):
                 # Empty destinations still carry meaning for a later link.
                 # The native reader binds them to the next concrete block.

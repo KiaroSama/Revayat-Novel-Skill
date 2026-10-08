@@ -195,6 +195,32 @@ def _page(number, blocks):
             ]}
 
 
+@pytest.mark.parametrize("new_match", ["missing-page", "missing-box", "low-overlap"])
+def test_unmatched_reattachment_clears_only_prior_confidence(new_match):
+    book = ir.new_book()
+    block = ir.make_block("paragraph", 1, page=1, bbox=[50, 100, 350, 160],
+                          text="Source sentence.")
+    block["ocr_provenance"] = {"engine": "embedded-layer"}
+    book["blocks"] = [block]
+    original = _sidecar([_page(1, [([50, 100, 350, 160], 95.0,
+                                  "Source sentence.", [])])])
+    assert ocr.attach(book, original)["matched"] == 1
+    assert block["ocr"]["grade"] == "high"
+    if new_match == "missing-page":
+        next_sidecar = _sidecar([])
+    elif new_match == "missing-box":
+        block.pop("bbox")
+        next_sidecar = original
+    else:
+        next_sidecar = _sidecar([_page(1, [([50, 500, 350, 560], 95.0,
+                                          "Source sentence.", [])])])
+    result = ocr.attach(book, next_sidecar)
+    assert result["unmatched"] == 1 and result["matched"] == 0
+    assert "ocr" not in block
+    assert block["ocr_provenance"] == {"engine": "embedded-layer"}
+    assert block["text"] == "Source sentence."
+
+
 def test_confidence_reaches_the_block_it_belongs_to():
     book = ir.new_book()
     book["blocks"] = [

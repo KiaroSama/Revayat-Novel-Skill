@@ -64,7 +64,10 @@ $PY $SKILL_DIR/scripts/revayat-novel.py qa check --book $WORK/book.json --allow-
 Resolve extraction errors, missing illustrations and incomplete source text
 before translation. Untranslated-text findings are expected here.
 
-For scanned or mixed PDFs, inspect the OCR report and source images. Read
+For scanned or mixed PDFs, inspect complete source/output page coverage, OCR
+provenance and source images. Resolve unknown silent raster roles explicitly with
+`--ocr-page-roles`; unknown coverage blocks delivery. Structural `table`/`layout`
+events carry no prose and require no fabricated translation response. Read
 [extraction.md](references/extraction.md) for OCR routing and MinerU imports,
 and [watermarks.md](references/watermarks.md) before changing cleaning thresholds.
 The source file stays intact; preprocessing writes work copies.

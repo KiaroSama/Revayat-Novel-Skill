@@ -61,6 +61,56 @@ def stamped_pdf(tmp_path) -> Path:
     return path
 
 
+def test_cleaning_preserves_crop_boxes_and_page_rotation(tmp_path):
+    import pymupdf
+
+    buffer = io.BytesIO()
+    _page(True).save(buffer, format="PNG")
+    source, destination = tmp_path / "rotated-scan.pdf", tmp_path / "cleaned.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=500)
+        page.set_cropbox(pymupdf.Rect(50, 50, 350, 450))
+        page.insert_image((0, 0, 300, 400), stream=buffer.getvalue())
+        page.set_rotation(90)
+        document.save(source)
+    report = scan_clean.clean_pdf(source, destination)
+    assert report["cleaned"] == 1
+    with pymupdf.open(source) as before, pymupdf.open(destination) as after:
+        assert after[0].rotation == before[0].rotation == 90
+        assert after[0].mediabox == before[0].mediabox
+        assert after[0].cropbox == before[0].cropbox
+        assert after[0].get_image_info()[0]["bbox"] == before[0].get_image_info()[0]["bbox"]
+
+
+@pytest.mark.parametrize("placement", ["offset", "rotated", "repeated"])
+def test_force_never_stretches_an_unverified_scan(tmp_path, placement):
+    import pymupdf
+
+    buffer = io.BytesIO()
+    _page(True).save(buffer, format="PNG")
+    source, destination = tmp_path / "artwork.pdf", tmp_path / "cleaned.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page(width=300, height=400)
+        box = pymupdf.Rect(40, 50, 190, 250)
+        xref = page.insert_image(box, stream=buffer.getvalue(),
+                                 rotate=90 if placement == "rotated" else 0)
+        if placement == "repeated":
+            page.insert_image((200, 270, 275, 370), xref=xref)
+        document.save(source)
+    before = source.read_bytes()
+    with pymupdf.open(source) as document:
+        expected = document[0].get_image_info(hashes=True)
+    survey = scan_clean.survey_pdf(source)
+    report = scan_clean.clean_pdf(source, destination, force=True)
+    assert survey["per_page"][0]["verdict"] == "not-a-single-raster"
+    assert report["cleaned"] == 0 and report["untouched_pages"] == [1]
+    with pymupdf.open(destination) as document:
+        actual = document[0].get_image_info(hashes=True)
+    assert [(item["bbox"], item["transform"], item["digest"]) for item in actual] == [
+        (item["bbox"], item["transform"], item["digest"]) for item in expected]
+    assert source.read_bytes() == before
+
+
 # --------------------------------------------------------------------------- #
 # survey — the question you could not ask before
 # --------------------------------------------------------------------------- #

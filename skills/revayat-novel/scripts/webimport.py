@@ -4,6 +4,7 @@ import argparse
 from html import escape
 from io import BytesIO
 import json
+import os
 from pathlib import Path, PureWindowsPath
 import re
 from urllib.parse import unquote, urldefrag, urljoin, urlsplit
@@ -13,10 +14,11 @@ from xml.etree import ElementTree as ET
 import zipfile
 
 from PIL import Image
+from bs4 import BeautifulSoup
 
 import bookir as ir
 import bookwrite
-from read_epub import read_epub
+from read_epub import read_epub, _is_note_link
 import reviewstate
 import webfetch
 from webhtml import chapter_html
@@ -69,6 +71,40 @@ def local_file(root, name, limit):
     if len(raw) > limit:
         raise ValueError("source file exceeds its byte limit")
     return raw, target
+
+
+def rebase_chapters(chapters, records, inputs):
+    """Resolve links in original source scope before generated filenames exist."""
+    locations = {}
+    for record, item in zip(records, inputs):
+        canonical = (urldefrag(record["path"]).url if "url" in item
+                     else Path(record["path"]).as_uri())
+        aliases = {canonical}
+        if "url" in item:
+            aliases.add(urldefrag(item["url"]).url)
+        for alias in aliases:
+            previous = locations.setdefault(alias, record["id"])
+            if previous != record["id"]:
+                raise reviewstate.Refused("ambiguous-chapter-source",
+                                          "several chapters share one canonical source; resolve their source mapping")
+    result = []
+    for (identity, content), record, item in zip(chapters, records, inputs):
+        base = record["path"] if "url" in item else Path(record["path"]).as_uri()
+        soup = BeautifulSoup(content, "html.parser")
+        for link in soup.find_all("a", href=True):
+            href = str(link["href"])
+            if _is_note_link(link) or not urlsplit(href).fragment:
+                continue
+            address, fragment = urldefrag(urljoin(base, href))
+            # Local URI spelling is normalized exactly as local acquisition is.
+            if urlsplit(address).scheme == "file":
+                address = Path(unquote(urlsplit(address).path.lstrip("/")
+                               if os.name == "nt" else urlsplit(address).path)).resolve().as_uri()
+            target = locations.get(address)
+            if target is not None:
+                link["href"] = target + ".xhtml#" + fragment
+        result.append((identity, str(soup).encode("utf-8")))
+    return result
 
 
 def epub_bytes(data, chapters, assets):
@@ -218,6 +254,7 @@ def import_book(manifest_path, out, *, resume=False):
                        re.split(r"\r?\n\s*\r?\n", text) if part.strip()) + "</body></html>").encode("utf-8")
         chapters.append((item["id"], chapter_html(content, item["content_selector"], item["title"], asset)))
     epub = snapshot_dir / "source.epub"
+    chapters = rebase_chapters(chapters, records, data["chapters"])
     epub.write_bytes(epub_bytes(data, chapters, assets))
     book = read_epub(str(epub), out / "assets", lang_source=data["source_language"])
     book["source"]["web_chapters"] = records

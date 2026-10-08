@@ -170,6 +170,8 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
                 links[identity]["text"] += display
 
         def carry_anchors(block):
+            if block.get('type') == 'layout':
+                return
             if anchors:
                 block["bookmarks"] = list(dict.fromkeys([*anchors, *block.get("bookmarks", [])]))
                 anchors.clear()
@@ -184,6 +186,8 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
                 if carried:
                     extra["links"] = carried
                 carry_anchors(emit(kind, text=text, **extra))
+            elif buffer and any('\n' in span['text'] or '\t' in span['text'] for span in buffer):
+                emit('layout', controls=''.join(span['text'] for span in buffer))
             buffer.clear()
             links.clear()
 
@@ -245,8 +249,9 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
                     new_kind, new_fields = "paragraph", {}
                 start = len(emitted)
                 pending = flow(child, new_kind, new_fields, strong, emphasis, depth + 1, active)
-                if len(emitted) > start:
-                    carry_anchors(emitted[start])
+                concrete = next((b for b in emitted[start:] if b['type'] != 'layout'), None)
+                if concrete is not None:
+                    carry_anchors(concrete)
                 anchors.extend(pending)
                 return
             if child.get("id"):
@@ -261,9 +266,14 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
         for child in container.children:
             visit(child)
         flush()
+        if len(emitted) == first and container.name == 'p' and not container.get('id') and not container.get_text(strip=True):
+            raw = container.get_text()
+            controls = raw if raw and all(c in ' \t\r\n' for c in raw) else ''
+            emit('layout', controls=controls)
         if container.get("id"):
-            if len(emitted) > first:
-                target = emitted[first].setdefault("bookmarks", [])
+            concrete = next((b for b in emitted[first:] if b['type'] != 'layout'), None)
+            if concrete is not None:
+                target = concrete.setdefault("bookmarks", [])
                 if container["id"] not in target:
                     target.insert(0, container["id"])
             else:
@@ -273,10 +283,11 @@ def walk(node: Tag, add, archive: zipfile.ZipFile, doc_path: str,
         return anchors
 
     pending = flow(node)
-    if pending and emitted:
-        # At end of the document the last block is the available IR location.
-        emitted[-1]["bookmarks"] = list(dict.fromkeys([
-            *emitted[-1].get("bookmarks", []), *pending]))
+    concrete = next((b for b in reversed(emitted) if b['type'] != 'layout'), None)
+    if pending and concrete is not None:
+        # Layout controls never steal an empty destination's concrete location.
+        concrete['bookmarks'] = list(dict.fromkeys([
+            *concrete.get('bookmarks', []), *pending]))
 
 
 def _ordered(item: Tag) -> bool:

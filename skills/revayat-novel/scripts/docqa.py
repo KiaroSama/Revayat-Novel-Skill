@@ -423,6 +423,14 @@ def check_document(work_dir: Path, book_path: Path, docx: Path, *,
     # One open for the whole book rather than two per page — see
     # `pagecheck.views_and_pngs` for the measurement.
     views, written = pagecheck.views_and_pngs(rendered, pngs, dpi=dpi)
+    if len(views) != total or len(written) != total or any(path is None for path in written):
+        return _write(work_dir, {
+            "ok": False, "verified": False, "pages": total,
+            "unverified": "incomplete-render-evidence: not every current document sheet was produced",
+            "renders": [str(path.relative_to(work_dir).as_posix()) for path in pngs],
+            "render_evidence_complete": False,
+            "document_sha256": ir.sha256_file(docx),
+        })
     for index, view in enumerate(views):
         # `limit=None`: every finding, because these are concatenated into the
         # list the document's verdict is taken from. A per-page display cap

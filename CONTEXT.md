@@ -19,6 +19,10 @@ installed payload, independent of another skill installation.
 **Workflow log**: The using agent's persistent record of observable translation work,
 stored beside the translated deliverable. Avoid: global agent log, private reasoning.
 
+**Authored structure**: Source-declared table topology and ordered control-only layout events, independent of translatable prose units. Missing legacy topology is not reconstructed by guessing.
+
+**OCR coverage proof**: Source/output-bound page inventory and mapping evidence, distinct from recognition accuracy or literary approval. Unknown coverage cannot authorize delivery.
+
 **Source snapshot**: The retained original chapter bytes and assets used for one import.
 It proves what was imported, not that a remote website has remained unchanged.
 

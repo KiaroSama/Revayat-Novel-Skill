@@ -37,6 +37,15 @@ def _pytest_ini() -> str:
     return (ROOT / "pytest.ini").read_text(encoding="utf-8")
 
 
+def test_cohesive_test_owners_stay_below_the_hard_ceiling():
+    oversized = {
+        path.name: len(path.read_text(encoding="utf-8").splitlines())
+        for path in TESTS.glob("*.py")
+        if path.name in {"test_extract.py", "test_renderqa.py", "test_pagerun.py"}
+    }
+    assert all(count < 800 for count in oversized.values()), oversized
+
+
 def test_every_marker_a_test_uses_is_declared():
     """An undeclared marker is a typo that silently selects nothing."""
     declared = set(_DECLARED.findall(_pytest_ini()))
@@ -52,6 +61,24 @@ def test_every_marker_a_test_uses_is_declared():
         f"these markers are used but not declared in pytest.ini: {undeclared}. "
         f"An undeclared marker selects nothing and warns, so a tier named this "
         f"way would be skipped everywhere.")
+
+
+def test_optional_tiers_have_one_junit_producer_and_full_skip_gate():
+    for workflow, count in (("integration.yml", 2), ("word-render.yml", 1)):
+        source = (WORKFLOWS / workflow).read_text(encoding="utf-8")
+        producers = re.findall(r"python -m pytest[^\n]*", source)
+        assert len(producers) == count, (workflow, producers)
+        assert source.count("--junitxml=") == count, workflow
+        assert source.count("tests/skip_budget.py --junit") == count, workflow
+        assert source.count("--profile full") == count, workflow
+        assert "grep -" not in source and "/tmp/report.txt" not in source
+        assert source.count("tests/test_render_cache.py") == 1, workflow
+        assert source.count("tests/test_page_lifecycle.py") == 1, workflow
+        for owner in ("test_page_acceptance.py", "test_review.py", "test_docqa.py",
+                      "test_renderqa.py", "test_renderer_processes.py", "test_process_tree_cleanup.py",
+                      "test_native_image_rendering.py"):
+            assert source.count("tests/" + owner) == 1, (workflow, owner)
+        assert 'if [ "$status" -ne 0 ]; then exit "$status"; fi' in source
 
 
 def test_no_ci_job_deselects_a_tier():
@@ -93,9 +120,10 @@ def test_the_marked_modules_are_the_expensive_ones():
     expected = {
         "test_docqa.py": "render",
         "test_renderqa.py": "render",
-        "test_pagerun.py": "render",
+        "test_page_lifecycle.py": "render",
         "test_page_acceptance.py": "render",
         "test_render_cache.py": "render",
+        "test_native_image_rendering.py": "render",
         "test_review.py": "render",
         "test_integration_ocr.py": "ocr",
     }

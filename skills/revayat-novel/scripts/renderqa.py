@@ -298,6 +298,13 @@ def check(
         target_image = None
 
     sheets: list[str] = []
+    missing_sheets: list[str] = []
+    if target_image is not None and target_pdf is not None:
+        try:
+            if page_count(Path(target_pdf)) != 1:
+                target_image = None
+        except Exception:
+            target_image = None
     if target_image is not None:
         target_png.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(Path(target_image), target_png)
@@ -309,8 +316,14 @@ def check(
         for index in range(max(1, page_count(Path(target_pdf)))):
             out = (target_png if index == 0 else
                    target_png.with_name(f"page-{page:04d}-{index + 1}.png"))
-            if render_png(Path(target_pdf), index, out, dpi) is not None:
-                sheets.append(str(out.relative_to(work_dir).as_posix()))
+            name = str(out.relative_to(work_dir).as_posix())
+            sheets.append(name)
+            if render_png(Path(target_pdf), index, out, dpi) is None:
+                missing_sheets.append(name)
+        if missing_sheets:
+            conversion_failure = "incomplete-render-evidence: current target sheets were not produced"
+    renders["complete"] = bool(sheets) and not missing_sheets and not source_missing
+    renders["missing"] = missing_sheets
     if sheets:
         renders["target"] = sheets[0]
         renders["target_sheets"] = sheets
@@ -502,7 +515,7 @@ def render_docx(docx: Path, out_dir: Path,
     # Only when there is a document to hash; a missing one must still reach
     # `wordrender.render` and raise its own named error.
     key = _render_key(docx, wordrender.backend()) if docx.is_file() else ""
-    if key and produced.is_file() and _cached_key(stamp) == key:
+    if key and produced.is_file() and _cached_key(stamp) == key and wordrender.readable_pdf(produced):
         return produced
 
     try:

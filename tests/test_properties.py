@@ -269,10 +269,14 @@ def test_the_typography_pass_is_idempotent_over_a_whole_book():
     book = ir.new_book(source_path="s.epub", source_format="epub",
                        title="کتاب", author="نویسنده")
     for index, text in enumerate(texts(10, seed=SEED + 2), start=1):
-        book["blocks"].append(ir.make_block("paragraph", index, text=text))
-    once = falint.fix_book(json.loads(json.dumps(book)))
-    twice = falint.fix_book(json.loads(json.dumps(once)))
-    assert twice == once
+        book["blocks"].append(ir.make_block("paragraph", index, text=text,
+                                          target="يک متن با كاف " + text))
+    first = falint.fix_book(book)
+    assert first["changed_count"] > 0
+    once = json.dumps(book, ensure_ascii=False, sort_keys=True)
+    second = falint.fix_book(book)
+    assert second["changed_count"] == 0
+    assert json.dumps(book, ensure_ascii=False, sort_keys=True) == once
 
 
 # --------------------------------------------------------------------------- #

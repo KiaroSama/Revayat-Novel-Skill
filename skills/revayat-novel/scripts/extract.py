@@ -56,6 +56,7 @@ from adapters import (  # noqa: F401
 # re-export disappearing broke nothing any developer machine would notice — the
 # `nothing skipped` CI job caught it, which is the hole that job exists to close.
 from rasters import crop_from_source  # noqa: F401
+from ocrvalidation import _usable_ocr_output  # noqa: F401
 
 #: A page with fewer characters than this has no usable text layer.
 PAGE_TEXT_THRESHOLD = 80
@@ -105,6 +106,7 @@ def ocr_inputs(args: Any) -> dict[str, str]:
         "deskew": str(getattr(args, "deskew", None)),
         "clean_scan": str(getattr(args, "clean_scan", "")),
         "ghost_threshold": str(getattr(args, "ghost_threshold", None)),
+        "ocr_page_roles": runstate.file_hash(getattr(args, "ocr_page_roles", None)),
     }
 
 
@@ -300,30 +302,6 @@ def ocr_command(
     return command + [str(source), str(destination)]
 
 
-def _usable_ocr_output(destination: Path) -> tuple[bool, str]:
-    """Can this OCR result actually be read, and did it gain any text?"""
-    if not destination.exists() or destination.stat().st_size == 0:
-        return False, "no output file was written"
-    try:
-        import pymupdf
-    except ImportError:  # pragma: no cover
-        import fitz as pymupdf  # type: ignore
-    try:
-        doc = pymupdf.open(destination)
-    except Exception as error:
-        return False, f"the output PDF cannot be opened: {error}"
-    try:
-        pages = len(doc)
-        if pages == 0:
-            return False, "the output PDF has no pages"
-        characters = sum(len(page.get_text("text").strip()) for page in doc)
-    finally:
-        doc.close()
-    if characters == 0:
-        return False, "the output PDF has no text layer at all"
-    return True, f"{characters} characters across {pages} pages"
-
-
 def ocr_environment(env: dict[str, str] | None = None) -> dict[str, str]:
     """``os.environ`` plus the directories the tools were actually found in.
 
@@ -383,6 +361,8 @@ def run_ocr(
     language: str = "eng",
     deskew: bool | None = None,
     timeout: int = OCR_TIMEOUT_SECONDS,
+    page_roles: Path | None = None,
+    validation_source: Path | None = None,
 ) -> dict[str, Any]:
     """Add a text layer with OCRmyPDF, preserving the original rasters."""
     launcher = find_ocrmypdf()
@@ -400,17 +380,20 @@ def run_ocr(
             "  have a text layer."
         )
 
+    from ocrvalidation import load_page_roles, make_proof, options, pdf_inventory, validate_output
+    original = validation_source or source
+    inventory = pdf_inventory(original)
+    load_page_roles(page_roles, original, len(inventory))
+    if any(item["text"] for item in inventory):
+        kind = "mixed"
+    settings = options(kind, language, deskew, page_roles)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    # The artefact test below asks whether the destination is a readable PDF that
-    # gained text. That is only evidence about *this* invocation if the file did
-    # not already exist: a run interrupted between writing its staging file and
-    # promoting it leaves a perfectly valid one behind, and the next run — whose
-    # converter failed and produced nothing — then judged that file and promoted
-    # it as its own output. So the destination is cleared first, and a readable
-    # file afterwards can only have come from the command below.
-    if destination.exists():
-        destination.unlink()
-    command = ocr_command(launcher, source, destination, kind=kind,
+    if destination.exists() and destination.name.endswith(".pdf.new"):
+        kept = destination.with_name(destination.name + ".orphaned-" + uuid.uuid4().hex[:8])
+        destination.replace(kept)
+    invocation = uuid.uuid4().hex
+    fresh = destination.with_name(destination.name + ".attempt-" + invocation + ".pdf")
+    command = ocr_command(launcher, source, fresh, kind=kind,
                           language=language, deskew=deskew)
 
     try:
@@ -422,6 +405,8 @@ def run_ocr(
         # machine can least afford a leaked core.
         finished = ir.run_bounded(command, timeout, env=ocr_environment())
     except subprocess.TimeoutExpired:
+        if fresh.exists():
+            fresh.replace(fresh.with_name(fresh.name + ".failed"))
         raise ExtractError(
             f"ocrmypdf exceeded {timeout}s. Split the PDF, or raise --ocr-timeout."
         ) from None
@@ -436,13 +421,16 @@ def run_ocr(
     # conditions that still leave a perfectly usable file — exit 4 means qpdf
     # disliked the structure, which a book exported by some tools inherits from
     # its own source. What matters is whether the PDF opens and gained text.
-    usable, detail = _usable_ocr_output(destination)
-    if not usable:
-        tail = (completed.stderr or completed.stdout or "").strip().splitlines()[-8:]
-        raise ExtractError(
-            "ocrmypdf failed (exit %s): %s\n  %s"
-            % (completed.returncode, detail, "\n  ".join(tail))
-        )
+    try:
+        proof = make_proof(original, source, fresh, invocation, command, settings, len(inventory))
+        coverage = validate_output(original, fresh, page_roles=page_roles,
+            converter_source=source, proof=proof, settings=settings)
+    except (ExtractError, OSError) as error:
+        if fresh.exists():
+            fresh.replace(fresh.with_name(fresh.name + ".failed"))
+        raise ExtractError(f"ocrmypdf failed (exit {completed.returncode}): {error}") from None
+    detail = f"{coverage['characters']} characters across {len(coverage['pages'])} pages"
+    fresh.replace(destination)
 
     warning = None
     if completed.returncode not in (0, 2):
@@ -462,6 +450,7 @@ def run_ocr(
         "mode": "force-ocr" if kind == "scanned" else "skip-text",
         "exit": completed.returncode,
         "output": str(destination),
+        "coverage": coverage, "proof": proof,
     }
 
 
@@ -551,90 +540,10 @@ def _extract_native(args, out_dir: Path, asset_dir: Path,
         return read_docx(str(source), asset_dir,
                          lang_source=args.source_lang or "en", lang_target=args.target_lang)
 
-    probe = probe_pdf(source)
-    report["probe"] = probe
-    read_from = source
-
-    # Whether `cleaned.pdf` and `ocr.pdf` may be believed. They used to be
-    # reused because they *existed*, which is not a claim about what produced
-    # them: a corrected scan dropped in place of the old one, or a different
-    # --ocr-lang, produced a book whose text came from the previous file with
-    # the new file's provenance recorded against it.
-    state = runstate.RunState(out_dir)
-    inputs = ocr_inputs(args)
-    cache_stale, cache_reason = state.is_stale("extract", inputs)
-    reusable = not (cache_stale or args.force_ocr)
-    if cache_stale and state.recorded("extract") is not None:
-        report["cache"] = {"rebuilt": cache_reason}
-    #: True only once the text actually being read came out of an OCR pass.
-    #: Deriving this from ``report["ocr"]`` was wrong: the *skipped* branch
-    #: writes there too, so `--ocr off` claimed `from_ocr` in the book's own
-    #: provenance and put the extractor on OCR's loose size tolerances over a
-    #: perfectly good digital text layer.
-    from_ocr = False
-
-    # Strip a colour watermark before OCR: a stamp across a line of text costs
-    # recognition accuracy, and the cleaned raster is what OCR should read.
-    if args.clean_scan != "off" and probe["kind"] != "digital":
-        import scan_clean
-        try:
-            cleaned_pdf = out_dir / "cleaned.pdf"
-            if cleaned_pdf.exists() and reusable:
-                report["clean_scan"] = {"reused": str(cleaned_pdf)}
-            else:
-                report["clean_scan"] = scan_clean.clean_pdf(
-                    read_from, cleaned_pdf,
-                    force=args.clean_scan == "force",
-                    ghost_threshold=args.ghost_threshold,
-                )
-            if (report["clean_scan"].get("cleaned")
-                    or report["clean_scan"].get("reused")):
-                read_from = cleaned_pdf
-        except scan_clean.Unavailable as error:
-            report["clean_scan"] = {"skipped": str(error)}
-
-    if probe["kind"] != "digital" and args.ocr != "off":
-        ocr_pdf = out_dir / "ocr.pdf"
-        if ocr_pdf.exists() and reusable:
-            report["ocr"] = {"reused": str(ocr_pdf)}
-        else:
-            # Written beside the destination and promoted only once it is a
-            # readable PDF this attempt produced. The name is unique per attempt:
-            # a fixed `ocr.pdf.new` meant an interrupted run left a valid staging
-            # file that the *next* run — converter failed, nothing written — found,
-            # judged usable and promoted as its own output. Same directory, so the
-            # promotion stays an atomic rename on one filesystem.
-            quarantined = _quarantine_stale_staging(out_dir)
-            fresh = out_dir / f"ocr.{os.getpid():d}-{uuid.uuid4().hex[:8]}.pdf.new"
-            try:
-                report["ocr"] = run_ocr(
-                    read_from, fresh, kind=probe["kind"], language=args.ocr_lang,
-                    deskew=args.deskew, timeout=args.ocr_timeout,
-                )
-                report["ocr"]["probe_after"] = probe_pdf(fresh)
-                fresh.replace(ocr_pdf)
-            except BaseException:
-                # An incomplete attempt is kept out of the way rather than left
-                # where a later existence check could believe it.
-                if fresh.exists():
-                    fresh.replace(fresh.with_suffix(".new.failed"))
-                raise
-            if quarantined:
-                report["ocr"]["quarantined"] = quarantined
-        read_from = ocr_pdf
-        from_ocr = True
-    elif probe["kind"] != "digital":
-        report["ocr"] = {"skipped": "--ocr off", "warning":
-                         f"{len(probe['pages_without_text'])}+ pages have no text layer"}
-
-    from read_pdf import read_pdf
-    book = read_pdf(str(read_from), asset_dir,
-                    lang_source=args.source_lang or "en", lang_target=args.target_lang,
-                    max_pages=args.max_pages,
-                    ocr_text=from_ocr)
-    book["source"]["original_path"] = str(source)
-    book["source"]["probe"] = probe
-    return book
+    from ocrvalidation import read_native_pdf
+    return read_native_pdf(args, source, out_dir, asset_dir, report,
+                           probe_pdf=probe_pdf, ocr_inputs=ocr_inputs,
+                           run_ocr=run_ocr, quarantine=_quarantine_stale_staging)
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -646,6 +555,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--ocr", choices=["auto", "off"], default="auto",
                         help="auto (default) OCRs scanned/mixed PDFs; off never does")
     parser.add_argument("--ocr-lang", default="eng", help="Tesseract language code")
+    parser.add_argument("--ocr-page-roles", metavar="FILE",
+                        help="source-hash-bound text/image/blank role for every source page")
     parser.add_argument("--ocr-timeout", type=int, default=OCR_TIMEOUT_SECONDS)
     parser.add_argument("--force-ocr", action="store_true",
                         help="re-run OCR even if ocr.pdf already exists")

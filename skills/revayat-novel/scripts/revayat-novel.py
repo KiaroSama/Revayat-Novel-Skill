@@ -156,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     stage, rest = argv[0], argv[1:]
+    import runlog
+    runlog.stage(stage if stage in STAGES or stage == "doctor" else "unknown")
 
     if stage == "doctor":
         report = doctor()
@@ -163,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if report["ready"] else 1
 
     if stage not in STAGES:
+        runlog.event("refused", cause="unknown-stage")
         print(f"unknown stage {stage!r}; expected one of "
               f"{', '.join(sorted(STAGES))}, doctor", file=sys.stderr)
         return 2

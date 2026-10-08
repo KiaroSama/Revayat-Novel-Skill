@@ -116,9 +116,20 @@ jobs:
       # Runs every stage against a generated book, so a break anywhere in the
       # chain fails here even when each module's unit tests still pass.
       - name: extract -> chunk -> merge -> typography -> QA -> build -> verify
+        id: synthetic-pipeline
         env:
           PYTHONIOENCODING: utf-8
         run: python tests/e2e_pipeline.py
+
+      - name: Retain bounded synthetic failure evidence
+        if: ${{ failure() && steps.synthetic-pipeline.outcome == 'failure' && hashFiles('.pytest-tmp/e2e-artifact/manifest.json') != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synthetic-e2e-${{ matrix.os }}-${{ github.sha }}
+          path: .pytest-tmp/e2e-artifact/
+          retention-days: 7
+          if-no-files-found: error
+          include-hidden-files: false
 
   # The matrix above runs on bare runners, so every test that needs LibreOffice,
   # Tesseract, Ghostscript or OCRmyPDF skips itself there — by design, because a

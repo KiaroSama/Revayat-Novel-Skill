@@ -72,11 +72,14 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          set -o pipefail
+          status=0
           python -m pytest tests/test_renderqa.py tests/test_docqa.py \
-            tests/test_pagerun.py -q --timeout=1800 -rs | tee suite.log
-          if grep -qE '^SKIPPED.*(lays a document out|no converter)' suite.log; then
-            echo "::error::the render tier skipped on the job that exists to run it"
-            grep -E '^SKIPPED' suite.log || true
-            exit 1
-          fi
+            tests/test_page_lifecycle.py tests/test_page_acceptance.py \
+            tests/test_render_cache.py tests/test_review.py \
+            tests/test_renderer_processes.py tests/test_process_tree_cleanup.py \
+            tests/test_native_image_rendering.py \
+            -q --timeout=1800 -rs --junitxml=word-results.xml || status=$?
+          gate=0
+          python tests/skip_budget.py --junit word-results.xml --profile full || gate=$?
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
+          exit "$gate"

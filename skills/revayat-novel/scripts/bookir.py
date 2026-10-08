@@ -69,6 +69,9 @@ from markup import (  # noqa: F401
     verbatim_spans,
 )
 
+from bookstructure import validate_book  # noqa: F401
+import bookstructure
+
 SCHEMA = "revayat-novel/bookir@1"
 
 PT_PER_INCH = 72.0
@@ -79,7 +82,7 @@ TEXT_TYPES = frozenset(
     {"heading", "paragraph", "blockquote", "listitem", "caption", "verse"}
 )
 #: Every block type the builder knows how to render.
-BLOCK_TYPES = TEXT_TYPES | frozenset({"image", "pagebreak", "separator"})
+BLOCK_TYPES = TEXT_TYPES | frozenset({"image", "pagebreak", "separator", "table", "layout"})
 
 #: The three running-head slots Word keeps per section, in the order it lists
 #: them. A section names only the ones it defines and inherits the rest.
@@ -480,6 +483,9 @@ def decode_book(text: str) -> dict[str, Any]:
             for name in ("headers", "footers"):
                 if not isinstance(section.get(name, {}), dict):
                     raise ValueError(f"invalid section {name}")
+    problems = bookstructure.validate(book)
+    if problems:
+        raise ValueError("invalid book structure: " + "; ".join(problems))
     return book
 
 
@@ -574,69 +580,6 @@ def running_heads(book: dict[str, Any]) -> dict[str, dict[str, Any]]:
     before and after the prose on every page.
     """
     return {unit_id: piece for unit_id, _, piece, _ in iter_running_pieces(book)}
-
-
-def validate_book(book: dict[str, Any]) -> list[str]:
-    """Structural self-check. Returns human-readable problems (empty == good)."""
-    problems: list[str] = []
-    seen: set[str] = set()
-
-    for position, block in enumerate(book.get("blocks", [])):
-        where = block.get("id") or f"#{position}"
-        if not block.get("id"):
-            problems.append(f"block {where}: missing id")
-        elif block["id"] in seen:
-            problems.append(f"block {where}: duplicate id")
-        else:
-            seen.add(block["id"])
-
-        if block.get("type") not in BLOCK_TYPES:
-            problems.append(f"block {where}: unknown type {block.get('type')!r}")
-        if block.get("type") == "image" and not block.get("asset"):
-            problems.append(f"block {where}: image without asset path")
-        if block.get("type") == "heading":
-            level = block.get("level")
-            if not isinstance(level, int) or not 1 <= level <= 6:
-                problems.append(f"block {where}: heading level must be 1..6, got {level!r}")
-
-    footnote_ids: set[str] = set()
-    for note in book.get("footnotes", []):
-        note_id = note.get("id", "?")
-        if note_id in footnote_ids:
-            problems.append(f"footnote {note_id}: duplicate id")
-        footnote_ids.add(note_id)
-        if note.get("anchor_block") and note["anchor_block"] not in seen:
-            problems.append(f"footnote {note_id}: anchor block {note['anchor_block']} not found")
-
-    # A repeated running-head id is the "silently disappeared" shape: merge
-    # resolves an id to one piece, so the second one's translation lands on the
-    # first and the head it was written for prints in the source language.
-    running: set[str] = set()
-    for unit_id, _, _, section in iter_running_pieces(book):
-        if unit_id in running:
-            problems.append(f"running head {unit_id}: duplicate id "
-                            f"(section {section.get('index')})")
-        running.add(unit_id)
-
-    # Every token, not only the canonical ones. A `tr-01` a translator wrote is
-    # legitimate in transit and a defect in a finished book, and a token naming
-    # nothing is the same defect spelled differently — but scanning with the
-    # canonical pattern could see neither, so the one check whose job is to
-    # notice found nothing to report and the marker printed.
-    for block in iter_text_blocks(book):
-        for side in ("text", "target"):
-            value = block.get(side)
-            if not value:
-                continue
-            # Parsed, not scanned, for the reason `footnote_refs` documents: a
-            # marker inside a code span is an example of the notation. `tr-NN`
-            # is still included, because one surviving into a finished book is
-            # exactly the defect this check exists for.
-            for ref in footnote_refs(value, include_local=True):
-                if ref not in footnote_ids:
-                    problems.append(
-                        f"block {block['id']} ({side}): unknown footnote ref {ref}")
-    return problems
 
 
 # --------------------------------------------------------------------------- #

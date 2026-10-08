@@ -118,6 +118,10 @@ class Builder(BodyWriter):
         self.bookmarks = ooxml.Bookmarks()
         self.notes_by_id = {n["id"]: n for n in book.get("footnotes", [])}
         self.used_notes: set[str] = set()
+        import bookstructure
+        problems = bookstructure.validate(book)
+        if problems:
+            raise ValueError('invalid book structure: ' + '; '.join(problems))
         self.warnings: list[str] = []
         self.toc_entries: list[tuple[str, str, int]] = []
         self.sections = book.get("sections") or []
@@ -277,6 +281,8 @@ class Builder(BodyWriter):
         run = paragraph.add_run(text)
         run.bold = bool(span.get("bold"))
         run.italic = bool(span.get("italic"))
+        run.font.cs_bold = bool(span.get('bold'))
+        run.font.cs_italic = bool(span.get('italic'))
         if latin:
             run.font.name = self.options.latin_font
         ooxml.set_run_direction(run, rtl=self.options.rtl and not latin)
@@ -441,6 +447,8 @@ class Builder(BodyWriter):
                     ooxml.add_tab(paragraph, rtl=self.options.rtl)
                 elif piece.get("field"):
                     ooxml.add_field(paragraph, piece["field"], rtl=self.options.rtl)
+                elif 'controls' in piece:
+                    self.write_markup(paragraph, ir.escape_markup(piece['controls']))
                 else:
                     self._running_text(paragraph, piece, part)
             if line.get("align"):

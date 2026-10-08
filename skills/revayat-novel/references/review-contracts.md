@@ -22,6 +22,19 @@ before a literal line beginning `??`, `++`, `!!`, `@@`, `~` plus whitespace
 or tabs after `<!--`. Escape an existing escape again; reading removes exactly one layer.
 Ordinary diagnostic prose and unrelated HTML comments remain payload.
 
+## Current complete visual evidence
+
+Acceptance rechecks live worksheet dependencies, including glossary voice, aliases
+and neighbour context, before writing accepted state. Zero-unit structural pages
+need no fabricated translation response. Authored structure is included in the
+`page5`, `page-request2` and `units5` digest formulas; legacy approvals require
+rebuilding/revalidation and are never relabeled as current.
+
+Each converter invocation uses fresh staging. Old PDFs and cache stamps survive
+failed conversion; only fresh readable output is promoted. Expected raster sheets
+stay ordered even when a current render fails. Missing current sheets make visual
+approval and delivery unverified; an old PNG or all-yes answer cannot replace them.
+
 ## Explicit review states
 
 | Fluency state | Meaning | Delivery |
@@ -94,8 +107,10 @@ Lock files persist as diagnostics; do not remove them based on age. Recovery own
 the same lock and validates the journal before reconciling files. Third-state
 edits are preserved and require a decision. See [troubleshooting.md](troubleshooting.md).
 
-Current source tags are `units4:` and `page-request1:`; current review revisions
-are `meaning3:` and `fluency3:`. Older source digests require rebuilding. Older
+Current source tags are `units5:` and `page-request2:`; current page visual
+identity is `page5:` and current review revisions are `meaning4:` and `fluency4:`.
+These formulas include relevant authored table/layout structure as well as prose.
+Older source digests require rebuilding or explicit revalidation. Older
 review sidecars cannot approve delivery; generate and record fresh complete
 reviews. Valid old repair history is carried forward, never reset.
 

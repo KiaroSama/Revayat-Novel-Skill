@@ -16,8 +16,31 @@ matters. Running OCR over pages that already carry good text replaces accurate
 characters with recognised ones — strictly worse. `--skip-text` leaves those
 pages alone and only works on the images.
 
-Deskew is only applied to fully scanned books. It rewrites the page raster, so
-on a mixed book it would damage the pages that were fine.
+Deskew is only applied to fully scanned books. Any actual native text selects
+skip-text mode, even when a short title falls below the classification threshold.
+Only proven OCR pages suppress unreliable font emphasis; native pages retain it.
+
+## Source-complete OCR evidence
+
+A readable PDF containing some text is not complete OCR. Before promotion or cache
+reuse, verify source/output page count, geometry, native text and available drawn
+image anchors. A failed attempt preserves the previous final artifact. A usable
+nonzero converter exit is accepted only when the artifact independently passes.
+
+A silent raster whose purpose is unknown requires `--ocr-page-roles FILE`. The
+UTF-8 JSON envelope has exactly `version: 1`, `source_sha256` of the original PDF,
+and `pages`, an exhaustive ordered list of `{page: N, role: "text"|"image"|"blank"}`.
+Page numbers are one-based. Native text cannot be relabeled image/blank; a blank
+role cannot conceal a drawn image. Approved plates and genuinely blank pages need
+no fabricated OCR characters. `--ocr off` may retain a partial extraction, but its
+unknown coverage blocks complete quality approval and delivery.
+
+Fresh controlled OCR records `ocr.pdf.proof.json`, binding original/converter/output
+hashes, options, roles, engine and invocation. Changed deskew rasters cannot prove
+pixel identity. Only the verified current-interpreter OCRmyPDF 17.13.0 indexed-graft
+path permits the explicitly weaker `engine-indexed` mapping evidence; unsupported
+engines require independent anchors or refuse. This is not semantic OCR accuracy
+or a universal proof against arbitrary reordered, fully changed equal-size rasters.
 
 ## Image fidelity
 
@@ -31,8 +54,16 @@ Images then come out of the PDF via `Document.extract_image`, which returns the
 Word file is byte-identical to the picture in the book, and `qa check` verifies
 that with a SHA-256 recorded at extraction time.
 
-Physical geometry comes from `page.get_image_rects`, so a 4.2 cm illustration
-is placed at 4.2 cm rather than stretched to the text width.
+Physical geometry comes from actual displayed occurrences, not the resource list.
+Repeated draws share original asset bytes but keep distinct bounding boxes,
+transforms and reading order; unused resources are not illustrations. Native Word
+publication retains supported orthogonal rotation/reflection without raster
+rewriting and refuses unsupported shear rather than silently changing its shape.
+Operator-approved image pages retain their artwork even when OCR recognizes a caption.
+MinerU replaces only explicitly verified scan rasters, never arbitrary native plates.
+Large retained OCR rasters with ambiguous placement carry `unknown-page-raster`;
+MinerU retains those originals and reports `replacement_uncertain_pages` rather
+than claiming a resolved replacement or guessing that the raster is disposable.
 
 **Page geometry is a census, not one number.** `book["page"]` reports the
 dominant trim, and `book["source"]["page_geometry"]["pages"]` names every page

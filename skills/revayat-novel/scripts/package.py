@@ -33,6 +33,7 @@ questions, against the IR's own expectations.
 
 from __future__ import annotations
 
+import math
 import re
 import zipfile
 from collections import Counter
@@ -255,7 +256,19 @@ def _check_image_geometry(package: opc.Package, book: dict[str, Any] | None,
             by_digest.setdefault(block["sha256"], block)
 
     limit = _text_width_pt(book) * WIDTH_TOLERANCE
+    pictures = [node for node in package.xml('word/document.xml').iter()
+                if node.tag in {opc.qname('wp', 'inline'), opc.qname('wp', 'anchor')}]
     for position, (relationship_id, cx, cy) in enumerate(placed, start=1):
+        if position <= len(pictures):
+            transform = next(pictures[position - 1].iter(opc.qname('a', 'xfrm')), None)
+            if transform is not None:
+                try:
+                    angle = int(transform.get('rot', '0')) / 60000 * math.pi / 180
+                    cx, cy = (abs(cx * math.cos(angle)) + abs(cy * math.sin(angle)),
+                              abs(cx * math.sin(angle)) + abs(cy * math.cos(angle)))
+                except ValueError:
+                    report.add(ERROR, 'picture-size-invalid', f'picture {position}', 'native rotation is invalid')
+                    continue
         where = f"picture {position}"
         if cx <= 0 or cy <= 0:
             report.add(ERROR, "picture-size-invalid", where,
@@ -283,6 +296,48 @@ def _check_image_geometry(package: opc.Package, book: dict[str, Any] | None,
                        f"drawn at {drawn:.3f} and the source is {wanted:.3f}: the "
                        f"illustration is squashed, which preserving the aspect "
                        f"ratio cannot produce")
+
+
+def _check_image_transforms(package, book, report):
+    """Native rotation/reflection is occurrence identity, not the media bytes."""
+    if book is None:
+        return
+    pictures = [node for node in package.xml('word/document.xml').iter()
+                if node.tag in {opc.qname('wp', 'inline'), opc.qname('wp', 'anchor')}]
+    expected = [b for b in book.get('blocks') or [] if b['type'] == 'image']
+    for index, (block, picture) in enumerate(zip(expected, pictures), 1):
+        matrix = block.get('transform')
+        if matrix is None:
+            continue
+        try:
+            a, b, c, d, e, f = map(float, matrix)
+            width, height = math.hypot(a, b), math.hypot(c, d)
+            if not all(math.isfinite(v) for v in (a, b, c, d, e, f)) or width <= 0 or height <= 0 or abs(a*c + b*d) > width*height*1e-6:
+                raise ValueError('unsupported affine')
+            xfrm = next(picture.iter(opc.qname('a', 'xfrm')))
+            angle = int(xfrm.get('rot', '0')) / 60000 * math.pi / 180
+            flip_h = -1 if xfrm.get('flipH', '0') in {'1', 'true'} else 1
+            flip_v = -1 if xfrm.get('flipV', '0') in {'1', 'true'} else 1
+            native = xfrm.find(opc.qname('a', 'ext'))
+            w, h = int(native.get('cx')) / EMU_PER_PT, int(native.get('cy')) / EMU_PER_PT
+            observed = (math.cos(angle)*w*flip_h, math.sin(angle)*w*flip_h,
+                        -math.sin(angle)*h*flip_v, math.cos(angle)*h*flip_v)
+            scale = min(1.0, _text_width_pt(book) / float(block['width_pt']))
+            if any(abs(v - wanted * scale) > 0.05 for v, wanted in zip(observed, (a, b, c, d))):
+                raise ValueError('native image orientation disagrees')
+            extent = picture.find(opc.qname('wp', 'extent'))
+            host_w, host_h = int(extent.get('cx')) / EMU_PER_PT, int(extent.get('cy')) / EMU_PER_PT
+            if abs(host_w - w) > 0.05 or abs(host_h - h) > 0.05:
+                raise ValueError('native inline host does not match unrotated picture')
+            effect = picture.find(opc.qname('wp', 'effectExtent'))
+            dx = max(0.0, (abs(observed[0]) + abs(observed[2]) - host_w) / 2)
+            dy = max(0.0, (abs(observed[1]) + abs(observed[3]) - host_h) / 2)
+            if any(int(effect.get(edge, '0') if effect is not None else '0') / EMU_PER_PT + 0.01 < value
+                   for edge, value in [('l', dx), ('r', dx), ('t', dy), ('b', dy)]):
+                raise ValueError('native inline rotation overflow is not reserved')
+        except (ValueError, TypeError, AttributeError, StopIteration):
+            report.add(ERROR, 'image-transform-mismatch', f'picture {index}',
+                       'native image rotation, reflection or pre-rotation dimensions differ from source occurrence')
 
 
 def _source_aspect(block: dict[str, Any]) -> float | None:
@@ -379,6 +434,145 @@ def _check_cell_termination(package: opc.Package, report: Report) -> None:
                        "table cell has no final native paragraph; rebuild without deleting its required terminator")
 
 
+def _check_authored_structure(package, book, report):
+    """Compare declared native topology and zero-unit layout with actual XML."""
+    if book is None:
+        return
+    import bookstructure
+    problems = bookstructure.validate(book)
+    if problems:
+        report.add(ERROR, 'book-structure-invalid', 'book', '; '.join(problems))
+        return
+    root = package.xml('word/document.xml')
+    body = root.find('w:body', opc.NS)
+    if body is None:
+        return
+    actual, layouts, sequence = [], [], []
+    relationships = package.relationships('word/document.xml')
+    skipped = set()
+    children = list(body)
+    prefix = 0
+    for field, style_id in [('title', 'Title'), ('author', 'Subtitle')]:
+        text = (book.get('meta') or {}).get(field + '_target') or (book.get('meta') or {}).get(field) or ''
+        if not text.strip() or prefix >= len(children):
+            continue
+        node = children[prefix]
+        style = node.find('w:pPr/w:pStyle', opc.NS)
+        if opc.text_of(node) == ir.plain_text(text) and style is not None and style.get(opc.qname('w', 'val')) in {style_id, 'Normal'}:
+            skipped.add(node)
+            prefix += 1
+    for index, node in enumerate(children):
+        if any((part.text or '').strip().startswith('TOC ') for part in node.iter(opc.qname('w', 'instrText'))):
+            skipped.add(node)
+            if index == prefix + 1:
+                skipped.add(children[prefix])
+
+    def walk(owner, parent=None, row=None, cell=None):
+        for node in owner:
+            if node in skipped:
+                continue
+            if node.tag == opc.qname('w', 'p'):
+                text = opc.text_of(node)
+                excluded = (node.find('w:pPr/w:sectPr', opc.NS) is not None or
+                            any(n.tag == opc.qname('w', 'drawing') or
+                                n.tag in {opc.qname('w', 'fldChar'), opc.qname('w', 'instrText'),
+                                          opc.qname('w', 'footnoteReference'), opc.qname('w', 'endnoteReference')} or
+                                n.tag == opc.qname('w', 'br') and n.get(opc.qname('w', 'type'), 'textWrapping') != 'textWrapping'
+                                for n in node.iter()))
+                terminal = parent is not None and node is owner[-1] and not text and not excluded
+                if not text.strip() and not excluded and not terminal:
+                    layouts.append((parent, row, cell, text))
+                    sequence.append(('layout', parent, row, cell, text))
+                elif text.strip():
+                    sequence.append(('text', parent, row, cell, text))
+                for blip in node.iter(opc.qname('a', 'blip')):
+                    target = relationships.get(blip.get(opc.qname('r', 'embed')), {}).get('part')
+                    sequence.append(('image', parent, row, cell,
+                                     ir.sha256_bytes(package.read(target)) if target else 'absent'))
+            elif node.tag == opc.qname('w', 'tbl'):
+                index = len(actual)
+                sequence.append(('table', parent, row, cell, index))
+                rows = node.findall('w:tr', opc.NS)
+                columns = len(node.findall('w:tblGrid/w:gridCol', opc.NS))
+                record = {'rows': len(rows), 'columns': columns, 'parent': parent,
+                          'parent_row': row, 'parent_cell': cell, 'cells': []}
+                actual.append(record)
+                opened = {}
+                for r, tr in enumerate(rows, 1):
+                    before = tr.find('w:trPr/w:gridBefore', opc.NS)
+                    c = int(before.get(opc.qname('w', 'val'), '0')) + 1 if before is not None else 1
+                    following = {}
+                    for tc in tr.findall('w:tc', opc.NS):
+                        span = tc.find('w:tcPr/w:gridSpan', opc.NS)
+                        width = int(span.get(opc.qname('w', 'val'), '1')) if span is not None else 1
+                        merge = tc.find('w:tcPr/w:vMerge', opc.NS)
+                        if merge is not None and merge.get(opc.qname('w', 'val')) != 'restart':
+                            if c not in opened or opened[c]['col_span'] != width:
+                                raise ValueError('invalid native vertical table continuation')
+                            opened[c]['row_span'] += 1
+                            following[c] = opened[c]
+                        else:
+                            spec = {'row': r, 'cell': c, 'row_span': 1, 'col_span': width}
+                            record['cells'].append(spec)
+                            if merge is not None:
+                                following[c] = spec
+                            walk(tc, index, r, c)
+                        c += width
+                    opened = following
+
+    try:
+        walk(body)
+    except (ValueError, TypeError):
+        report.add(ERROR, 'table-structure-invalid', 'word/document.xml', 'native table grid is invalid')
+        return
+    if 'tables' in book:
+        identities = {r['id']: i for i, r in enumerate(book['tables'])}
+        expected = [{'rows': r['rows'], 'columns': r['columns'],
+                     'cells': [{key: c[key] for key in bookstructure.CELL_FIELDS} for c in r['cells']],
+                     'parent': identities.get(r.get('parent_table')),
+                     'parent_row': r.get('parent_row'), 'parent_cell': r.get('parent_cell')}
+                    for r in book['tables']]
+        if expected != actual:
+            report.add(ERROR, 'table-structure-mismatch', 'word/document.xml',
+                       'native table grids, merges, order or immediate cell ownership differ from source inventory')
+    wanted_layouts = [(next((i for i, r in enumerate(book.get('tables') or []) if r['id'] == b.get('table')), None),
+                       b.get('row'), b.get('cell'), b['controls'])
+                      for b in book.get('blocks') or [] if b['type'] == 'layout']
+    # Only each cell's final required empty paragraph is excluded above.
+    if wanted_layouts != layouts:
+        report.add(ERROR, 'layout-structure-mismatch', 'word/document.xml',
+                   'authored empty/control-only paragraph sequence differs from the book')
+    identities = {r['id']: i for i, r in enumerate(book.get('tables') or [])}
+    expected_sequence = []
+    for block in book.get('blocks') or []:
+        kind = block['type']
+        owner = identities.get(block.get('table'))
+        row, cell = block.get('row'), block.get('cell')
+        if kind == 'table':
+            expected_sequence.append(('table', identities.get(block.get('parent_table')),
+                                      block.get('parent_row'), block.get('parent_cell'), owner))
+        elif kind == 'layout':
+            expected_sequence.append(('layout', owner, row, cell, block['controls']))
+        elif kind in ir.TEXT_TYPES or kind == 'separator':
+            text = '❖' if kind == 'separator' else ir.plain_text(block.get('target') or block.get('text') or '').replace('\r\n', '\n').replace('\r', '\n')
+            if text.strip():
+                expected_sequence.append(('text', owner, row, cell, text))
+        elif kind == 'image':
+            expected_sequence.append(('image', owner, row, cell, block.get('sha256')))
+            caption = ir.plain_text(block.get('target_alt') or block.get('alt') or '')
+            if caption.strip() and ('text', owner, row, cell, caption) in sequence:
+                expected_sequence.append(('text', owner, row, cell, caption))
+    if 'tables' not in book:
+        # Legacy grids lack source placement events. Keep their existing package
+        # contracts; the new exact sequence claim needs authoritative topology.
+        sequence = [event for event in sequence if event[0] != 'table']
+        sequence = [(kind, None, None, None, value) for kind, _, _, _, value in sequence]
+        expected_sequence = [(kind, None, None, None, value) for kind, _, _, _, value in expected_sequence]
+    if expected_sequence != sequence:
+        report.add(ERROR, 'body-structure-order-mismatch', 'word/document.xml',
+                   'interleaved native body prose, illustrations, tables or layout differ from book order')
+
+
 #: The parts a Word package cannot open without, and the root each must have.
 REQUIRED = (
     ("[Content_Types].xml", ("ct", "Types")),
@@ -424,7 +618,10 @@ def check_docx(path: Path, book: dict[str, Any] | None = None) -> Report:
             _check_footnotes(package, book, report)
             _check_link_controls(package, book, report)
             _check_cell_termination(package, report)
+            if book is not None and ('tables' in book or any(b['type'] == 'layout' for b in book.get('blocks') or [])):
+                _check_authored_structure(package, book, report)
             _check_image_geometry(package, book, report)
+            _check_image_transforms(package, book, report)
         except opc.Damaged as damaged:
             report.add(ERROR, damaged.code, str(path), damaged.detail)
             return report

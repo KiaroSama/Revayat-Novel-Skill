@@ -253,6 +253,8 @@ def text_of(element: ElementTree.Element) -> str:
     changes, so the text of a paragraph is never one node's ``.text``.
     """
     return "".join(node.text or "" if node.tag == qname("w", "t") else
+                   "‑" if node.tag == qname('w', 'noBreakHyphen') else
+                   "­" if node.tag == qname('w', 'softHyphen') else
                    "\t" if node.tag in {qname("w", "tab"), qname("w", "ptab")} else
                    "\n" if node.tag == qname("w", "cr") or
                    (node.tag == qname("w", "br") and node.get(qname("w", "type"), "textWrapping") == "textWrapping") else ""

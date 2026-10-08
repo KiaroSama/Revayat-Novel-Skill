@@ -301,14 +301,19 @@ def fix_text(text: str, options: Options | None = None) -> str:
     if not text:
         return text
     options = options or Options()
-    spans = ir.parse_markup(text)
+    start = len(text) - len(text.lstrip())
+    end = len(text.rstrip())
+    if start >= end:
+        return text
+    leading, trailing = text[:start], text[end:]
+    spans = ir.parse_markup(text[start:end])
     if options.quotes:
         _pair_quotes(spans)
     for span in spans:
         if span["verbatim"] or span["footnote"]:
             continue
         span["text"] = fix_prose(span["text"], options)
-    return ir.render_spans(spans).strip()
+    return leading + ir.render_spans(spans) + trailing
 
 
 # --------------------------------------------------------------------------- #
@@ -326,7 +331,7 @@ _BARE_COMPARATIVE = re.compile(rf"[{PERSIAN_LETTER}]{{2,}} +تر\b")
 def lint_text(text: str) -> list[dict[str, str]]:
     """Problems a fix pass cannot decide on its own."""
     issues: list[dict[str, str]] = []
-    plain = ir.plain_text(text or "")
+    plain = published.prose(text or "")
     if not plain.strip():
         return issues
 

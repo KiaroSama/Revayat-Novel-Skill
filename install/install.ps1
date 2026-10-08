@@ -9,7 +9,8 @@ param(
     [ValidateSet('user','project')]
     [string] $Scope = 'user',
     [string] $Path = (Get-Location).Path,
-    [switch] $Force
+    [switch] $Force,
+    [switch] $Status
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -26,6 +27,7 @@ foreach ($name in 'python3','python','py') {
     try {
         $arguments = @($prefix) + @($engine, '--agent', $Agent, '--scope', $Scope, '--path', $Path)
         if ($Force) { $arguments += '--force' }
+        if ($Status) { $arguments += '--status' }
         & $command.Source @arguments
         $code = $LASTEXITCODE
         exit $code

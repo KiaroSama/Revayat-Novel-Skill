@@ -71,7 +71,8 @@ def page_book(book: dict[str, Any], page: int) -> dict[str, Any]:
     job = next((j for j in pagerun.owners(book) if j["page"] == page), None)
     if job is None:
         return {**{k: v for k, v in book.items()
-                   if k not in ("blocks", "footnotes", *WHOLE_BOOK_FURNITURE)},
+                   if k not in ("blocks", "footnotes", "tables", *WHOLE_BOOK_FURNITURE)},
+                **({"tables": []} if "tables" in book else {}),
                 "blocks": [], "footnotes": [], "page": dict(book.get("page") or {})}
 
     lookup = ir.blocks_by_id(book)
@@ -89,6 +90,9 @@ def page_book(book: dict[str, Any], page: int) -> dict[str, Any]:
     preview = {k: v for k, v in book.items()
                if k not in ("blocks", "footnotes", *WHOLE_BOOK_FURNITURE)}
     preview["blocks"] = blocks
+    if "tables" in book:
+        import bookstructure
+        preview["tables"] = bookstructure.select_tables(book, blocks)
     preview["footnotes"] = notes
     # The geometry this page was measured at, not the book's first page's - a
     # book with a different trim partway through is reported, not averaged.

@@ -146,7 +146,9 @@ def test_the_import_is_a_valid_book(imported):
 def test_table_cells_survive_and_know_where_they_came_from(imported):
     """They used to vanish: `document.paragraphs` never descends into a table."""
     book, _ = imported
-    cells = [b for b in book["blocks"] if b.get("table")]
+    cells = [b for b in book["blocks"] if b.get("table") and b["type"] in ir.TEXT_TYPES]
+    assert len(book["tables"]) == 1
+    assert [b["table"] for b in book["blocks"] if b["type"] == "table"] == [book["tables"][0]["id"]]
     assert IN_TABLE in _all_text(book), "the table's text was dropped"
     assert len(cells) == 4
     assert {(b["row"], b["cell"]) for b in cells} == {(1, 1), (1, 2), (2, 1), (2, 2)}
@@ -173,7 +175,7 @@ def test_linked_text_survives(imported):
 
 def test_emphasis_survives_as_markup(imported):
     book, _ = imported
-    prose = next(b for b in book["blocks"] if "Ordinary prose" in (b["text"] or ""))
+    prose = next(b for b in book["blocks"] if "Ordinary prose" in (b.get("text") or ""))
     assert "**bold**" in prose["text"] and "*italic*" in prose["text"]
     assert ir.emphasis_signature(prose["text"])[:2] == (1, 1)
 
@@ -408,7 +410,7 @@ def test_a_merged_cell_is_read_once_not_once_per_position(tmp_path):
     twice — the reader sees the same sentence in two boxes.
     """
     book = read_docx(str(_merged_docx(tmp_path)), tmp_path / "assets")
-    blocks = [b for b in book["blocks"] if b.get("table") == "t0000"]
+    blocks = [b for b in book["blocks"] if b.get("table") == "t0000" and b["type"] in ir.TEXT_TYPES]
 
     # Counted by grid position, not by block: `merge()` concatenates the
     # paragraphs of the cells it joins, so one merged cell legitimately yields
@@ -423,7 +425,7 @@ def test_a_merged_cell_is_read_once_not_once_per_position(tmp_path):
 def test_the_span_of_a_merge_is_recorded(tmp_path):
     book = read_docx(str(_merged_docx(tmp_path)), tmp_path / "assets")
     spans = {(b["row"], b["cell"]): (b.get("row_span", 1), b.get("col_span", 1))
-             for b in book["blocks"] if b.get("table") == "t0000"}
+             for b in book["blocks"] if b.get("table") == "t0000" and b["type"] in ir.TEXT_TYPES}
     assert spans[(1, 1)] == (1, 2), "the horizontal merge was lost"
     assert spans[(2, 1)] == (2, 1), "the vertical merge was lost"
     assert (3, 1) not in spans, "the covered position was read as its own cell"
@@ -433,7 +435,7 @@ def test_a_table_inside_a_cell_is_not_dropped(tmp_path):
     """Nested tables are not in `iter_inner_content`; they used to vanish."""
     book = read_docx(str(_merged_docx(tmp_path)), tmp_path / "assets")
     nested = [b for b in book["blocks"]
-              if b.get("table", "").startswith("t0000-")]
+              if b.get("table", "").startswith("t0000-") and b["type"] in ir.TEXT_TYPES]
     assert nested, "the nested table's text was lost"
     assert "nested cell text" in " ".join(b["text"] for b in nested)
 

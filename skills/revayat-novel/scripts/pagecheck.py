@@ -110,15 +110,16 @@ def _flat(text: str) -> str:
 
 # --------------------------------------------------------------------------- #
 
-def expectations(book: dict[str, Any], page: int) -> dict[str, Any]:
+def expectations(book: dict[str, Any], page: int, *, context=None) -> dict[str, Any]:
     """What the translated page must show, taken from the IR.
 
     Uses the same ownership rule as the page jobs, so what is checked for on a
     page is exactly what was sent out to be translated for it — a block that
     ran on from the previous page is that page's to prove, not this one's.
     """
-    lookup = ir.blocks_by_id(book)
-    job = next((j for j in pagerun.owners(book) if j["page"] == page), None)
+    lookup = context["lookup"] if context is not None else ir.blocks_by_id(book)
+    jobs = context["jobs"] if context is not None else pagerun.owners(book)
+    job = next((j for j in jobs if j["page"] == page), None)
     if job is None:
         return {"page": page, "setup": dict(book.get("page") or {}),
                 "texts": [], "images": [], "translatable": 0}

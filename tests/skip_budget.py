@@ -116,6 +116,8 @@ def check(junit: Path, profile: str) -> list[str]:
     # catching: an import error at collection time empties the whole suite.
     if total == 0:
         return [f"{junit} records no tests at all; the run collected nothing"]
+    if total != passed + len(skips):
+        problems.append("junit records test failures or errors; the run did not pass")
 
     grouped: dict[str, list[str]] = {}
     for where, message in skips:
@@ -160,7 +162,11 @@ def main(argv: list[str] | None = None) -> int:
               f"so its skips cannot be checked")
         return 2
 
-    problems = check(args.junit, args.profile)
+    try:
+        problems = check(args.junit, args.profile)
+    except (OSError, ET.ParseError, UnicodeError, ValueError):
+        print("::error::invalid junit document; structured test coverage cannot be checked")
+        return 2
     for problem in problems:
         print(f"::error::{problem}")
     return 1 if problems else 0

@@ -32,8 +32,12 @@ from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
 import bookir as ir
+from docxtables import (  # noqa: F401
+    column_span, _vertical_merge, _continuation_is_empty, table_cells,
+)
 from docxnotes import NOTE_PARTS, note_key, read_notes
 from docxfurniture import running_of
+from docxproperties import emphasis_spans
 from docxfurniture import (  # noqa: F401
     _pt, section_geometry, _column_count, _alignment, _running_runs,
     _running_pieces, _run_style,
@@ -45,117 +49,6 @@ EMU_PER_PT = ir.EMU_PER_PT
 
 _HEADING_STYLE = re.compile(r"^\s*heading\s*(\d)\s*$", re.I)
 _LIST_STYLE = re.compile(r"list\s*(bullet|number|paragraph)", re.I)
-
-
-def column_span(tc) -> int:
-    """How many grid columns this ``w:tc`` covers, from ``w:gridSpan``."""
-    properties = tc.find(qn("w:tcPr"))
-    if properties is None:
-        return 1
-    grid = properties.find(qn("w:gridSpan"))
-    if grid is None:
-        return 1
-    try:
-        width = int(grid.get(qn("w:val")))
-    except (TypeError, ValueError) as error:
-        raise ValueError("invalid DOCX table grid span") from error
-    if width < 1:
-        raise ValueError("invalid DOCX table grid span")
-    return width
-
-
-def _vertical_merge(tc) -> str | None:
-    """``"restart"``, ``"continue"``, or ``None`` when the cell is not merged."""
-    properties = tc.find(qn("w:tcPr"))
-    if properties is None:
-        return None
-    merge = properties.find(qn("w:vMerge"))
-    if merge is None:
-        return None
-    # A bare <w:vMerge/> means continue; only "restart" opens a new span.
-    return "restart" if merge.get(qn("w:val")) == "restart" else "continue"
-
-
-def _continuation_is_empty(tc) -> bool:
-    """Allow generated empty paragraphs, never discard authored live content."""
-    for child in tc:
-        if child.tag == qn("w:tcPr"):
-            continue
-        if child.tag != qn("w:p"):
-            return False
-        for item in child:
-            if item.tag == qn("w:pPr"):
-                continue
-            if item.tag != qn("w:r"):
-                return False
-            for part in item:
-                if part.tag == qn("w:rPr"):
-                    continue
-                if part.tag != qn("w:t") or part.text:
-                    return False
-    return True
-
-
-def table_cells(table) -> list[dict[str, Any]]:
-    """Every distinct cell of a table, once, with its position and span.
-
-    Walks ``w:tr``/``w:tc`` rather than ``row.cells``. Two reasons, and the
-    second one is the reason this is not shorter:
-
-    ``row.cells`` *expands* merges — a cell spanning two columns comes back
-    twice, and a vertically merged one comes back on every row it covers. Since
-    every cell here becomes its own worksheet unit, that made a merged cell's
-    sentence get translated twice and printed twice.
-
-    And de-duplicating that expansion by object identity does not work.
-    `cell._tc` hands back a fresh lxml proxy on each access, and CPython reuses
-    the `id()` of a freed one — measured on a 3x3 grid, three different cells
-    reported the same id and a fourth reported one that had never been seen.
-    Walking the XML gives each cell exactly once by construction, so there is
-    nothing to de-duplicate.
-
-    Returns ``{"tc", "row", "cell", "row_span", "col_span"}`` with 1-based
-    ``row``/``cell`` counted in grid columns.
-    """
-    from docx.table import _Cell
-
-    found: list[dict[str, Any]] = []
-    # Grid column -> the record of the cell currently open there, so a
-    # `continue` row extends the span of the cell that started it.
-    open_at: dict[int, dict[str, Any]] = {}
-
-    for row_number, tr in enumerate(table._tbl.findall(qn("w:tr")), start=1):
-        properties = tr.find(qn("w:trPr"))
-        before = properties.find(qn("w:gridBefore")) if properties is not None else None
-        try:
-            column = int(before.get(qn("w:val"))) if before is not None else 0
-        except (TypeError, ValueError) as error:
-            raise ValueError("invalid DOCX table leading grid offset") from error
-        if column < 0:
-            raise ValueError("invalid DOCX table leading grid offset")
-        following: dict[int, dict[str, Any]] = {}
-        for tc in tr.findall(qn("w:tc")):
-            width = column_span(tc)
-            merge = _vertical_merge(tc)
-            if merge == "continue":
-                record = open_at.get(column)
-                if record is None or record["col_span"] != width:
-                    raise ValueError("invalid DOCX table vertical merge continuation")
-                if not _continuation_is_empty(tc):
-                    raise ValueError("populated DOCX table vertical merge continuation")
-                record["row_span"] += 1
-                following[column] = record
-            else:
-                record = {"tc": _Cell(tc, table), "row": row_number,
-                          "cell": column + 1, "row_span": 1, "col_span": width}
-                found.append(record)
-                if merge == "restart":
-                    following[column] = record
-            column += width
-        # Only a restarted/continued span in the immediately preceding row is
-        # eligible. Ordinary or absent cells must never seed a later merge.
-        open_at = following
-    return found
 
 
 def iter_runs(paragraph: Paragraph) -> Iterator[Run]:
@@ -356,6 +249,7 @@ def read_docx(
         })
 
     blocks: list[dict[str, Any]] = []
+    book['tables'] = []
     footnotes: list[dict[str, Any]] = []
     seen_assets: dict[str, str] = {}
     counter = 0
@@ -437,7 +331,9 @@ def read_docx(
 
         reference_kinds = {qn(reference): kind for kind, _, _, reference in NOTE_PARTS}
         for run, active_link in linked_runs():
-            bold, italic = _run_style(run)
+            def styled(value):
+                for text, bold, italic in emphasis_spans(run, value):
+                    append(text, bold, italic)
             # A run may interleave text, pictures, breaks and note references.
             # Neither aggregate run.text nor a single first-picture lookup can
             # express that sequence; consume each child exactly once instead.
@@ -496,22 +392,24 @@ def read_docx(
                     flush()
                     add("pagebreak", page=0, soft=False, **extra)
                 elif child.tag == qn("w:t"):
-                    append(child.text or "", bold, italic)
+                    styled(child.text or "")
                 elif child.tag in {qn("w:tab"), qn("w:cr"), qn("w:noBreakHyphen")}:
                     value = {qn("w:tab"): "\t", qn("w:cr"): "\n",
                              qn("w:noBreakHyphen"): "\u2011"}[child.tag]
-                    append(value, bold, italic)
+                    styled(value)
                 elif child.tag == qn("w:br"):
                     if child.get(qn("w:type"), "textWrapping") != "textWrapping":
                         raise ValueError("unsupported DOCX run break type")
-                    append("\n", bold, italic)
+                    styled("\n")
                 elif child.tag == qn("w:softHyphen"):
-                    append("\u00ad", bold, italic)
+                    styled("\u00ad")
                 elif child.tag not in {qn("w:" + name) for name in (
                         "rPr", "lastRenderedPageBreak", "fldChar", "instrText",
                         "commentReference", "footnoteRef", "endnoteRef")}:
                     raise ValueError(f"unsupported DOCX run content: {child.tag}")
         flush()
+        if len(blocks) == first_block and not ends_section(paragraph):
+            add('layout', page=0, controls='', **extra)
         keep_anchors(paragraph, first_block)
 
 
@@ -521,16 +419,33 @@ def read_docx(
         Raw cells avoid python-docx's expanded merge aliases. Their children
         are read in XML order, with nested tables owned by the immediate cell.
         """
-        rows = 0
+        records = table_cells(table)
+        rows = len(table._tbl.findall(qn('w:tr')))
+        columns = len(table._tbl.tblGrid.findall(qn('w:gridCol')))
+        inventory = {'id': table_id, 'rows': rows, 'columns': columns,
+                     'cells': [{name: record[name] for name in ('row', 'cell', 'row_span', 'col_span')}
+                               for record in records], **parent}
+        book['tables'].append(inventory)
+        add('table', page=0, table=table_id, **parent)
         merges = 0
-        for record in table_cells(table):
-            rows = max(rows, record["row"] + record["row_span"] - 1)
+        for position, record in enumerate(records):
             span = {name: record[name] for name in ("row_span", "col_span")
                     if record[name] > 1}
             merges += bool(span)
             cell = record["tc"]
+            terminal = cell._tc[-1] if len(cell._tc) else None
+            terminal_empty = (terminal is not None and terminal.tag == qn('w:p') and
+                              all(node.tag == qn('w:pPr') or node.tag == qn('w:r') and
+                                  all(part.tag == qn('w:rPr') or part.tag == qn('w:t') and not part.text
+                                      for part in node) for node in terminal))
+            # A cell's final required empty paragraph is a terminator, not an
+            # authored extra blank; every preceding empty paragraph is retained.
+            if terminal_empty:
+                inventory['cells'][position]['terminal_empty'] = True
             inner_number = 0
             for element in cell._tc:
+                if element is terminal and terminal_empty:
+                    continue
                 if element.tag == qn("w:p"):
                     read_paragraph(Paragraph(element, cell), table=table_id, row=record["row"],
                                    cell=record["cell"], **span, **parent)
@@ -623,6 +538,9 @@ def read_docx(
 
     if warnings:
         book["source"]["docx_warnings"] = warnings
+    problems = ir.validate_book(book)
+    if problems:
+        raise ValueError('invalid DOCX source structure: ' + '; '.join(problems))
     LOG.info("DOCX extracted: %d blocks, %d native notes", len(blocks), len(footnotes))
     return book
 
@@ -632,10 +550,11 @@ def _flush(spans, paragraph, add, footnotes,
     """Emit the accumulated runs of one paragraph as a block."""
     if not spans:
         return
-    text = ir.render_markup(spans).strip(" ")
-    if not text.strip():
-        return
+    text = ir.render_markup(spans)
     extra = dict(extra or {})
+    if not text.strip():
+        add('layout', page=0, controls=ir.plain_text(text), **extra)
+        return
 
     style_name = getattr(paragraph.style, "name", "") or ""
     # The style records the paragraph's role; the numbering properties record

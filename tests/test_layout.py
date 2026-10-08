@@ -114,7 +114,9 @@ def test_mirrored_margins_and_gutter_reach_the_section(translated_book, tmp_path
 
     document = _xml(path, "word/document.xml")
     section = document.find(f"{{{W}}}body").find(f"{{{W}}}sectPr")
-    assert section.find(f"{{{W}}}mirrorMargins") is not None
+    settings = _xml(path, "word/settings.xml")
+    assert settings.find(f"{{{W}}}mirrorMargins") is not None
+    assert section.find(f"{{{W}}}mirrorMargins") is None
     assert section.find(f"{{{W}}}pgMar").get(f"{{{W}}}gutter") == str(layout.twips(36.0))
 
 
@@ -123,6 +125,23 @@ def test_mirrored_margins_are_off_by_default(translated_book, tmp_path):
     document = _xml(path, "word/document.xml")
     section = document.find(f"{{{W}}}body").find(f"{{{W}}}sectPr")
     assert section.find(f"{{{W}}}mirrorMargins") is None
+
+
+def test_disabled_widow_control_overrides_a_true_template(tmp_path):
+    from docx import Document
+    import bookir as ir
+
+    template = Document()
+    template.styles['Normal'].paragraph_format.widow_control = True
+    source = tmp_path / 'template.docx'
+    template.save(source)
+    book = ir.new_book()
+    book['blocks'] = [ir.make_block('paragraph', 1, text='Source', target='فارسی')]
+    output = tmp_path / 'disabled.docx'
+    Builder(book, tmp_path, _options(template=str(source), widow_control=False,
+                                    page_numbers=False, toc=False)).build(output)
+    properties = _style_pPr(_xml(output, 'word/styles.xml'), 'Normal')
+    assert properties.find(f'{{{W}}}widowControl').get(f'{{{W}}}val') == '0'
 
 
 def test_page_number_is_a_live_field_not_literal_text(translated_book, tmp_path):

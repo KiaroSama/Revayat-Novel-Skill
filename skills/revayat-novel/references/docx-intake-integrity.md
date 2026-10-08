@@ -19,6 +19,24 @@ events, including inside cells. Word can lay out a cell-scoped break differently
 from a body break; emitted OOXML does not guarantee identical pagination across
 viewers. The default `chapter` policy and soft-break behavior are unchanged.
 
+## Authored structure without prose
+
+Native tables carry a validated source inventory independently of translatable
+blocks: declared rows/columns, actual cells and spans, and immediate nested-table
+ownership. Ordered `table` events preserve wholly empty grids; ordered `layout`
+events preserve authored control-only paragraphs without fabricated translations.
+The writer and package gate compare their position among prose, pictures and
+other source events, not merely a filtered list of tables and blank paragraphs.
+A mandatory final cell paragraph is distinct from additional authored blanks.
+
+`bookstructure.py` owns validation and the shared projection; `docxtables.py`
+reads native topology, `docxproperties.py` resolves bounded effective properties,
+and `docxbody.py` writes native body/cell events. Books without the optional
+inventory keep the established content-derived compatibility path; that path
+cannot reconstruct empty source shape which the earlier import never recorded.
+Reimport from the preserved original into a new workspace when that fidelity is
+required, rather than inventing cells or relabeling approvals.
+
 ## Note identity and content
 
 Footnote and endnote numbers identify different namespaces. A normal note with
@@ -90,9 +108,11 @@ terminator is not translatable prose and must not be deleted to remove a blank
 line. Package QA checks it and resolves anchors by XML namespace, independent of
 prefix choices. Keep genuine in-cell paragraphs in their original order.
 
-Page visual identities use `page4`: ordered block type/placement/span ownership,
-links/bookmarks, authored controls, relevant section/running structure, source
-and target contents, and actual image bytes are framed in typed JSON. A page3
-approval is not migrated by editing its prefix. Rebuild/render affected pages,
-inspect every emitted page and record new evidence; unrelated-page prose edits
-and transient builder caches must not invalidate a current page.
+Page visual identities use `page5`: ordered block type/placement/span ownership,
+links/bookmarks, exact authored controls, source-authoritative table grids and
+immediate ownership, relevant section/running structure, source/target contents
+and actual image bytes are framed in typed JSON. Page requests use
+`page-request2:` and chunk source digests use `units5:`. Older approvals are not
+migrated by editing a prefix. Rebuild/render affected pages, inspect every emitted
+page and record new evidence; unrelated-page prose edits and transient builder
+caches must not invalidate a current page.

@@ -54,6 +54,9 @@ venv/
 !templates/*.docx
 !tests/fixtures/*.docx
 
+# Evaluation command diagnostics are local-only.
+/evaluation/logs/
+
 # --- OS ---
 .DS_Store
 Thumbs.db

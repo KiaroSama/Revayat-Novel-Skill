@@ -40,6 +40,8 @@ def cli(function):
             try:
                 return function(*args, **kwargs)
             except (OSError, UnicodeError, ValueError) as error:
+                runlog.event("refused", cause=getattr(error, "reason", "invalid-input"),
+                             error_type=type(error).__name__)
                 print(json.dumps({"ok": False, "refused": getattr(error, "reason", "invalid-input"),
                                   "detail": str(error)}, ensure_ascii=False))
                 return 2

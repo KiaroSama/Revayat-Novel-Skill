@@ -166,7 +166,8 @@ def test_nested_table_stays_between_its_surrounding_cell_paragraphs(tmp_path):
     cell.add_table(rows=1, cols=1).cell(0, 0).text = 'Inside'
     cell.add_paragraph('After')
     book = imported(document, tmp_path)
-    assert [b['text'] for b in book['blocks']] == ['Before', 'Inside', 'After']
+    assert [b['text'] for b in book['blocks'] if b['type'] in ir.TEXT_TYPES] == ['Before', 'Inside', 'After']
+    assert [b['type'] for b in book['blocks']].count('table') == 2
 
 
 @pytest.mark.parametrize('kind', ['footnote', 'endnote'])
@@ -316,7 +317,8 @@ def test_grid_before_keeps_a_cells_real_column(tmp_path):
     before.set(qn('w:val'), '1')
     props.append(before)
     book = imported(document, tmp_path)
-    assert [(b['text'], b['cell']) for b in book['blocks']] == [('Column two', 2), ('Column three', 3)]
+    assert [(b['text'], b['cell']) for b in book['blocks'] if b['type'] in ir.TEXT_TYPES] == [('Column two', 2), ('Column three', 3)]
+    assert book['tables'][0]['columns'] == 3
 
 
 @pytest.mark.parametrize('prior', ['ordinary', 'interrupted'])
@@ -384,7 +386,7 @@ def test_seeded_mixed_run_events_preserve_the_complete_source_sequence(tmp_path,
     expected, buffer, count = [], [], 0
 
     def flush():
-        text = ''.join(buffer).strip(' ')
+        text = ''.join(buffer)
         if text.strip():
             expected.append(('paragraph', text))
         buffer.clear()

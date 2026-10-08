@@ -181,7 +181,7 @@ def _with_libreoffice(docx: Path, out_dir: Path, timeout: float) -> Path:
 # The caller's entry point
 # --------------------------------------------------------------------------- #
 
-def render(docx: Path, out_dir: Path, *,
+def _render_current(docx: Path, out_dir: Path, *,
            timeout: float = DEFAULT_TIMEOUT) -> tuple[Path, str]:
     """Lay ``docx`` out as a PDF. Returns ``(pdf, backend_name)``.
 
@@ -227,7 +227,7 @@ def render(docx: Path, out_dir: Path, *,
     return produced, chosen
 
 
-def render_many(docs: list[Path], out_dir: Path, *,
+def _render_many_current(docs: list[Path], out_dir: Path, *,
                 timeout: float = DEFAULT_TIMEOUT
                 ) -> tuple[dict[Path, Path], dict[Path, str], str]:
     """Lay several documents out in one renderer session.
@@ -311,6 +311,56 @@ def render_many(docs: list[Path], out_dir: Path, *,
         if len(parts) == 3 and parts[0] == "FAIL" and parts[1] in by_name:
             failed[by_name[parts[1]]] = parts[2]
     return produced, failed, chosen
+
+
+def readable_pdf(path: Path) -> bool:
+    try:
+        import pymupdf
+        with pymupdf.open(path) as document:
+            return not document.needs_pass and document.page_count > 0
+    except (ImportError, OSError, ValueError, RuntimeError):
+        return False
+
+
+def render(docx: Path, out_dir: Path, *,
+           timeout: float = DEFAULT_TIMEOUT) -> tuple[Path, str]:
+    """Publish only a readable PDF produced in this invocation's empty staging."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".render-", dir=out_dir) as directory:
+        staging = Path(directory)
+        made, chosen = _render_current(docx, staging, timeout=timeout)
+        expected = staging / (Path(docx).stem + ".pdf")
+        if Path(made).resolve() != expected.resolve() or not readable_pdf(expected):
+            raise RenderError("converter produced no fresh readable PDF")
+        destination = out_dir / expected.name
+        expected.replace(destination)
+        return destination, chosen
+
+
+def render_many(docs: list[Path], out_dir: Path, *,
+                timeout: float = DEFAULT_TIMEOUT
+                ) -> tuple[dict[Path, Path], dict[Path, str], str]:
+    """Keep batch partial results, but never admit old or unreadable artifacts."""
+    docs = [Path(doc).resolve() for doc in docs]
+    names = [doc.stem.casefold() for doc in docs]
+    if len(names) != len(set(names)):
+        raise RenderError("duplicate document basenames cannot share a render batch")
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".render-", dir=out_dir) as directory:
+        staging = Path(directory)
+        produced, failed, chosen = _render_many_current(docs, staging, timeout=timeout)
+        published = {}
+        for doc, made in produced.items():
+            expected = staging / (doc.stem + ".pdf")
+            if Path(made).resolve() != expected.resolve() or not readable_pdf(expected):
+                failed[doc] = "converter produced no fresh readable PDF"
+                continue
+            destination = out_dir / expected.name
+            expected.replace(destination)
+            published[doc] = destination
+        return published, failed, chosen
 
 
 def _with_word_batch(docs: list[Path], out_dir: Path) -> int:

@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import Any
 
 import bookir as ir
+from pdfimages import full_page_raster
 
 #: Saturation above this counts as coloured. Text measured 0, so this is a
 #: wide margin that still catches faint, heavily-transparent watermark edges.
@@ -144,11 +145,11 @@ def _page_raster(doc: Any, page: Any) -> Any | None:
     A page with real text or several images is not a scan page: that is what
     makes running this over a mixed book safe.
     """
-    images = page.get_images(full=True)
-    if len(images) != 1 or page.get_text("text").strip():
+    placement = full_page_raster(page)
+    if placement is None or page.get_text("text").strip():
         return None
     try:
-        raw = doc.extract_image(images[0][0])
+        raw = doc.extract_image(placement["xref"])
     except Exception:
         return None
     if raw is None:
@@ -322,13 +323,16 @@ def clean_pdf(
                 out.insert_pdf(doc, from_page=index, to_page=index)
                 continue
 
-            # Rebuild the page around the cleaned raster rather than patching the
-            # image stream in place. Overwriting a stream leaves the XObject's own
-            # /Filter and /ColorSpace describing the *old* bytes, which silently
-            # produces an unreadable image — measured: OCR fell to zero characters
-            # on a page Tesseract had read perfectly well before.
-            new_page = out.new_page(width=page.rect.width, height=page.rect.height)
-            new_page.insert_image(page.rect, stream=cleaned_bytes)
+            # Isolate the page: replace_image safely replaces the complete image
+            # object, but its effect is global to every draw of that xref.
+            with pymupdf.open() as isolated:
+                isolated.insert_pdf(doc, from_page=index, to_page=index)
+                copied = isolated[0]
+                placement = full_page_raster(copied)
+                if placement is None:
+                    raise ValueError("scan placement changed while copying page")
+                copied.replace_image(placement["xref"], stream=cleaned_bytes)
+                out.insert_pdf(isolated)
 
         destination.parent.mkdir(parents=True, exist_ok=True)
         out.save(str(destination), garbage=3, deflate=True)

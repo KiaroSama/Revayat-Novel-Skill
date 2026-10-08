@@ -74,22 +74,14 @@ jobs:
         # these tests drive real OCR (ocrmypdf, tesseract, ghostscript) over a
         # whole document, which is legitimately slower than anything the
         # committed default is sized for.
-        run: python -m pytest tests/test_integration_ocr.py -v -rs --timeout=900
-
-      - name: No test silently skipped itself
+        shell: bash
         run: |
-          python -m pytest tests/test_integration_ocr.py -q --timeout=900 \
-            --no-header -rs 2>&1 | tee /tmp/report.txt
-          python - <<'PY'
-          import pathlib, re
-          report = pathlib.Path("/tmp/report.txt").read_text(encoding="utf-8")
-          skipped = re.findall(r"^SKIPPED .*$", report, re.M)
-          # A skip for a language pack this job installs is a real failure;
-          # anything else is reported but tolerated.
-          fatal = [line for line in skipped if "language data" in line]
-          assert not fatal, "a test skipped for a tool this job installs:\n" + "\n".join(fatal)
-          print(f"ok: {len(skipped)} tolerated skip(s)")
-          PY
+          status=0
+          python -m pytest tests/test_integration_ocr.py -v -rs --timeout=900 --junitxml=ocr-results.xml || status=$?
+          gate=0
+          python tests/skip_budget.py --junit ocr-results.xml --profile full || gate=$?
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
+          exit "$gate"
 
   # The Windows render tier, here rather than in ci.yml's `full-coverage` job
   # for the same reason the OCR tier is here at all: it needs a big, slow,
@@ -159,11 +151,14 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          set -o pipefail
+          status=0
           python -m pytest tests/test_renderqa.py tests/test_docqa.py \
-            tests/test_pagerun.py -q --timeout=900 -rs | tee suite.log
-          if grep -qE '^SKIPPED.*(lays a document out|no converter)' suite.log; then
-            echo "::error::the render tier skipped on the job that installs a renderer"
-            grep -E '^SKIPPED' suite.log || true
-            exit 1
-          fi
+            tests/test_page_lifecycle.py tests/test_page_acceptance.py \
+            tests/test_render_cache.py tests/test_review.py \
+            tests/test_renderer_processes.py tests/test_process_tree_cleanup.py \
+            tests/test_native_image_rendering.py \
+            -q --timeout=900 -rs --junitxml=render-results.xml || status=$?
+          gate=0
+          python tests/skip_budget.py --junit render-results.xml --profile full || gate=$?
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
+          exit "$gate"

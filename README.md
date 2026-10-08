@@ -139,6 +139,23 @@ None of them has to be on `PATH`. `doctor` looks on `PATH`, then in the script
 directory of the interpreter you ran `pip install` with — a virtual environment
 usually is not on `PATH` — and then where each installer leaves the tool.
 
+## Integrity and review limits
+
+Native intake retains authored tables (including empty/nested grids), control-only
+layout, applicable complex-script emphasis and every actual PDF image occurrence.
+Unsupported geometry refuses instead of silently rewriting assets. Page acceptance
+rechecks live glossary/context dependencies; complete current raster evidence is
+required for visual approval. OCR caches carry source/output-bound coverage proofs;
+ambiguous silent raster roles need an explicit `--ocr-page-roles` manifest.
+Approved image-role pages retain artwork even when OCR recognizes a caption;
+ambiguous retained page rasters are preserved and reported during MinerU placement.
+
+The installer supports read-only `--status` (`-Status` in PowerShell); it observes
+stable receipts but does not claim OS-lock exclusivity. Evaluation's
+[adjudication protocol](evaluation/README.md) prepares all 28 cases as pending and
+validates independent result intake—no human literary approval is invented.
+CI may retain only bounded, allowlisted synthetic failure evidence, never real books.
+
 ## Use
 
 Ask your agent, in whatever words you like:

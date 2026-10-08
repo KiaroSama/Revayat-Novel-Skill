@@ -1,6 +1,7 @@
 """Native publication of ordered body blocks, tables, images and source breaks."""
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,28 @@ def _has_style(document, name: str) -> bool:
         return True
     except KeyError:
         return False
+
+
+def _image_affine(block):
+    matrix = block.get('transform')
+    if matrix is None:
+        return None
+    if not isinstance(matrix, (list, tuple)) or len(matrix) != 6:
+        raise ValueError('unsupported image affine transform: six coefficients required')
+    try:
+        a, b, c, d, e, f = map(float, matrix)
+    except (ValueError, TypeError) as error:
+        raise ValueError('unsupported image affine transform: invalid coefficients') from error
+    width, height = math.hypot(a, b), math.hypot(c, d)
+    if not all(math.isfinite(v) for v in (a, b, c, d, e, f)) or width <= 0 or height <= 0:
+        raise ValueError('unsupported image affine transform: nonfinite or degenerate')
+    if abs(a * c + b * d) > width * height * 1e-6:
+        raise ValueError('unsupported image affine transform: shear')
+    envelope = (abs(a) + abs(c), abs(b) + abs(d))
+    if any(abs(float(block.get(field, 0)) - size) > 0.05 for field, size in zip(('width_pt', 'height_pt'), envelope)):
+        raise ValueError('unsupported image affine transform: envelope disagrees with declared size')
+    rotation = round(math.degrees(math.atan2(b, a)) * 60000) % 21600000
+    return rotation, a * d - b * c < 0, width, height
 
 
 class BodyWriter:
@@ -67,6 +90,8 @@ class BodyWriter:
                 self._pagebreak(block)
             elif kind == "separator":
                 self._separator(block)
+            elif kind == 'layout':
+                self._layout(block)
             elif kind in ir.TEXT_TYPES:
                 self._text_block(block)
 
@@ -118,6 +143,12 @@ class BodyWriter:
         outcome than an untidy table.
         """
         root_id = cells[0].get("table")
+        if 'tables' in self.book:
+            from docxtables import write_table
+            write_table(self, cells, root_id, container=container)
+            return
+        if not any('legacy table shape' in message for message in self.warnings):
+            self.warnings.append('legacy table shape reconstructed from content; empty source grid and ownership are unavailable')
         direct = [block for block in cells if block.get("table") == root_id]
         placed = [block for block in direct if block.get("row") and block.get("cell")]
         stray = [block for block in direct if block not in placed]
@@ -210,8 +241,15 @@ class BodyWriter:
             self._pagebreak(block, container=cell)
         elif kind == "separator":
             self._separator(block, container=cell)
+        elif kind == 'layout':
+            self._layout(block, container=cell)
         elif kind in ir.TEXT_TYPES:
             self._text_block(block, container=cell)
+
+    def _layout(self, block, *, container=None):
+        paragraph = self.paragraph('Normal', container=container)
+        if block['controls']:
+            self.write_markup(paragraph, ir.escape_markup(block['controls']))
 
     def _separator(self, block: dict[str, Any], *, container=None) -> None:
         paragraph = self.paragraph("Normal", align=WD_ALIGN_PARAGRAPH.CENTER,
@@ -257,13 +295,31 @@ class BodyWriter:
             return
 
         width_pt, height_pt = self._image_size(block)
+        affine = _image_affine(block)
         paragraph = (container.add_paragraph() if container is not None else
                      self.paragraph("Normal", align=WD_ALIGN_PARAGRAPH.CENTER))
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         ooxml.set_paragraph_rtl(paragraph, self.options.rtl)
         run = paragraph.add_run()
         try:
-            if height_pt:
+            if affine:
+                rotation, reflected, native_width, native_height = affine
+                scale = width_pt / float(block['width_pt'])
+                shape = run.add_picture(str(path), width=Pt(native_width * scale),
+                                        height=Pt(native_height * scale))
+                transform = shape._inline.find('.//' + qn('a:xfrm'))
+                transform.set('rot', str(rotation))
+                transform.set('flipV', '1' if reflected else '0')
+                # Word rotates the unrotated inline host too. Reserving only
+                # the rotated envelope there clips non-square quarter turns.
+                from docx.oxml import OxmlElement
+                effect = OxmlElement('wp:effectExtent')
+                dx = max(0, round((width_pt - native_width * scale) * ir.EMU_PER_PT / 2))
+                dy = max(0, round((height_pt - native_height * scale) * ir.EMU_PER_PT / 2))
+                for edge, value in [('l', dx), ('r', dx), ('t', dy), ('b', dy)]:
+                    effect.set(edge, str(value))
+                shape._inline.insert(1, effect)
+            elif height_pt:
                 run.add_picture(str(path), width=Pt(width_pt), height=Pt(height_pt))
             else:
                 run.add_picture(str(path), width=Pt(width_pt))

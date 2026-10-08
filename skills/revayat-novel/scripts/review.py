@@ -90,6 +90,27 @@ def evidence_digest(paths: Iterable[Path]) -> str:
     return ir.sha256_bytes("\n".join(lines).encode("utf-8"))
 
 
+def _evidence_problem(work_dir: Path, page: int | str) -> dict[str, Any] | None:
+    report = (work_dir / "qa" / "document.json" if isinstance(page, str) else
+              work_dir / "qa" / "pages" / f"page-{page:04d}.json")
+    if not report.is_file():
+        return None
+    found = reviewstate.object_file(report)
+    renders = found.get("renders") or {}
+    if isinstance(renders, dict):
+        paths = list(renders.get("target_sheets") or [])
+        if renders.get("source"):
+            paths.insert(0, renders["source"])
+        complete = renders.get("complete", True)
+    else:
+        paths = list(renders)
+        complete = found.get("render_evidence_complete", True)
+    if not complete or not paths or any(not (work_dir / path).is_file() for path in paths):
+        return {"ok": False, "refused": "incomplete-render-evidence",
+                "detail": "every expected current render sheet must exist before visual approval"}
+    return None
+
+
 def review_path(work_dir: Path, page: int | str) -> Path:
     name = page if isinstance(page, str) else f"page-{page:04d}"
     return Path(work_dir) / "qa" / "reviews" / f"{name}.json"
@@ -155,6 +176,9 @@ def record(work_dir: Path, page: int | str, answers: dict[str, bool],
         _read_review(review_path(work_dir, page), page)
     reviewstate.require(isinstance(answers, dict) and set(answers) <= set(QUESTIONS)
                         and all(type(value) is bool for value in answers.values()), "review answers must be known booleans")
+    evidence_problem = _evidence_problem(work_dir, page)
+    if evidence_problem:
+        return evidence_problem
     render = current_render(work_dir, page, render=render)
     if not render:
         subject = "the document" if isinstance(page, str) else f"page {page}"
@@ -199,6 +223,9 @@ def verdict(work_dir: Path, page: int | str, *,
                           f"{', '.join(sorted(QUESTIONS))}."}
     found = _read_review(path, page)
 
+    evidence_problem = _evidence_problem(Path(work_dir), page)
+    if evidence_problem:
+        return evidence_problem
     render = current_render(Path(work_dir), page, render=render)
     if not render:
         return {"ok": False, "refused": "not-rendered", "detail": "the current render identity is unavailable"}

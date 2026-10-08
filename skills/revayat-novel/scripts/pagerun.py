@@ -47,6 +47,7 @@ from typing import Any
 
 import bookir as ir
 import chunk as chunking
+import eligible
 import glossary as gl
 import merge as merging
 import review as page_review
@@ -403,7 +404,8 @@ def merge_page(book_path: Path, out_dir: Path, page: int, *,
                 "detail": f"the manifest in {out_dir} has no page {page}"}
 
     answers = [answer(out_dir, entry) for entry in entries]
-    waiting = [entry["id"] for entry, text in zip(entries, answers) if not text]
+    waiting = [entry["id"] for entry, text in zip(entries, answers)
+               if entry["unit_ids"] and not text]
     if waiting:
         return {"ok": False, "page": page, "refused": "not-translated",
                 "detail": f"page {page} is still waiting on "
@@ -509,13 +511,30 @@ def accept(book_path: Path, out_dir: Path, page: int) -> dict[str, Any]:
     again, a page re-translated after it passed cannot keep the old pass.
     """
     state = runstate.RunState(out_dir.parent)
-    entries = jobs_for(load_manifest(out_dir), page)
+    manifest = load_manifest(out_dir)
+    entries = jobs_for(manifest, page)
     if not entries:
         return {"ok": False, "page": page, "refused": "unknown-page",
                 "detail": f"the manifest in {out_dir} has no page {page}"}
 
+    book = ir.load_book(book_path)
+    _, glossary_path = eligible._book_and_glossary(out_dir, manifest)
+    glossary = None
+    if glossary_path is not None:
+        try:
+            glossary = gl.load(glossary_path) if glossary_path.is_file() else None
+        except (OSError, ValueError, UnicodeError):
+            pass  # Freshness refuses an unreadable named dependency below.
+    for entry in entries:
+        refusal, detail = eligible.freshness(
+            entry, book=book, glossary=glossary,
+            glossary_named=bool(manifest.get("glossary")), book_path=book_path,
+            manifest=manifest, out_dir=out_dir)
+        if refusal:
+            return {"ok": False, "page": page, "refused": refusal, "detail": detail}
+
     unit_ids = [unit_id for entry in entries for unit_id in entry["unit_ids"]]
-    missing = untranslated(ir.load_book(book_path), unit_ids)
+    missing = untranslated(book, unit_ids)
     if missing:
         return {"ok": False, "page": page, "refused": "not-merged",
                 "detail": f"{len(missing)} of page {page}'s units have no "

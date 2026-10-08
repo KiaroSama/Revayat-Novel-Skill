@@ -104,6 +104,14 @@ def test_a_failure_is_not_counted_as_a_pass(tmp_path):
         "</testsuite></testsuites>", encoding="utf-8")
     total, passed, skips = skip_budget.read(report)
     assert (total, passed, len(skips)) == (2, 0, 1)
+    assert any("failures or errors" in problem for problem in skip_budget.check(report, "full"))
+
+
+def test_a_malformed_junit_document_is_a_named_error(tmp_path, capsys):
+    report = tmp_path / "broken.xml"
+    report.write_text("<testsuites><broken", encoding="utf-8")
+    assert skip_budget.main(["--junit", str(report), "--profile", "full"]) == 2
+    assert "invalid junit" in capsys.readouterr().out.lower()
 
 
 def test_an_absent_junit_document_is_an_error_not_a_pass(tmp_path):

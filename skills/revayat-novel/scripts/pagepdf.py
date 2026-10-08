@@ -93,8 +93,10 @@ def _view_of_open(document: Any, index: int, pdf_path: Path) -> dict[str, Any]:
     # every other check measures a layout that is not the one the reader
     # gets - and a fallback's metrics differ, so those findings describe a
     # page nobody will see.
+    pymupdf = _pymupdf()
     fonts = sorted({_basefont(span["font"])
-                    for block in page.get_text("dict")["blocks"]
+                    for block in page.get_text("dict", flags=(
+                        pymupdf.TEXTFLAGS_DICT & ~pymupdf.TEXT_PRESERVE_IMAGES))["blocks"]
                     for line in block.get("lines", ())
                     for span in line.get("spans", ())
                     if span.get("text", "").strip()})

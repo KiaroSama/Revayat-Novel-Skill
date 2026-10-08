@@ -21,7 +21,7 @@ from install_transaction import installation_lock, publish
 ROOT = Path(__file__).absolute().parent.parent
 SOURCE = ROOT / "skills" / "revayat-novel"
 INVENTORY = ROOT / "install" / "payload.json"
-INVENTORY_SHA256 = "29a6b3b821d08d194af4ac67ef00d164a164c38ef2f849c778c353f41133189d"
+INVENTORY_SHA256 = "46f838fcd3828ee9a285b84b92a9cdf09354c5958db566164fcc4e6fcd727c27"
 
 
 def verified_snapshot(source: Path, inventory: Path) -> dict:
@@ -111,7 +111,14 @@ def main(argv=None) -> int:
     parser.add_argument("--scope", choices=("user", "project"), default="user")
     parser.add_argument("--path", default=os.getcwd())
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--status", action="store_true", help="observe recovery state without changing it")
     args = parser.parse_args(argv)
+    if args.status:
+        from install_status import inspect
+        home = os.environ.get("HOME") or os.environ.get("USERPROFILE") or str(Path.home())
+        result = inspect(Path(args.path if args.scope == "project" else home), args.agent, args.scope)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result["status"] in ("absent", "committed") else 2
     logger = None
     handler = None
     start = time.monotonic()

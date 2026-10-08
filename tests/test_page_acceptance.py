@@ -5,7 +5,7 @@ only thing that stops a page being re-rendered forever. Both were decided from
 *labels* — the state a record happened to be in, and a report written at some
 earlier time — rather than from the content they are supposed to be about.
 
-The helpers come from `test_pagerun`, which owns the page-run fixtures; `tests/`
+The helpers come from `page_fixtures`, which owns the page-run fixtures; `tests/`
 is on `sys.path`, so importing them is cheaper than a second copy that can drift
 away from the lifecycle it is meant to model.
 """
@@ -21,7 +21,7 @@ from tests_support import reply_text
 import pagerun
 import renderqa
 import runstate
-from test_pagerun import TARGET, _one_page_book, _rendered, _reviewed
+from page_fixtures import TARGET, _one_page_book, _rendered, _reviewed
 
 #: This whole module is the `render` tier: it drives a real renderer and costs
 #: minutes. CI runs it on every push; a local run can deselect it with

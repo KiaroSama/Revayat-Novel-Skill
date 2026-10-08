@@ -21,24 +21,26 @@ from typing import Any
 
 import bookir as ir
 
-REQUEST_DIGEST_VERSION = "page-request1"
+REQUEST_DIGEST_VERSION = "page-request2"
 
 
 def request_fingerprint(book, entry, *, glossary, book_path, neighbour_chars=600,
-                        source_prints=None, out_dir=None):
+                        source_prints=None, out_dir=None, context=None):
     """Live page source, geometry, OCR, policy and context; never cached across uses."""
     import pagesheet
+    import published
     import provenance
     import sourcepages
 
-    jobs = owners(book)
-    index = next((i for i, job in enumerate(jobs) if job["page"] == entry["page"]), None)
+    context = context or operation_context(book)
+    jobs = context["jobs"]
+    index = context["page_indexes"].get(entry["page"])
     if index is None:
         raise ValueError("the source page no longer exists; rebuild")
     job = jobs[index]
     if job["block_ids"] != entry["block_ids"]:
         raise ValueError("the page ownership changed; rebuild")
-    lookup = ir.blocks_by_id(book)
+    lookup = context["lookup"]
     visual = ""
     if (book.get("source") or {}).get("format") == "pdf":
         if out_dir is not None:
@@ -56,6 +58,7 @@ def request_fingerprint(book, entry, *, glossary, book_path, neighbour_chars=600
         "page": job["page"], "blocks": job["block_ids"],
         "units": provenance.translatable_units(book, job["block_ids"]),
         "cut": provenance.source_fingerprint(book, job["block_ids"], entry["unit_spans"], glossary=glossary),
+        "structure": published.structure(book, [lookup[i] for i in job["block_ids"]]),
         "geometry": geometry(book, job["block_ids"], lookup, job["page"]),
         "ocr": ocr_state(job["block_ids"], lookup), "source_pdf": visual,
         "glossary": glossary,
@@ -202,7 +205,7 @@ def ocr_state(block_ids: list[str],
 
 
 
-PAGE_DIGEST_VERSION = "page4"
+PAGE_DIGEST_VERSION = "page5"
 
 # Persisted presentation fields consumed by the native builder. Diagnostic
 # notes and transient TOC caches are intentionally absent: they do not print.
@@ -210,24 +213,34 @@ _VISUAL_BLOCK_FIELDS = (
     "id", "type", "text", "target", "alt", "target_alt", "level", "ordered",
     "table", "row", "cell", "row_span", "col_span", "parent_table", "parent_row", "parent_cell",
     "bookmarks", "links", "font_size_pt", "asset", "width_pt", "height_pt",
-    "pixel_width", "pixel_height", "soft",
+    "pixel_width", "pixel_height", "soft", "controls", "transform", "drawing_order", "source_role",
 )
 
 
-def translation_hash(book_path: Path, page: int) -> str:
+def operation_context(book):
+    """Indexes for one loaded-book observation; never retained across operations."""
+    jobs = owners(book)
+    return {"jobs": jobs, "lookup": ir.blocks_by_id(book),
+            "page_indexes": {job["page"]: index for index, job in enumerate(jobs)}}
+
+
+def translation_hash(book_path: Path, page: int, *, book=None, context=None) -> str:
     """Identity of this page's source, published text, structure and actual assets.
 
-    page4 replaces delimiter-concatenated strings and target-only prose with a
-    typed projection. Moving a table cell, changing a heading/list kind or a
+    page5 includes authored table/layout structure alongside the typed page
+    projection introduced by page4. Moving a table cell, changing a heading/list kind or a
     running-header field is a changed page even when every word is unchanged.
     Old approvals require new rendering, never a version-prefix substitution.
     """
     import pagecheck
+    import published
 
-    book = ir.load_book(book_path)
-    expected = pagecheck.expectations(book, page)
-    job = next((j for j in owners(book) if j["page"] == page), None)
-    lookup = ir.blocks_by_id(book)
+    book = ir.load_book(book_path) if book is None else book
+    context = context or operation_context(book)
+    expected = pagecheck.expectations(book, page, context=context)
+    index = context["page_indexes"].get(page)
+    job = context["jobs"][index] if index is not None else None
+    lookup = context["lookup"]
     block_ids = (job or {}).get("block_ids") or []
     ids = set(block_ids)
     blocks = [lookup[identifier] for identifier in block_ids if identifier in lookup]
@@ -254,6 +267,7 @@ def translation_hash(book_path: Path, page: int) -> str:
         "notes": [{key: note.get(key) for key in ("id", "text", "target", "origin", "anchor_block")}
                   for note in book.get("footnotes", []) if note.get("id") in note_ids],
         "figures": figures,
+        "structure": published.structure(book, blocks),
         "sections": [{key: section[key] for key in section_fields if key in section} for section in showing],
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -261,7 +275,7 @@ def translation_hash(book_path: Path, page: int) -> str:
 
 
 def _translation_moved(book_path: Path, page: int,
-                       record: dict[str, Any]) -> tuple[str, str]:
+                       record: dict[str, Any], *, book=None, context=None) -> tuple[str, str]:
     """``(refusal code, detail)`` for this page's recorded digest, or ``("", "")``.
 
     Three outcomes, not two. The digest is **versioned**, so a value written by an
@@ -279,7 +293,7 @@ def _translation_moved(book_path: Path, page: int,
                 f"compare — it predates the digest covering notes, running "
                 f"heads, figures and geometry. Run render-qa on the page again "
                 f"to record a current one, then accept it.")
-    current = translation_hash(book_path, page)
+    current = translation_hash(book_path, page, book=book, context=context)
     if current == recorded:
         return ("", "")
     return ("translation-changed",
