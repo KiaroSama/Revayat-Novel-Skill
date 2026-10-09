@@ -155,6 +155,15 @@ layout model finds and crops the figure regions — see `extraction.md`.
 Tesseract's `configs/` folder. Copy the whole `tessdata` directory, not just the
 `.traineddata` files. Nothing is wrong with the book.
 
+## `ocr-coverage-unverified` — source pages are not fully accounted for
+
+QA refuses unknown or incomplete OCR coverage. Re-extract from the original PDF;
+for ambiguous silent raster pages, supply the source-hash-bound `--ocr-page-roles`
+manifest described in `extraction.md`. Assign `text` only where OCR must produce
+readable text, `image` for approved artwork, and `blank` only for an actually empty
+page. Do not change stored coverage or approvals to turn an unknown result into
+completion.
+
 ## OCR produced almost no text from a scan
 
 Check `clean_scan` in the extract report. If pages were cleaned and the text is

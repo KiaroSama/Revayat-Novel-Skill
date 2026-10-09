@@ -231,8 +231,13 @@ def test_a_document_never_reached_is_in_neither_map(tmp_path):
         path.write_bytes(b"not really a document")
 
     def only_the_first(command, timeout, **kwargs):
-        import subprocess as sp
-        return sp.CompletedProcess(command, 0, b"OK\ta.docx\ta.pdf\n", b"")
+        import pymupdf
+        from pathlib import Path
+        with pymupdf.open() as document:
+            document.new_page()
+            document.save(Path(command[3]) / "a.pdf")
+        raise subprocess.TimeoutExpired(command, timeout,
+                                        output=b"OK\ta.docx\ta.pdf\n", stderr=b"")
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(wordrender, "backend", lambda: "word")

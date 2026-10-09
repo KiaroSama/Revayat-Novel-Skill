@@ -380,6 +380,15 @@ def run_ocr(
             "  have a text layer."
         )
 
+    from importlib.metadata import PackageNotFoundError, version
+    if Path(launcher[0]).name.lower() in {"ocrmypdf", "ocrmypdf.exe"}:
+        try:
+            # PATH console scripts can live outside the interpreter's bin
+            # directory (notably macOS). Bind invocation to the measured engine.
+            if version("ocrmypdf") == "17.13.0":
+                launcher = [sys.executable, "-m", "ocrmypdf"]
+        except PackageNotFoundError:
+            pass
     from ocrvalidation import load_page_roles, make_proof, options, pdf_inventory, validate_output
     original = validation_source or source
     inventory = pdf_inventory(original)

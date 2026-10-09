@@ -293,10 +293,12 @@ def _render_many_current(docs: list[Path], out_dir: Path, *,
 
     command = [sys.executable, str(Path(__file__).resolve()), "--batch",
                str(out_dir), *[str(d) for d in docs]]
+    wedged = False
     try:
         finished = _run_bounded(command, timeout)
         out, err = finished.stdout or b"", finished.stderr or b""
     except subprocess.TimeoutExpired as wedge:
+        wedged = True
         # The pages the worker had already reported are still known, which is the
         # whole point of it reporting per document rather than at the end.
         out, err = wedge.stdout or b"", wedge.stderr or b""
@@ -310,6 +312,10 @@ def _render_many_current(docs: list[Path], out_dir: Path, *,
         parts = line.split("\t")
         if len(parts) == 3 and parts[0] == "FAIL" and parts[1] in by_name:
             failed[by_name[parts[1]]] = parts[2]
+    if not wedged:
+        for docx in docs:
+            if docx not in produced and docx not in failed:
+                failed[docx] = "Word completed without a fresh PDF or document result"
     return produced, failed, chosen
 
 

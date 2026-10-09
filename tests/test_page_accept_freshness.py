@@ -83,4 +83,4 @@ def test_other_live_dependency_changes_refuse_without_acceptance_mutation(checke
 def test_unchanged_live_dependencies_allow_acceptance(checked_page):
     path, pages, _, _, state = checked_page
     assert pagerun.accept(path, pages, 1)["ok"]
-    assert state.page(1)["state"] == "accepted"
+    assert runstate.RunState(path.parent).page(1)["state"] == "accepted"

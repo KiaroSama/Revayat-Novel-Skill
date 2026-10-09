@@ -37,9 +37,9 @@ def admitted(root, relative):
     for parent in reversed(path.parents):
         if parent == root or root in parent.parents:
             regular(parent, directory=True)
+    regular(path)
     if not path.resolve().is_relative_to(root):
         raise ValueError("Evidence path escapes workspace")
-    regular(path)
     return path
 
 

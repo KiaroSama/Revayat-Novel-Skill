@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 
 import bookir as ir
 import bookwrite
-from read_epub import read_epub, _is_note_link
+from read_epub import read_epub, _is_note_link, VERBATIM_TAGS
 import reviewstate
 import webfetch
 from webhtml import chapter_html
@@ -90,7 +90,7 @@ def rebase_chapters(chapters, records, inputs):
     result = []
     for (identity, content), record, item in zip(chapters, records, inputs):
         base = record["path"] if "url" in item else Path(record["path"]).as_uri()
-        soup = BeautifulSoup(content, "html.parser")
+        soup = BeautifulSoup(content, "html.parser", preserve_whitespace_tags=VERBATIM_TAGS | {"textarea"})
         for link in soup.find_all("a", href=True):
             href = str(link["href"])
             if _is_note_link(link) or not urlsplit(href).fragment:

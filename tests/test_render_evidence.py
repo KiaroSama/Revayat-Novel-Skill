@@ -79,7 +79,9 @@ def test_a_target_that_is_not_there_is_unverified(tmp_path):
     book_path = _latin_book(tmp_path, "Anything at all.")
     written = renderqa.check(tmp_path, book_path, 1,
                              target_pdf=tmp_path / "never-built.pdf")
-    assert written["verified"] is False and "not there" in written["unverified"]
+    assert written["ok"] is False and written["verified"] is False
+    assert "incomplete-render-evidence" in written["unverified"]
+    assert not written["renders"].get("complete")
 
 
 def test_a_supplied_image_is_filed_as_the_evidence(tmp_path, sample_png):

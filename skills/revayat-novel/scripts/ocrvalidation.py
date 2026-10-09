@@ -209,6 +209,8 @@ def validate_output(source: Path, destination: Path, *, page_roles: Path | None 
 
 def _usable_ocr_output(destination: Path) -> tuple[bool, str]:
     """Legacy single-file structural seam; production additionally validates source."""
+    if not destination.exists() or destination.stat().st_size == 0:
+        return False, "no output file was written"
     try:
         inventory = pdf_inventory(destination)
     except (ExtractError, OSError) as error:

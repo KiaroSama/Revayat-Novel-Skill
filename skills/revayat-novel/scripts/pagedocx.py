@@ -86,8 +86,13 @@ def requested_fonts(docx: Path) -> dict[str, str]:
     Empty strings when the document does not say - a state, not a failure: a
     .docx from somewhere else need not carry any of this.
     """
-    with zipfile.ZipFile(docx) as archive:
-        styles = opc.Package(archive).xml('word/styles.xml')
+    try:
+        with zipfile.ZipFile(docx) as archive:
+            styles = opc.Package(archive).xml('word/styles.xml')
+    except (OSError, zipfile.BadZipFile, opc.Damaged):
+        # Optional font discovery must not prevent the authoritative package
+        # and direction gates from reporting unreadable native evidence.
+        return {'complex': '', 'ascii': ''}
     element = styles.find('w:docDefaults/w:rPrDefault/w:rPr/w:rFonts', opc.NS)
     return {key: element.get(opc.qname('w', attribute), '') if element is not None else ''
             for key, attribute in [('complex', 'cs'), ('ascii', 'ascii')]}

@@ -416,12 +416,16 @@ def test_a_pdf_page_cannot_be_accepted_on_target_evidence_alone(
                           assets=tmp_path / "assets")
     if not built["ok"]:
         pytest.skip(f"no converter here: {built['detail']}")
+    if not renderqa.wordrender.backend():
+        pytest.skip("no converter here: no render backend")
+    target = None
     try:
         target = renderqa.render_docx(tmp_path / "only-target.docx",
                                       tmp_path / "renders" / "preview")
     except renderqa.RenderError as error:
         pytest.skip(f"nothing here can lay a document out: {error}")
 
+    assert target is not None and target.is_file()
     handed = renderqa.check(tmp_path, book_path, 2, target_pdf=target)
     assert handed.get("source_evidence"), (
         "handing over a target still has to render the source: the old route "
@@ -441,8 +445,8 @@ def test_a_pdf_page_cannot_be_accepted_on_target_evidence_alone(
                   note="claims to have compared them")
     taken = pagerun.accept(book_path, pages, 2)
     assert taken["ok"] is False, f"accepted with no source render: {taken}"
-    assert taken["refused"] in {"no-source-render", "not-qa-passed",
-                                "render-qa-failed"}, taken
+    assert taken["refused"] == "unverified", taken
+    assert "source page artifact is missing" in taken["detail"], taken
 
 
 def test_the_page_loop_still_reaches_accepted_with_both_sides_present(

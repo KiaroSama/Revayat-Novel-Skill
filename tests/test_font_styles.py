@@ -141,6 +141,20 @@ def test_a_file_that_is_not_a_document_asks_for_nothing(tmp_path):
     assert pagecheck.requested_fonts(broken) == {"complex": "", "ascii": ""}
 
 
+@pytest.mark.parametrize('damage', ['missing-file', 'missing-styles', 'malformed-styles'])
+def test_optional_font_probe_does_not_hide_invalid_direction_evidence(tmp_path, damage):
+    broken = tmp_path / 'broken.docx'
+    if damage != 'missing-file':
+        with zipfile.ZipFile(broken, 'w') as archive:
+            archive.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>')
+            if damage == 'malformed-styles':
+                archive.writestr('word/styles.xml', b'<invalid')
+    assert pagecheck.requested_fonts(broken) == {'complex': '', 'ascii': ''}
+    findings = pagecheck.check_direction_in_document(broken)
+    assert any(f['code'] == 'document-direction-unverified' and f['severity'] == qa.ERROR
+               for f in findings)
+
+
 def test_the_default_font_is_vazir():
     """Not Vazirmatn: it is usually installed as a variable font, which Word
     will not resolve for a complex-script run. Measured — a book asking for it

@@ -80,7 +80,11 @@ def test_generated_empty_vertical_merge_continuation_remains_supported(tmp_path)
     table.cell(0, 0).text = "Merged source"
     table.cell(0, 0).merge(table.cell(1, 0))
     book = imported(document, tmp_path)
-    assert [(block["text"], block["row_span"]) for block in book["blocks"]] == [("Merged source", 2)]
+    assert [(block['type'], block.get('text'), block.get('row_span'))
+            for block in book['blocks']] == [('table', None, None), ('paragraph', 'Merged source', 2)]
+    assert [(table['rows'], table['columns'], table['cells']) for table in book['tables']] == [
+        (2, 1, [{'row': 1, 'cell': 1, 'row_span': 2, 'col_span': 1}])]
+    assert book['blocks'][0]['table'] == book['tables'][0]['id']
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "bad", None])
@@ -114,18 +118,25 @@ def test_nested_events_carry_their_immediate_parent_cell(tmp_path):
     note_part(document)
     book = imported(document, tmp_path)
     blocks = book["blocks"]
-    assert [(block["type"], block.get("text") or "") for block in blocks] == [
-        ("paragraph", "Parent before"), ("paragraph", "Child before"),
-        ("image", ""), ("paragraph", "Child middle[[fn:fn0001]]"),
-        ("pagebreak", ""), ("paragraph", "Child after"),
-        ("paragraph", "Grandchild"), ("paragraph", "Parent after"),
+    assert [(block['type'], block['controls'] if block['type'] == 'layout' else block.get('text') or '')
+            for block in blocks] == [
+        ('table', ''), ('paragraph', 'Parent before'), ('table', ''),
+        ('paragraph', 'Child before'), ('image', ''), ('paragraph', 'Child middle[[fn:fn0001]]'),
+        ('pagebreak', ''), ('paragraph', 'Child after'), ('table', ''),
+        ('paragraph', 'Grandchild'), ('layout', ''), ('paragraph', 'Parent after'),
     ]
     assert [(block.get("table"), block.get("row"), block.get("cell"),
              block.get("parent_table"), block.get("parent_row"), block.get("parent_cell"))
             for block in blocks] == [
-        ("t0000", 1, 1, None, None, None),
-        *[("t0000-11n1", 1, 1, "t0000", 1, 1)] * 5,
-        ("t0000-11n1-11n1", 1, 1, "t0000-11n1", 1, 1),
-        ("t0000", 1, 1, None, None, None),
+        ('t0000', None, None, None, None, None),
+        ('t0000', 1, 1, None, None, None),
+        ('t0000-11n1', None, None, 't0000', 1, 1),
+        *[('t0000-11n1', 1, 1, 't0000', 1, 1)] * 5,
+        ('t0000-11n1-11n1', None, None, 't0000-11n1', 1, 1),
+        ('t0000-11n1-11n1', 1, 1, 't0000-11n1', 1, 1),
+        ('t0000', 1, 1, None, None, None),
+        ('t0000', 1, 1, None, None, None),
     ]
-    assert book["footnotes"][0]["anchor_block"] == blocks[3]["id"]
+    assert [table['id'] for table in book['tables']] == [
+        't0000', 't0000-11n1', 't0000-11n1-11n1']
+    assert book['footnotes'][0]['anchor_block'] == blocks[5]['id']

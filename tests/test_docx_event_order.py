@@ -389,6 +389,8 @@ def test_seeded_mixed_run_events_preserve_the_complete_source_sequence(tmp_path,
         text = ''.join(buffer)
         if text.strip():
             expected.append(('paragraph', text))
+        elif text:
+            expected.append(('layout', text))
         buffer.clear()
 
     for index in range(18):
@@ -413,5 +415,6 @@ def test_seeded_mixed_run_events_preserve_the_complete_source_sequence(tmp_path,
             buffer.append(text)
     flush()
     book = imported(document, tmp_path)
-    assert [(b['type'], b.get('text') or '') for b in book['blocks']] == expected
+    assert [(b['type'], b['controls'] if b['type'] == 'layout' else b.get('text') or '')
+            for b in book['blocks']] == expected
     assert len(book['footnotes']) == count

@@ -38,7 +38,11 @@ def test_owned_module_events_record_only_known_templates_and_counts(tmp_path):
         runlog.stage("extract")
         logger.info("EPUB extracted: %d blocks, %d notes, %d distinct assets", 3, 1, 2)
         logger.error("PRIVATE-MANUSCRIPT-%s", "PRIVATE-TOKEN")
-        logger.info("EPUB extracted: %d blocks, %d notes, %d distinct assets", "PRIVATE-TOKEN", 1, 2)
+        record = logging.LogRecord("read_epub", logging.INFO, __file__, 0,
+                                   "EPUB extracted: %d blocks, %d notes, %d distinct assets",
+                                   ("PRIVATE-TOKEN", 1, 2), None)
+        next(handler for handler in logger.handlers
+             if isinstance(handler, runlog.SafeModuleEvents)).handle(record)
         return runlog.execute(lambda: 0, directory=tmp_path)
 
     assert runlog.execute(command, directory=tmp_path) == 0

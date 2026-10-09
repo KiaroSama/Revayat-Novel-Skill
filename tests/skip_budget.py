@@ -49,6 +49,7 @@ CAUSES: dict[str, re.Pattern[str]] = {
         r"|lays a document out"
         r"|cannot lay out here"
         r"|no renderer here"
+        r"|^no render backend$"
         r"|no converter here"
         r"|cannot read a page back",
         re.I),

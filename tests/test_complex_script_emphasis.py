@@ -89,6 +89,7 @@ def test_published_body_and_running_runs_write_complex_false_overrides(tmp_path)
         root = ET.fromstring(archive.read('word/document.xml'))
     runs = [r for r in root.iter(opc.qname('w', 'r')) if opc.text_of(r).strip()]
     properties = [r.find(opc.qname('w', 'rPr')) for r in runs]
-    assert [(p.find(opc.qname('w', 'bCs')).get(opc.qname('w', 'val')),
-             p.find(opc.qname('w', 'iCs')).get(opc.qname('w', 'val'))) for p in properties] == [
+    # A present bare on/off element is true; python-docx elides its default.
+    assert [(p.find(opc.qname('w', 'bCs')).get(opc.qname('w', 'val'), '1'),
+             p.find(opc.qname('w', 'iCs')).get(opc.qname('w', 'val'), '1')) for p in properties] == [
         ('1', '0'), ('0', '0'), ('0', '1')]

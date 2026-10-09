@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from urllib.parse import urlparse
 import pytest
 import bookir as ir
 from extract import ExtractError, find_ocrmypdf, ocr_command, run_ocr
@@ -137,7 +138,9 @@ def test_missing_ocrmypdf_explains_all_three_prerequisites(monkeypatch, tmp_path
     # send anyone there for it.
     assert "pip install ocrmypdf" in message
     assert "tesseract" in message.lower()
-    assert "ghostscript.com" in message
+    links = [urlparse(token) for token in message.split() if token.startswith("https://")]
+    assert any(link.scheme == "https" and link.hostname == "ghostscript.com"
+               and link.path == "/releases/gsdnld.html" for link in links)
     assert "--ocr off" in message
 
 
@@ -148,6 +151,46 @@ def test_find_ocrmypdf_prefers_path_then_falls_back_to_the_module(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda name: None)
     launcher = find_ocrmypdf()
     assert launcher is None or launcher[1:] == ["-m", "ocrmypdf"]
+
+
+def test_controlled_ocr_execution_binds_installed_engine_not_path_script(tmp_path, monkeypatch):
+    import io
+    from pathlib import Path
+    import subprocess
+    import pymupdf
+    from PIL import Image
+    import extract
+
+    source = tmp_path / "scan.pdf"
+    pixels = io.BytesIO()
+    Image.new("RGB", (30, 40), "navy").save(pixels, format="PNG")
+    with pymupdf.open() as document:
+        page = document.new_page(width=300, height=400)
+        page.insert_image(page.rect, stream=pixels.getvalue())
+        document.save(source)
+    monkeypatch.setattr(extract, "find_ocrmypdf", lambda: ["/external/scripts/ocrmypdf"])
+    monkeypatch.setattr("importlib.metadata.version", lambda package: "17.13.0")
+    monkeypatch.setattr("ocrvalidation.version", lambda package: "17.13.0")
+    seen = []
+
+    def convert(command, timeout, **kwargs):
+        seen.append(command)
+        changed = io.BytesIO()
+        Image.new("RGB", (30, 40), "white").save(changed, format="PNG")
+        with pymupdf.open(source) as document:
+            page = document[0]
+            page.replace_image(page.get_images()[0][0], stream=changed.getvalue())
+            page.insert_text((30, 60), "Recognized source sentence.", render_mode=3)
+            document.save(Path(command[-1]))
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr(ir, "run_bounded", convert)
+    destination = tmp_path / "ocr.pdf"
+    result = run_ocr(source, destination, kind="scanned")
+    assert seen[0][:3] == [sys.executable, "-m", "ocrmypdf"]
+    assert result["proof"]["indexed_engine"] is True
+    assert result["proof"]["output_sha256"] == ir.sha256_file(destination)
+    assert result["coverage"]["pages"][0]["mapping"] == "engine-indexed"
 
 
 def test_skipping_ocr_is_not_recorded_as_having_run(scanned_pdf, tmp_path,

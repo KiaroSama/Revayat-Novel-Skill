@@ -34,6 +34,6 @@ def test_zero_unit_page_merges_without_a_reply(tmp_path):
     review.record(tmp_path, 1, {name: True for name in review.QUESTIONS},
                   render=renderqa.evidence(tmp_path, renders))
     assert pagerun.accept(path, pages, 1)["ok"]
-    assert state.page(1)["state"] == "accepted"
+    assert runstate.RunState(tmp_path).page(1)["state"] == "accepted"
     assert not (pages / manifest["chunks"][0]["output"]).exists()
     assert path.read_bytes() == before
