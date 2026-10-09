@@ -45,6 +45,10 @@ SHA-256 checksums. Its artifact includes `audit-export_YYYY-MM-DD_HH-mm-ss_UTC.l
 with UTC INFO/DEBUG/WARNING/ERROR export events, no credentials or book content;
 artifacts expire after seven days. Verify checksums before replaying.
 
+The separate [offline sandbox CI](tests/sandbox/README.md) requires isolation
+proof before a finite synthetic parser/transaction corpus. It is not a complete
+security audit or literary certification.
+
 <div align="left"><a href="LICENSE">GPL-3.0 licensed</a></div>
 <div align="right"><a href="README.fa.md">فارسی</a></div>
 

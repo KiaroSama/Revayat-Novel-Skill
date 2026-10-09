@@ -46,3 +46,9 @@ unfinished receipt housekeeping does not mean that publication was rolled back.
 
 **Recovery conflict**: A persisted or current state that differs from both recorded
 states, requiring preservation and explicit resolution rather than guessed recovery.
+
+**Control preflight**: Proof that every required isolation boundary is active before
+any work under review is allowed to execute. Unknown means no execution.
+
+**Target validation**: Execution of the declared finite fixture corpus after control
+admission; distinct from a complete source security audit.

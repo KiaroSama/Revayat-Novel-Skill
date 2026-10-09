@@ -1,0 +1,70 @@
+name: Sandbox validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sandbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sandbox:
+    name: offline isolation and synthetic boundaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Prepare runtime without target execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          context="$GITHUB_WORKSPACE/.pytest-tmp/sandbox-build"
+          mkdir -p "$context"
+          cp tests/sandbox/Dockerfile "$context/Dockerfile"
+          cp tests/sandbox/Dockerfile.dockerignore "$context/.dockerignore"
+          cp skills/revayat-novel/requirements.txt "$context/requirements.txt"
+          cp constraints-ci.txt "$context/constraints-ci.txt"
+          timeout --signal=TERM --kill-after=10s 310s python3 - "$context" <<'PY'
+          import runpy
+          import sys
+          import time
+          import signal
+          controller = runpy.run_path('tests/sandbox/runner.py')
+          signal.signal(signal.SIGTERM, controller['cancel'])
+          signal.signal(signal.SIGINT, controller['cancel'])
+          controller['bounded'](['docker', 'build', '--progress=plain', '--iidfile', sys.argv[1] + '/image-id', sys.argv[1]], deadline=time.monotonic() + 300, idle=60)
+          PY
+      - name: Prove controls before finite target fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$(cat .pytest-tmp/sandbox-build/image-id)"
+          timeout --signal=TERM --kill-after=20s 240s python3 tests/sandbox/runner.py --image "$image" --report .pytest-tmp/sandbox-evidence/result.json
+      - name: Remove only task-owned containers after cancellation
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          containers="$(timeout 10s docker ps --all --filter 'label=revayat-sandbox-validation=true' --format '{{.ID}}')"
+          if [ -n "$containers" ]; then
+            timeout --signal=TERM --kill-after=5s 20s docker rm --force $containers
+          fi
+          test -z "$(timeout 10s docker ps --all --filter 'label=revayat-sandbox-validation=true' --format '{{.ID}}')"
+      - name: Keep bounded safe control evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sandbox-control-evidence
+          path: |
+            .pytest-tmp/sandbox-evidence/result.json
+            .pytest-tmp/sandbox-evidence/*.log
+          retention-days: 7
+          if-no-files-found: error
