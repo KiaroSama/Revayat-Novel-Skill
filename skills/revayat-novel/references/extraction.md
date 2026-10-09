@@ -39,8 +39,12 @@ Fresh controlled OCR records `ocr.pdf.proof.json`, binding original/converter/ou
 hashes, options, roles, engine and invocation. Changed deskew rasters cannot prove
 pixel identity. Only the verified current-interpreter OCRmyPDF 17.13.0 indexed-graft
 path permits the explicitly weaker `engine-indexed` mapping evidence; unsupported
-engines require independent anchors or refuse. This is not semantic OCR accuracy
-or a universal proof against arbitrary reordered, fully changed equal-size rasters.
+engines require independent anchors or refuse. When the selected launcher is an
+OCRmyPDF console script and version 17.13.0 is installed in the skill's interpreter,
+execution uses that interpreter's `-m ocrmypdf`, even if the console script lives
+elsewhere on PATH. Discovery still reports the available launcher; invocation and
+proof bind to the actual selected engine. This is not semantic OCR accuracy or a
+universal proof against arbitrary reordered, fully changed equal-size rasters.
 
 ## Image fidelity
 
