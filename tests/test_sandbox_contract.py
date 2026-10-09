@@ -15,7 +15,7 @@ def module():
 
 
 def test_sandbox_launch_has_all_required_controls(tmp_path, module):
-    command = module.create_command("sha256:" + "a" * 64, "revayat-test", tmp_path)
+    command = module.create_command("sha256:" + "a" * 64, "revayat-novel-test", tmp_path)
     assert "--read-only" in command
     for flag, expected in [("--network", "none"), ("--user", "65532:65532"),
                            ("--cpus", "1"), ("--memory", "768m"),
@@ -33,7 +33,7 @@ def test_sandbox_launch_has_all_required_controls(tmp_path, module):
 @pytest.mark.parametrize("image", ["python:latest", "", "sha256:bad", "a;echo bad"])
 def test_unbound_image_identity_refuses_before_launch(tmp_path, image, module):
     with pytest.raises(ValueError):
-        module.create_command(image, "revayat-test", tmp_path)
+        module.create_command(image, "revayat-novel-test", tmp_path)
 
 
 def test_missing_control_proof_never_authorizes_target_results(module):
@@ -56,7 +56,7 @@ def test_nonzero_or_incomplete_case_result_refuses(module):
 @pytest.fixture()
 def inspection(tmp_path, module):
     image = "sha256:" + "a" * 64
-    command = module.create_command(image, "revayat-test", tmp_path)
+    command = module.create_command(image, "revayat-novel-test", tmp_path)
     bindings = []
     for index, flag in enumerate(command):
         if flag != "--mount":
@@ -64,7 +64,7 @@ def inspection(tmp_path, module):
         fields = dict(item.split("=", 1) for item in command[index + 1].split(",") if "=" in item)
         bindings.append({"Type": "bind", "Destination": fields["target"],
                          "Source": fields["source"], "RW": False})
-    return [{"Image": image, "Name": "/revayat-test", "State": {"Running": False},
+    return [{"Image": image, "Name": "/revayat-novel-test", "State": {"Running": False},
              "Config": {"User": "65532:65532", "Entrypoint": ["env"],
                         "Cmd": command[command.index(image) + 1:], "Volumes": None},
              "HostConfig": {"ReadonlyRootfs": True, "NetworkMode": "none",
@@ -79,7 +79,7 @@ def inspection(tmp_path, module):
 
 
 def test_exact_inspection_admits_only_fixed_configuration(inspection, tmp_path, module):
-    module.validate_inspect(inspection, "sha256:" + "a" * 64, "revayat-test", tmp_path)
+    module.validate_inspect(inspection, "sha256:" + "a" * 64, "revayat-novel-test", tmp_path)
 
 
 @pytest.mark.parametrize("field,value", [("NetworkMode", "host"), ("Privileged", True),
@@ -89,7 +89,7 @@ def test_exact_inspection_admits_only_fixed_configuration(inspection, tmp_path, 
 def test_changed_isolation_configuration_refuses(inspection, tmp_path, module, field, value):
     inspection[0]["HostConfig"][field] = value
     with pytest.raises(ValueError):
-        module.validate_inspect(inspection, "sha256:" + "a" * 64, "revayat-test", tmp_path)
+        module.validate_inspect(inspection, "sha256:" + "a" * 64, "revayat-novel-test", tmp_path)
 
 
 @pytest.mark.parametrize("mutation", ["command", "mount", "volume", "tty"])
@@ -103,7 +103,7 @@ def test_extra_entrypoint_or_storage_refuses(inspection, tmp_path, module, mutat
     else:
         inspection[0]["Config"]["Tty"] = True
     with pytest.raises(ValueError):
-        module.validate_inspect(inspection, "sha256:" + "a" * 64, "revayat-test", tmp_path)
+        module.validate_inspect(inspection, "sha256:" + "a" * 64, "revayat-novel-test", tmp_path)
 
 
 def test_closed_output_does_not_remove_idle_ceiling(monkeypatch, module):
@@ -184,7 +184,7 @@ def test_surviving_container_is_never_reported_clean(monkeypatch, module, tmp_pa
             return 0, '{"Version":"28.0.4"}'
         if command[1] == "start":
             raise ValueError("synthetic failed start")
-        return 0, "revayat-survivor" if command[1] == "ps" else "[]"
+        return 0, "revayat-novel-survivor" if command[1] == "ps" else "[]"
     monkeypatch.setattr(module, "bounded", transport)
     report = tmp_path / "result.json"
     assert module.execute("sha256:" + "a" * 64, report, logging.getLogger("test")) == 2

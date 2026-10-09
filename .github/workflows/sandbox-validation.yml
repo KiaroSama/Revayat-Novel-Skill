@@ -53,11 +53,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          containers="$(timeout 10s docker ps --all --filter 'label=revayat-sandbox-validation=true' --format '{{.ID}}')"
+          containers="$(timeout 10s docker ps --all --filter 'label=revayat-novel-sandbox-validation=true' --format '{{.ID}}')"
           if [ -n "$containers" ]; then
             timeout --signal=TERM --kill-after=5s 20s docker rm --force $containers
           fi
-          test -z "$(timeout 10s docker ps --all --filter 'label=revayat-sandbox-validation=true' --format '{{.ID}}')"
+          test -z "$(timeout 10s docker ps --all --filter 'label=revayat-novel-sandbox-validation=true' --format '{{.ID}}')"
       - name: Keep bounded safe control evidence
         if: always()
         uses: actions/upload-artifact@v7

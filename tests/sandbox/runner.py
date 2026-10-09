@@ -49,13 +49,13 @@ def cancel(_signal, _frame):
 def create_command(image, name, target):
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", image):
         raise ValueError("Prepared image must be an exact local image ID")
-    if not re.fullmatch(r"revayat-[a-z0-9-]{1,60}", name):
+    if not re.fullmatch(r"revayat-novel-[a-z0-9-]{1,60}", name):
         raise ValueError("Invalid owned container name")
     source = str(Path(target).resolve())
     control = str(Path(__file__).resolve().parent)
     if any(character in source + control for character in (",", "\n", "\r")):
         raise ValueError("Mount path cannot be safely encoded")
-    return ["docker", "create", "--name", name, "--label", "revayat-sandbox-validation=true",
+    return ["docker", "create", "--name", name, "--label", "revayat-novel-sandbox-validation=true",
             "--read-only", "--network", "none",
             "--user", "65532:65532", "--cpus", "1", "--memory", "768m",
             "--memory-swap", "768m", "--pids-limit", "32", "--cap-drop", "ALL",
@@ -66,7 +66,7 @@ def create_command(image, name, target):
             "--mount", f"type=bind,source={source},target=/target,readonly",
             "--mount", f"type=bind,source={control},target=/control,readonly",
             *(item for filename in ("hosts", "hostname", "resolv.conf")
-              for item in ("--mount", f"type=bind,source={source}/.network/{filename},target=/etc/{filename},readonly")),
+              for item in ("--mount", f"type=bind,source={Path(source) / '.network' / filename},target=/etc/{filename},readonly")),
             "--entrypoint", "env", image, "-i",
             *(f"{key}={value}" for key, value in ENVIRONMENT.items()),
             "/usr/local/bin/python", "-B", "-u", "/control/controls.py"]
@@ -215,7 +215,7 @@ def stage_source(root, destination):
 
 def execute(image, report, logger):
     root = Path(__file__).resolve().parents[2]
-    name = "revayat-" + uuid.uuid4().hex
+    name = "revayat-novel-" + uuid.uuid4().hex
     deadline = time.monotonic() + WALL
     result = {"ok": False, "cleanup": False, "phase": "negative-preflight", "exit_code": None}
     created = False
