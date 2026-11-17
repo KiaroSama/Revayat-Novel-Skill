@@ -4,23 +4,17 @@
 
 <div align="center">
 
-[![وضعیت CI روی شاخهٔ اصلی](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml)
-[![مجوز GPL نسخهٔ ۳ یا بالاتر](https://img.shields.io/badge/License-GPL--3.0--or--later-blue)](LICENSE)
-[![نسخهٔ پلاگین ۱٫۰٫۰](https://img.shields.io/badge/Version-1.0.0-blue)](.claude-plugin/plugin.json)
-[![پایتون ۳٫۱۰ به بالا](https://img.shields.io/badge/Python-3.10%2B-blue)](skills/revayat-novel/requirements.txt)
-[![پشتیبانی از ویندوز، مک و لینوکس](https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux-blue)](.github/workflows/ci.yml)
-
-[![Documentation](https://img.shields.io/badge/Docs-book%20workflow-blue)](skills/revayat-novel/SKILL.md)
-[![وضعیت CodeQL روی شاخهٔ اصلی](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/codeql.yml)
-[![وضعیت ممیزی وابستگی‌ها روی شاخهٔ اصلی](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/dependency-audit.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/dependency-audit.yml)
-[![وضعیت حداقل نسخه‌های پشتیبانی‌شده](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/supported-range.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/supported-range.yml)
-[![وضعیت آزمون OCR و رندر](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/integration.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/integration.yml)
-[![وضعیت بازپخش ممیزی روی شاخهٔ اصلی](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/audit-replay.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/audit-replay.yml)
-
-[![ستاره‌های گیت‌هاب](https://img.shields.io/github/stars/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill)
-[![فورک‌های گیت‌هاب](https://img.shields.io/github/forks/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/forks)
-[![مشارکت‌کنندگان گیت‌هاب](https://img.shields.io/github/contributors/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/graphs/contributors)
-[![ورودی‌های PDF، EPUB، DOCX و متن](https://img.shields.io/badge/Sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-blue)](skills/revayat-novel/SKILL.md)
+[![اجرای دستی CI پروژه](https://img.shields.io/badge/CI-manual-2563eb)](.github/workflows/ci.yml)
+[![مجوز GPL نسخهٔ ۳ یا بالاتر](https://img.shields.io/badge/license-GPL%203.0%2B-7c3aed)](LICENSE)
+[![نسخهٔ پلاگین ۲٫۰٫۰](https://img.shields.io/badge/plugin-2.0.0-15803d)](.claude-plugin/plugin.json)
+[![نسخهٔ آزمایش‌شدهٔ محلی پایتون ۳٫۱۴٫۸](https://img.shields.io/badge/python%203.14.8-verified%20local-8b5cf6)](skills/revayat-novel/requirements.txt)
+[![پشتیبانی از ویندوز، مک‌اواس و لینوکس](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0891b2)](.github/workflows/ci.yml)
+[![نصب پلاگین و نسخهٔ مستقل](https://img.shields.io/badge/install-plugin%20%7C%20standalone-0369a1)](install/README.md)
+[![راهنمای ترجمهٔ کتاب](https://img.shields.io/badge/docs-book%20workflow-0f766e)](skills/revayat-novel/SKILL.md)
+[![حجم فایل‌های ثبت‌شده در نسخهٔ e25c33c: ۳٫۰۰ مگابایت](https://img.shields.io/badge/repo%20size-3.00%20MB%20e25c33c-ca8a04)](https://github.com/KiaroSama/Revayat-Novel-Skill/tree/e25c33c754673ef511a763328a597e8b843a7152)
+[![ورودی‌های PDF، EPUB، DOCX و متن](https://img.shields.io/badge/sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-b45309)](skills/revayat-novel/SKILL.md)
+[![خروجی ورد فارسی](https://img.shields.io/badge/output-Persian%20DOCX-be123c)](skills/revayat-novel/SKILL.md)
+[![سه اسکیل ویرایش همراه پلاگین](https://img.shields.io/badge/writing%20skills-3%20bundled-4d7c0f)](skills/README.md)
 [![Support donations](https://img.shields.io/badge/Support-donations-d04a9a)](#donate)
 
 </div>
@@ -74,12 +68,12 @@ pip install -r skills/revayat-novel/requirements.txt
 ./install/install.sh
 
 # Windows
-powershell -ExecutionPolicy Bypass -File .\install\install.ps1
+pwsh -NoProfile -File .\install\install.ps1
 ```
 
 </div>
 
-به‌صورت پیش‌فرض در هر ایجنتی که پیدا کند نصب می‌شود — Claude Code، Kiro، Codex، Cursor، Cline، Hermes، OpenCode و Antigravity. برای OpenCode و Antigravity یک اشاره‌گر در `AGENTS.md` هم نوشته می‌شود، چون این دو دستورها را از آنجا پیدا می‌کنند. با `--agent claude` فقط یکی، و با `--scope project --path <dir>` فقط داخل یک پروژه. هر دو نصب‌کننده پیش از نصب به **Python 3.10+** نیاز دارند و از یک موتور مشترک استفاده می‌کنند. جایگزینی در اجرای غیرتعاملی فقط با `--force` یا `-Force` مجاز است؛ پاسخ پیش‌فرض تأیید تعاملی «خیر» است و پایان ورودی هم رضایت نیست.
+به‌صورت پیش‌فرض در هر ایجنتی که پیدا کند نصب می‌شود — Claude Code، Kiro، Codex، Cursor، Cline، Hermes، OpenCode و Antigravity. برای OpenCode و Antigravity یک اشاره‌گر در `AGENTS.md` هم نوشته می‌شود، چون این دو دستورها را از آنجا پیدا می‌کنند. با `--agent claude` فقط یکی، و با `--scope project --path <dir>` فقط داخل یک پروژه. هر دو نصب‌کننده پیش از نصب به **Python 3.11+** نیاز دارند و از یک موتور مشترک استفاده می‌کنند. جایگزینی در اجرای غیرتعاملی فقط با `--force` یا `-Force` مجاز است؛ پاسخ پیش‌فرض تأیید تعاملی «خیر» است و پایان ورودی هم رضایت نیست.
 
 نسخه‌های قبلی و دستورهای خصوصی حذف نمی‌شوند؛ برای بازیابی در فضای محلی حفاظت‌شده نگه داشته می‌شوند. اجرای بعدی تراکنش قطع‌شده را بازیابی می‌کند یا در صورت تعارض، بدون حدس‌زدن متوقف می‌شود. فقط بخش متعلق به Revayat Novel در `AGENTS.md` تغییر می‌کند. جزئیات پشتیبان‌ها، گزارش‌ها و محدودیت‌ها در [راهنمای نصب و بازیابی](install/README.md) آمده است.
 
@@ -89,19 +83,18 @@ powershell -ExecutionPolicy Bypass -File .\install\install.ps1
 
 ```
 /plugin marketplace add KiaroSama/Revayat-Novel-Skill
-/plugin install revayat-novel@KiaroSama/Revayat-Novel-Skill
+/plugin install revayat-novel@revayat-novel-skill
 ```
 
 </div>
 
-این کار دستورهای `/translate-book`، `/revayat-novel-resume` و `/revayat-novel-qa` را هم اضافه می‌کند.
+این پلاگین دستورهای `/revayat-novel:translate-book`، `/revayat-novel:revayat-novel-resume` و `/revayat-novel:revayat-novel-qa` را هم اضافه می‌کند.
+
+پلاگین سه اسکیل ویرایش فارسی، انگلیسی و روسی دارد. معیار انتخاب، زبان متنی است که ویرایش می‌کنید. اگر کتابی انگلیسی یا روسی را به فارسی ترجمه کنید، اسکیل فارسی به کار می‌آید. خروجی کتاب همچنان فارسی است. نسخهٔ مستقل هم [راهنمای فارسی خودش](skills/revayat-novel/references/writing-voice.md) را دارد. [نسخه و مجوز هر اسکیل](skills/README.md) را ببینید.
 
 ### بررسی نصب
 
-**پایتون 3.10 یا جدیدتر**، روی لینوکس، مک‌اواس یا ویندوز. CI نسخه‌های 3.10،
-3.13 و 3.14 را روی هر سه اجرا می‌کند. توجه کنید که پشتیبانی از 3.10 در اکتبر
-۲۰۲۶ به پایان می‌رسد — همچنان اینجا کار می‌کند، ولی دیگر وصلهٔ امنیتی CPython
-نمی‌گیرد.
+**پایتون 3.11 یا جدیدتر** روی لینوکس، مک‌اواس یا ویندوز. ماتریس CI نسخه‌های `3.11`، `3.13` و `3.14` را پوشش می‌دهد. اگر نسخهٔ `1.x` را با پایتون `3.10` اجرا می‌کنید، پیش از به‌روزرسانی اسکیل به نسخهٔ پشتیبانی‌شدهٔ پایتون بروید. هنگام به‌روزرسانی، وابستگی‌های اعلام‌شده را دوباره نصب کنید. نسخهٔ اصلاح‌شدهٔ Pillow به پایتون `3.11` نیاز دارد.
 
 <div dir="ltr">
 
@@ -298,6 +291,8 @@ python -m pytest tests -q
 ## سپاس
 
 شکل کلی orchestration — تکه‌کردن کتاب، ترجمهٔ موازی تکه‌ها با subagentها و یک واژه‌نامهٔ مشترک، و ازسرگیری اجرای ناتمام — از رویکردی پیروی می‌کند که [deusyu/translate-book](https://github.com/deusyu/translate-book) (MIT) نشان داده است. استخراج و مسیریابی OCR بر [PyMuPDF](https://github.com/pymupdf/PyMuPDF)، [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF) و به‌صورت اختیاری [MinerU](https://github.com/opendatalab/MinerU) استوارند. ایدهٔ استفاده از یک نمایش میانی برای حفظ صفحه‌آرایی در ترجمه، از [BabelDOC](https://github.com/funstory-ai/BabelDOC) می‌آید.
+
+<a id="donate"></a>
 
 ## حمایت مالی
 

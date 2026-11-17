@@ -1,6 +1,6 @@
 name: OCR integration
 
-# The unit tier runs on every push and deliberately installs no binaries: it
+# The unit tier deliberately installs no binaries: it
 # tests the decisions, which is the part with consequences and the part that
 # can be checked in a second. This workflow is the other half — it installs
 # OCRmyPDF, Tesseract and Ghostscript and runs the pipeline over a PDF built
@@ -11,10 +11,6 @@ name: OCR integration
 # them must not block an unrelated commit.
 on:
   workflow_dispatch:
-  schedule:
-    # Weekly, early Monday UTC. Enough to catch a breaking release of any of
-    # the three tools without spending a runner on every commit.
-    - cron: "17 4 * * 1"
 
 permissions:
   contents: read

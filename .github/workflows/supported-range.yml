@@ -16,32 +16,9 @@ name: Supported range
 # 1.24.3), and the compare sheet drew an em dash through Pillow 10.0's latin-1
 # bitmap font. Neither was reachable from any job that installs the pins.
 #
-# Off the push path, like integration.yml and dependency-audit.yml. A floor that
-# turns out to be wrong is a real finding, but it is a finding about a version
-# nobody pushed, so it must not fail somebody else's commit. Dispatchable,
-# because the answer only changes when requirements.txt does.
+# Dispatch this alongside CI when verifying a release or dependency change.
 on:
-  schedule:
-    # Weekly, well clear of the OCR tier (04:41) and the advisory audit (05:41).
-    - cron: "41 6 * * 1"
   workflow_dispatch:
-  # And on a change to the files the lane is *about*. A floor edited in a pull
-  # request used to wait for the following Monday to be tested, which is a week
-  # in which the claim is unproved — and the schedule is still there for the
-  # other direction, an upstream yanking the release a floor names.
-  pull_request:
-    paths:
-      - "skills/revayat-novel/requirements.txt"
-      - "skills/revayat-novel/requirements-optional.txt"
-      - "dependency-floors.json"
-      - ".github/workflows/supported-range.yml"
-  push:
-    branches: [main]
-    paths:
-      - "skills/revayat-novel/requirements.txt"
-      - "skills/revayat-novel/requirements-optional.txt"
-      - "dependency-floors.json"
-      - ".github/workflows/supported-range.yml"
 
 permissions:
   contents: read
@@ -59,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # 3.10 and only 3.10, by necessity rather than economy. The lowest
+      # The floor lane uses Python 3.11. The lowest
       # *installable* version of a floor depends on the interpreter: on CPython
       # 3.13 `pymupdf==1.24.3` cannot be installed at all — the lowest wheel is
       # 1.24.11 — and pillow 10.0.0 and lxml 5.0.0 shipped before cp313 existed

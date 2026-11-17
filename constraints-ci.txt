@@ -18,19 +18,13 @@
 # test_renderqa.py, test_docqa.py and test_pagerun.py all assert on numbers it
 # produces.
 #
-# Verified green on the full local suite with this exact set: Windows, Word
-# installed, CPython 3.14.7. The CI side of that claim needs a push — read the
-# matrix after one, rather than trusting this comment for it.
+# Dispatch CI on the exact revision whenever this set changes. Results from
+# earlier pins do not verify a new set.
 #
-# `ocrmypdf` and `pywin32` are deliberately NOT pinned here. They are optional
-# tools, installed ad hoc by the two jobs that need them and absent from
-# `requirements.txt` by a recorded decision, and the jobs that use them
-# (`integration.yml`, `word-render.yml`) are scheduled rather than on the push
-# path — so a break there is an optional-tier break that does not redden a
-# push. Measured alongside the pins below: ocrmypdf 17.11.0, pywin32 312.
+# The optional tools `ocrmypdf` and `pywin32` are declared separately. Their
+# integration workflows install them only where needed.
 #
-# To move a pin: change it here, push, and read the matrix. Dependabot opens a
-# PR per update against this file.
+# Dependabot groups updates to these pins for review.
 # Dependabot does update this file. Verified against dependabot-core rather than
 # assumed: its pip fetcher takes every `.txt` whose lines all parse as
 # requirements or comments, which this does, so the `ci-constraints` group in
@@ -48,6 +42,6 @@ pymupdf==1.28.2
 python-docx==1.2.0
 beautifulsoup4==4.15.0
 lxml==6.1.3
-pillow==12.3.0
-pytest==9.1.1
+pillow==13.0.0
+pytest==9.2.0
 pytest-timeout==2.4.0

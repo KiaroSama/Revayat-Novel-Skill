@@ -2,23 +2,17 @@
 
 <div align="center">
 
-[![CI on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/ci.yml)
-[![GPL 3.0 or later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue)](LICENSE)
-[![Plugin version 1.0.0](https://img.shields.io/badge/Version-1.0.0-blue)](.claude-plugin/plugin.json)
-[![Python 3.10 or newer](https://img.shields.io/badge/Python-3.10%2B-blue)](skills/revayat-novel/requirements.txt)
-[![Windows, macOS and Linux](https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux-blue)](.github/workflows/ci.yml)
-
-[![Documentation](https://img.shields.io/badge/Docs-book%20workflow-blue)](skills/revayat-novel/SKILL.md)
-[![CodeQL on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/codeql.yml)
-[![Dependency audit on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/dependency-audit.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/dependency-audit.yml)
-[![Supported dependency range on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/supported-range.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/supported-range.yml)
-[![OCR and renderer integration on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/integration.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/integration.yml)
-[![Audit replay snapshot on main](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/audit-replay.yml/badge.svg?branch=main)](https://github.com/KiaroSama/Revayat-Novel-Skill/actions/workflows/audit-replay.yml)
-
-[![GitHub stars](https://img.shields.io/github/stars/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill)
-[![GitHub forks](https://img.shields.io/github/forks/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/forks)
-[![GitHub contributors](https://img.shields.io/github/contributors/KiaroSama/Revayat-Novel-Skill)](https://github.com/KiaroSama/Revayat-Novel-Skill/graphs/contributors)
-[![PDF, EPUB, DOCX and text inputs](https://img.shields.io/badge/Sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-blue)](skills/revayat-novel/SKILL.md)
+[![Project CI runs on manual dispatch](https://img.shields.io/badge/CI-manual-2563eb)](.github/workflows/ci.yml)
+[![GPL 3.0 or later](https://img.shields.io/badge/license-GPL%203.0%2B-7c3aed)](LICENSE)
+[![Plugin version 2.0.0](https://img.shields.io/badge/plugin-2.0.0-15803d)](.claude-plugin/plugin.json)
+[![Verified local development interpreter Python 3.14.8](https://img.shields.io/badge/python%203.14.8-verified%20local-8b5cf6)](skills/revayat-novel/requirements.txt)
+[![Windows, macOS and Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0891b2)](.github/workflows/ci.yml)
+[![Claude Code plugin and standalone installers](https://img.shields.io/badge/install-plugin%20%7C%20standalone-0369a1)](install/README.md)
+[![Book workflow documentation](https://img.shields.io/badge/docs-book%20workflow-0f766e)](skills/revayat-novel/SKILL.md)
+[![Published baseline e25c33c: 3.00 MB of tracked files](https://img.shields.io/badge/repo%20size-3.00%20MB%20e25c33c-ca8a04)](https://github.com/KiaroSama/Revayat-Novel-Skill/tree/e25c33c754673ef511a763328a597e8b843a7152)
+[![PDF, EPUB, DOCX and text sources](https://img.shields.io/badge/sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-b45309)](skills/revayat-novel/SKILL.md)
+[![Persian Word output](https://img.shields.io/badge/output-Persian%20DOCX-be123c)](skills/revayat-novel/SKILL.md)
+[![Three bundled writing skills](https://img.shields.io/badge/writing%20skills-3%20bundled-4d7c0f)](skills/README.md)
 [![Support donations](https://img.shields.io/badge/Support-donations-d04a9a)](#donate)
 
 </div>
@@ -83,14 +77,14 @@ Then install the skill into whichever agents you use:
 ./install/install.sh
 
 # Windows
-powershell -ExecutionPolicy Bypass -File .\install\install.ps1
+pwsh -NoProfile -File .\install\install.ps1
 ```
 
 By default this installs into every agent it finds — Claude Code, Kiro, Codex,
 Cursor, Cline, Hermes, OpenCode and Antigravity. OpenCode and Antigravity also
 get an `AGENTS.md` pointer, because that is how they discover instructions.
 Use `--agent claude` for one, and `--scope project --path <dir>` for a single
-project. Both wrappers require **Python 3.10+ before installation** and use one
+project. Both wrappers require **Python 3.11+ before installation** and use one
 standard-library engine. Updating an existing copy requires `--force` / `-Force`
 in automation; interactive confirmation defaults to **No**, including EOF.
 
@@ -105,16 +99,24 @@ inventory maintenance and the limits of multi-directory recovery.
 
 ```
 /plugin marketplace add KiaroSama/Revayat-Novel-Skill
-/plugin install revayat-novel@KiaroSama/Revayat-Novel-Skill
+/plugin install revayat-novel@revayat-novel-skill
 ```
 
-That also gives you `/translate-book`, `/revayat-novel-resume` and `/revayat-novel-qa`.
+That also gives you `/revayat-novel:translate-book`, `/revayat-novel:revayat-novel-resume` and `/revayat-novel:revayat-novel-qa`.
+
+The plugin bundles Persian, Humanizer and Great Russian. Choose by the language
+of the prose you are editing. An English or Russian source translated into
+Persian still uses the Persian skill. Revayat Novel produces Persian books; use
+the English and Russian skills for separate editorial work. The standalone book
+skill includes [its own Persian guidance](skills/revayat-novel/references/writing-voice.md).
+See the [upstream revisions and licenses](skills/README.md).
 
 ### Check the install
 
-**Python 3.10 or newer**, on Linux, macOS or Windows. CI runs 3.10, 3.13 and
-3.14 on all three. Note that 3.10 reaches end of life in October 2026 — it still
-works here, and it stops receiving CPython security fixes.
+**Python 3.11 or newer** on Linux, macOS or Windows. The CI matrix covers 3.11,
+3.13 and 3.14. If you are upgrading from 1.x on Python 3.10, switch to a supported
+interpreter before updating the skill. Install the declared requirements again
+on upgrade. The Pillow release with the image-decoder fixes requires Python 3.11.
 
 ```bash
 python skills/revayat-novel/scripts/revayat-novel.py doctor

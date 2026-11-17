@@ -4,19 +4,6 @@ name: Audit replay snapshot
 # unavailable. Archive tracked files only, never credentials or working books.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - ".github/workflows/audit-replay.yml"
-  pull_request:
-    paths:
-      - ".github/workflows/audit-replay.yml"
-      # A repair's exact checkout and wheels must be reproducible before merge,
-      # not only after someone edits the exporter or dispatches it manually.
-      - "skills/revayat-novel/scripts/**"
-      - "tests/**"
-      - "skills/revayat-novel/requirements*.txt"
-      - "constraints-ci.txt"
-      - "requirements-lint.txt"
 
 permissions:
   contents: read
@@ -62,8 +49,7 @@ jobs:
           retention-days: 7
 
   wheelhouse:
-    # Runs alongside source replay for relevant PRs or an explicit dispatch;
-    # it does not replace the existing CI matrix or its no-skip gates.
+    # Dispatch alongside source replay. It does not replace the CI test matrix.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

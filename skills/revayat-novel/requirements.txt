@@ -1,14 +1,5 @@
-# Python 3.10 or newer. CI runs 3.10, 3.13 and 3.14 on Linux, macOS and Windows
-# — the oldest and newest supported, plus the one someone installing Python
-# today gets. Verified rather than assumed: every script parses under
-# `ast.parse(..., feature_version=(3, 10))`.
-#
-# **3.10 reaches end of life in 2026-10** (python.org developer guide). After
-# that a reader on it gets no further CPython security fixes. The floor is kept
-# at 3.10 anyway, because several current distro images still ship it as the
-# system Python and this skill is meant to run on whatever the reader has.
-# Raising it to 3.11 is a two-line change: this comment and `ruff.toml`'s
-# `target-version`, plus the CI matrix.
+# Python 3.11 or newer. CI covers 3.11, 3.13 and 3.14 on Linux, macOS and Windows.
+# Pillow 13, the minimum with the required image-decoder fixes, needs Python 3.11.
 
 # Two sibling files answer different questions. `requirements-optional.txt`
 # declares the wheels two stages need and the rest of the pipeline does without.
@@ -30,9 +21,9 @@
 pymupdf>=1.24.3          # PDF text, geometry and original image bytes
 python-docx>=1.1         # DOCX reading and writing
 beautifulsoup4>=4.12     # EPUB (XHTML) parsing
-# Security floors: current XML entity and image-decoder fixes; Python 3.10 supported.
+# Security floors for XML entities and image decoding.
 lxml>=6.1.3              # OOXML manipulation (also a python-docx dependency)
-pillow>=12.3.0           # removing a colour watermark from scanned pages
+pillow>=13.0.0           # image handling and scan cleanup
 
 # Development only.
 # 9.0.3 fixes GHSA-6w46-j5rx-g56g and still supports Python 3.10.

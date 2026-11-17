@@ -1,9 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -22,14 +19,9 @@ jobs:
       fail-fast: false
       matrix:
         # All three platforms people actually run this on, at the oldest and
-        # newest supported interpreters — and 3.14, which is what someone
-        # installing Python today gets. This is a skill people copy into their
-        # own agent directory and run against whatever interpreter they have,
-        # so "newest" has to mean the current release rather than the one that
-        # was current when the matrix was written. Verified locally first: the
-        # full suite passes on CPython 3.14.7 with every dependency as a wheel.
+        # newest supported versions, plus 3.13 for existing installations.
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.10", "3.13", "3.14"]
+        python: ["3.11", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v7
@@ -159,7 +151,7 @@ jobs:
         # ceiling, while every other job on those runs went green. That is the
         # same judgement `integration.yml` already makes about apt and a 200 MB
         # OCR toolchain, so the Windows render tier lives there instead —
-        # scheduled and dispatchable, off the push path.
+        # dispatchable, off the push path.
         os: [ubuntu-latest, macos-latest]
 
     steps:

@@ -168,7 +168,7 @@ live in `tests/page_fixtures.py`; rendering views/documents in
 processes and evidence each have cohesive test owners. **No CI job passes `-m`**:
 `tests/test_ci_tiers.py` guards marker declaration, optional-lane membership and
 one JUnit producer per lane. Optional render lanes include the real render-cache
-integration and apply the same full skip gate as equipped push CI. Hosted runners
+integration and apply the same full skip gate as equipped manual CI. Hosted runners
 have no Office licence. The Word COM path requires an equipped local machine or
 the dispatch-only self-hosted `word` lane; `doctor` reports the selected backend.
 
@@ -216,7 +216,7 @@ Keep the three plugin manifests at the same `version` — CI enforces it.
 Every tracked text file must be UTF-8; CI enforces that too.
 
 CI runs `ruff check skills/revayat-novel/scripts tests evaluation install`.
-`requirements-lint.txt` pins Ruff 0.16.10; `ruff.toml` explicitly selects
+`requirements-lint.txt` pins Ruff 0.17.5; `ruff.toml` explicitly selects
 `["E4", "E7", "E9", "F"]`, preserving the established gate across changed
 upstream defaults. Use the manifest's version locally:
 `pip install -r requirements-lint.txt`. Dependabot can propose a manifest bump;
@@ -233,6 +233,12 @@ runs it against whatever they already have. The two files answer different
 questions: one is the range the skill supports, the other is the set the build
 was checked against. Moving a pin is a commit, and Dependabot opens a PR per
 update.
+
+Dispatch `ci.yml`, `supported-range.yml`, `integration.yml`, and
+`sandbox-validation.yml` for the candidate ref. Use `audit-replay.yml` for the
+same ref when creating replay evidence. Read each run's exact commit and results
+before merging. CodeQL, Gitleaks, dependency review, and dependency audits retain
+their separate security triggers.
 
 `dependency-audit.yml` runs `pip-audit` weekly against the floors in
 `requirements.txt` and against what they resolve to that day — the question

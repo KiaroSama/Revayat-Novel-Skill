@@ -9,7 +9,11 @@ from test_web_dom_boundaries import import_source
 @pytest.mark.parametrize('ancestor', ['hidden', 'nav', 'form', 'template'])
 def test_selected_descendant_cannot_escape_an_excluded_ancestor(tmp_path, ancestor):
     start, end = ('<div hidden>', '</div>') if ancestor == 'hidden' else (f'<{ancestor}>', f'</{ancestor}>')
-    with pytest.raises(ValueError, match='selected|excluded|hidden'):
+    # Some html.parser versions leave template contents out of selector results.
+    refusal = 'selected chapter root is hidden, excluded or unsupported'
+    if ancestor == 'template':
+        refusal += '|chapter selector must match exactly one narrative container'
+    with pytest.raises(ValueError, match=refusal):
         import_source(tmp_path, start+'<article id="chapter">Visible-looking text.</article>'+end)
     assert not (tmp_path/'work/book.json').exists()
 

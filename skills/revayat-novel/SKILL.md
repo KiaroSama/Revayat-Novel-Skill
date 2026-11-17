@@ -16,7 +16,7 @@ Resolve once:
 - `SKILL_DIR`: the directory containing this file.
 - `WORK`: this book's work directory; put its review directories inside it.
 - `OUTPUT_DIR`: the directory containing the translated deliverable; resolve it before starting and put the translation logs here too.
-- `PY`: Python 3.10 or newer (`python3` on macOS / Linux; `python` or the installed interpreter on Windows).
+- `PY`: Python 3.11 or newer (`python3` on macOS / Linux; `python` or the installed interpreter on Windows).
 - `OCR_LANG`: the language printed in the source (`eng` for English, `fas` for Persian).
 
 Every command below uses the same interpreter and work directory. Quote paths
@@ -43,8 +43,9 @@ an affirmative answer, work serially. Log the choice beside the translated outpu
 $PY $SKILL_DIR/scripts/revayat-novel.py doctor
 ```
 
-Continue when `ready` is true. Install missing core requirements from
-`$SKILL_DIR/requirements.txt` and repeat the check. Optional tool availability
+On a new install or upgrade, install the declared requirements from
+`$SKILL_DIR/requirements.txt`, even if this interpreter already has the modules.
+Then run `doctor` again and continue when `ready` is true. Optional tool availability
 matters only for stages that use those tools; report unavailable coverage honestly.
 
 ## Step 2 — Extract and inspect
@@ -105,6 +106,7 @@ Map aliases explicitly, for example `"alias_targets": {"Ashcroft": "اشکراف
 Preserve `first_block_id`; the shared naming plan chooses an eligible introduction.
 
 Set `policy.book_voice` for narration and character voice cards for dialogue.
+Use [writing-voice.md](references/writing-voice.md) to select the guidance for the prose you are writing, before drafting or dispatching translation work.
 Keep approved short Persian examples in these existing text fields when useful.
 Read [glossary-and-voice.md](references/glossary-and-voice.md) for the schema.
 Distinct registers stay distinct; an approved example is guidance, not text to copy.
@@ -230,7 +232,7 @@ earlier. Preserve and inspect escalation evidence instead of resetting history.
 ## Step 6c — Read the Persian independently
 
 A Persian-only reading complements bilingual review; a bilingual reviewer can also
-assess fluency. Keep the independent pass focused on natural Persian and voice.
+assess fluency. Follow the Persian route in [writing-voice.md](references/writing-voice.md) before writing fluency replies.
 
 ```bash
 $PY $SKILL_DIR/scripts/revayat-novel.py fluency sheets --book $WORK/book.json --out $WORK/fluency --meaning $WORK/review

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Install Revayat Novel through its shared Python 3.10+ preservation engine.
+    Install Revayat Novel through its shared Python 3.11+ preservation engine.
 #>
 [CmdletBinding()]
 param(
@@ -21,7 +21,7 @@ foreach ($name in 'python3','python','py') {
     if (-not $command) { continue }
     $prefix = if ($name -eq 'py') { @('-3') } else { @() }
     try {
-        & $command.Source @prefix -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' 2>$null
+        & $command.Source @prefix -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' 2>$null
         if ($LASTEXITCODE -ne 0) { continue }
     } catch { continue }
     try {
@@ -36,5 +36,5 @@ foreach ($name in 'python3','python','py') {
         exit 1
     }
 }
-Write-Error 'Python 3.10+ is required before installation; no files were replaced.' -ErrorAction Continue
+Write-Error 'Python 3.11+ is required before installation; no files were replaced.' -ErrorAction Continue
 exit 1

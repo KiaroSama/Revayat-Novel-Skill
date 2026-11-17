@@ -3,7 +3,7 @@
 # fires on eight `zip()` calls that were each read and found correct, and
 # `RUF001` fires on the Persian and typographic characters this project exists
 # to handle. A gate that cries wolf is a gate people turn off.
-target-version = "py310"
+target-version = "py311"
 
 [lint]
 # Preserve the established gate across Ruff 0.16's expanded defaults, including

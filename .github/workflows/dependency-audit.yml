@@ -42,8 +42,7 @@ name: Dependency audit
 # is not a reason to fail an unrelated commit.
 on:
   schedule:
-    # Weekly, early Monday UTC — an hour after the OCR tier, so two heavy
-    # scheduled jobs do not start together.
+    # Check published advisories every Monday, even when no code changed.
     - cron: "41 5 * * 1"
   workflow_dispatch:
   # And when the set being audited changes. A pin raised in a pull request used

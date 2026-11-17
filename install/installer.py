@@ -21,7 +21,7 @@ from install_transaction import installation_lock, publish
 ROOT = Path(__file__).absolute().parent.parent
 SOURCE = ROOT / "skills" / "revayat-novel"
 INVENTORY = ROOT / "install" / "payload.json"
-INVENTORY_SHA256 = "46f838fcd3828ee9a285b84b92a9cdf09354c5958db566164fcc4e6fcd727c27"
+INVENTORY_SHA256 = "2016c30dd5301c39d163f42998f6567355fbb1035581c7f60661f371ca8b53b6"
 
 
 def verified_snapshot(source: Path, inventory: Path) -> dict:

@@ -1,9 +1,9 @@
 # Recoverable skill installation
 
-Both native wrappers require Python 3.10+ **before installation**, with no third-party
+Both wrappers require Python 3.11+ **before installation** and have no third-party
 installer dependencies. Keep `installer.py`, `install_files.py`,
-`install_transaction.py`, `install_status.py` and `payload.json` beside the wrappers. Python 3.10 remains
-a tested compatibility floor, not a recommendation to use an EOL interpreter.
+`install_transaction.py`, `install_status.py` and `payload.json` beside the wrappers.
+They copy the standalone book skill. The plugin ships the three editorial skills separately.
 
 ```bash
 bash install/install.sh --agent claude --scope project --path /path/to/project
