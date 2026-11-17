@@ -50,7 +50,7 @@ Without a sample, take the voice from the kind of text. Blog posts, essays, opin
 
 **Pasted text (default).** Return the draft, a short list of remaining patterns, and the final rewrite.
 
-**File mode.** When the user names a file, first read the whole current file from disk, even if you wrote it in this session. Read long files in chunks until every section has been covered. Run the full process but write only the final text to the file. Change prose only. Keep code blocks, inline code, commands, paths, YAML metadata, data, and link targets unchanged. Then give the user a short summary stating how many sections you reviewed and identifying any you could not cover. A partial pass must be reported as partial.
+**File mode.** When the user names a file, first read the whole current file from disk, even if you wrote it in this session. Read long files in chunks until every section has been covered. Run the full process when the user requests edits. Leave the file untouched when they ask for a review or a proposed rewrite. Change prose only. Keep code blocks, inline code, commands, paths, YAML metadata, data, and link targets unchanged. Then give the user a short summary stating how many sections you reviewed and identifying any you could not cover. A partial pass must be reported as partial.
 
 **Embedded mode.** When another task uses this skill for a pull request, commit message, or document, return only the final text.
 
@@ -194,7 +194,7 @@ Shapes and punctuation applied everywhere, whether or not the meaning asks for t
 
 ### 8. Dashes as the universal connector
 
-**Rule:** The final rewrite must not contain em dashes (—) or en dashes (–) unless the writer's sample uses them; then match the sample's rate. Replace each dash with a period, comma, colon, or parentheses, or rewrite the sentence. This includes spaced dashes and double hyphens (` -- `) used as dashes. Leave dashes and hyphens inside code blocks, inline code, commands, paths, and URLs alone.
+**Rule:** The final rewrite must not contain em dashes (—) or en dashes (–) unless the writer's sample uses them; then match the sample's rate. Replace each dash with a period, comma, colon, or parentheses, or rewrite the sentence. This includes spaced dashes and double hyphens (` -- `) used as dashes. Leave dashes and hyphens inside direct quotations, code blocks, inline code, commands, paths, and URLs alone.
 
 **Problem:** A dash lets the writer skip choosing how two clauses relate, so a model reaches for it everywhere. Many editors and journalists also use dashes, so one dash is *weak alone*; a text full of them is not.
 
@@ -324,13 +324,13 @@ The fact underneath is usually sound. Keep it and remove the dressing.
 > Due to its unique characteristics, the Haolai River is of interest to researchers and conservationists. Experts believe it plays a crucial role in the regional ecosystem.
 
 **After:**
-> Researchers and conservationists study the Haolai River, often called the narrowest river in the world: it averages about 15 centimeters wide.
+> (Omit the claim until the source identifies the researchers and explains the river's role.)
 
 **Before (prestige list):**
 > Her views have been cited in The New York Times, BBC, Financial Times, and The Hindu. She maintains an active social media presence with over 500,000 followers.
 
 **After:**
-> In a 2024 New York Times interview, she argued that AI regulation should focus on outcomes rather than methods.
+> She has more than 500,000 social media followers.
 
 ### 18. Avoiding is, are, and has
 

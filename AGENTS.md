@@ -246,6 +246,8 @@ their separate security triggers.
 request changed. It is scheduled and dispatchable, not on the push path: a newly
 published advisory should not fail an unrelated commit.
 
+The Pillow 13 floor contains the image-decoder fixes required by the dependency audit. It is why the project now requires Python 3.11.
+
 The two optional wheels are declared too, in
 `skills/revayat-novel/requirements-optional.txt`: `ocrmypdf`, which forks
 Tesseract and Ghostscript over a PDF from an untrusted source, and `pywin32`,

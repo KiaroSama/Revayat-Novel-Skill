@@ -64,6 +64,8 @@ security audit or literary certification.
 
 ## Install
 
+Use Python 3.11 or newer. On Windows, run the installer from PowerShell 7 (`pwsh`). If your administrator manages script execution, follow their policy for running the checked-out installer.
+
 ```bash
 git clone https://github.com/KiaroSama/Revayat-Novel-Skill.git
 cd Revayat-Novel-Skill

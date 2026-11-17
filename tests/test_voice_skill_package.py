@@ -1,5 +1,7 @@
 """Contracts for editorial guidance shipped with the native plugin."""
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -38,3 +40,16 @@ def test_book_routes_by_editable_prose_and_keeps_standalone_fallback():
     assert 'English source translated into Persian uses Persian guidance' in text
     assert 'persian-typography.md' in text
     assert 'translation-policy.md' in text
+
+
+@pytest.mark.parametrize(('source', 'expected'), [
+    ('    print(1)\n\nكتاب', '    print(1)\n\nکتاب'),
+    ('نسخه 1.2.3.4', 'نسخه 1.2.3.4'),
+    ('این یک جمله فارسی است. "Go, now?"', 'این یک جمله فارسی است. "Go, now?"'),
+])
+def test_persian_linter_preserves_embedded_literals_and_english(source, expected):
+    result = subprocess.run(
+        [sys.executable, '-I', '-B', str(SKILLS / 'persian/scripts/persian_lint.py'), '--fix'],
+        input=source, text=True, encoding='utf-8', capture_output=True, check=True, timeout=10,
+    )
+    assert result.stdout == expected

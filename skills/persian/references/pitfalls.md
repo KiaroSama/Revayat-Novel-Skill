@@ -21,8 +21,7 @@ Iran and sometimes cut or soften alcohol, sex, and politics. Copy their craft, n
 
 ## P2 · Drop redundant or implied words
 Persian routinely omits what English states explicitly when context carries it.
-- EN: *my parents' wedding night* → ✓ عروسیِ پدر و مادرم (the «شب» is usually dropped)
-- Models tend to translate every word («شبِ عروسی»), which reads over-literal.
+- EN: *my parents' wedding night* → شب عروسی پدر و مادرم. Keep the night when the source specifies it.
 
 ## P3 · Prefer a predicate verb over a bare adjective string
 - EN: *looking tired and grim*
@@ -67,10 +66,10 @@ match *this* speaker, not a generic one.
 Don't calque as «تازه X بود که Y». Persian prefers a simultaneity frame and often nominalizes X.
 - EN: The microwave had just beeped when the lights went out
 - ✗ مایکروفر تازه بوق زده بود که چراغ‌ها خاموش شد
-- ✓ همزمان با صدای بوقِ مایکروفر، برق رفت
+- ✓ هم‌زمان با بوق مایکروفر، چراغ‌ها خاموش شدند.
 
 ## P12 · Natural collocations for everyday events
-- "the lights went out" → ✓ برق رفت (not چراغ‌ها خاموش شد)
+- "the lights went out" → چراغ‌ها خاموش شدند. Use «برق رفت» only if the context establishes a power outage.
 - "the music disappeared/stopped" → ✓ موسیقی قطع شد (not موسیقی ناپدید شد)
 
 ## P13 · Stock exclamations and suggestion frames: use the Persian idiom
@@ -183,8 +182,8 @@ English: "…," he said, brushing salt from his beard. Persian often leads with 
 ## P38 · Re-architect long periodic sentences around their endpoint
 - Front the goal «برای رسیدن به انگلیس…»; background secondary clauses with «در حالی که…»
 
-## P39 · Add an implied motion or gathering verb to make a tableau physical
-- "ate on a table" → «دورِ میز حلقه می‌زدیم و با دست می‌خوردیم»
+## P39 · Keep physical actions faithful to the source
+- "we ate at a table" → «سر میز غذا می‌خوردیم». Do not add an eating method the source does not specify.
 
 ## P40 · "establish ourselves / make it" → ambition idiom «به جایی رسیدن» (not «خود را تثبیت کردن»)
 
@@ -231,8 +230,8 @@ English: "…," he said, brushing salt from his beard. Persian often leads with 
 ## P55 · Manner adverb on a dialogue tag → reason-phrase adjunct
 - "adding tentatively" → «محضِ احتیاط اضافه کردم» (not «با تردید»)
 
-## P56 · Reported gossip stays present-perfect «…شده است» (live-news feel), not past «بود»
-- "her husband had fallen in love" → «عاشق زن دیگری شده است»
+## P56 · Keep the time and referents of reported gossip
+- "her husband had fallen in love" → «شوهرش عاشق شده بود». Keep the person unspecified when the source does.
 
 ## P57 · English concessive "Not that I X" → plain Persian negative
 - → «من سرزنشش نمی‌کنم» (not «نه اینکه سرزنشش کنم»)

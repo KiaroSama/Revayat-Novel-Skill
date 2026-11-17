@@ -133,8 +133,9 @@ left-aligned in Word; changing it to `w:jc="start"` fixed it.
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 pPr = paragraph._p.get_or_add_pPr()
-pPr.append(OxmlElement('w:bidi'))                 # RTL
-jc = OxmlElement('w:jc'); jc.set(qn('w:val'), 'start'); pPr.append(jc)   # NOT 'right'
+if pPr.find(qn('w:bidi')) is None:
+    pPr.insert_element_before(OxmlElement('w:bidi'), 'w:spacing', 'w:ind', 'w:jc')
+pPr.get_or_add_jc().set(qn('w:val'), 'start')
 rPr = run._r.get_or_add_rPr()
 rFonts = OxmlElement('w:rFonts')
 for k in ('w:ascii', 'w:hAnsi', 'w:cs'): rFonts.set(qn(k), 'Arial')

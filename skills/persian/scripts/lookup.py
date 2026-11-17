@@ -25,6 +25,7 @@ for _stream in (sys.stdout, sys.stderr, sys.stdin):
     try:
         _stream.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
+        # A substituted or already-read stream may not support reconfiguration.
         pass
 
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -95,7 +96,11 @@ def main(argv=None):
     p.add_argument("--json", action="store_true")
     p.add_argument("file", nargs="?", default="-")
     a = p.parse_args(argv)
-    text = open(a.file, encoding="utf-8").read() if a.file != "-" else sys.stdin.read()
+    if a.file == "-":
+        text = sys.stdin.read()
+    else:
+        with open(a.file, encoding="utf-8") as source:
+            text = source.read()
 
     result = {}
     for label, fname in BANKS:

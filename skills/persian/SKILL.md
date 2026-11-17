@@ -73,10 +73,10 @@ The highest-frequency ways a draft betrays itself. Apply while drafting; the ful
 - **-ing participles → coordinate verbs (P15).** Not «در حالِ …»: *ran the water, soaking the
   knife* → «شیر را باز کرد و چاقو را در آب گذاشت».
 - **Dialogue must sound spoken (P8).** Match the speaker: *"Go on, now"* → «برو دیگه، یالا».
-- **Drop implied words (P2).** *wedding night* → «عروسی».
+- **Drop only redundant words (P2).** *wedding night* → «شب عروسی».
 - **«چرا» answers a negative question (P35).** *Isn't it…?* answered yes → «چرا، هست».
 - **Verb-final order (P6).** *Upstairs was my room* → «اتاقم … در طبقهٔ بالا بود».
-- **Persian collocations (P12, P13).** *the lights went out* → «برق رفت»; *perfect timing* → «چه به‌موقع!».
+- **Persian collocations (P12, P13).** *the lights went out* → «چراغ‌ها خاموش شدند»; *perfect timing* → «چه به‌موقع!».
 - **Flatten dialogue tags (P20).** suggested / conceded / announced → usually «گفت».
 - **Re-segment to Persian rhythm (P5).** Shorter clauses; don't keep English dashes or clause order.
 - **No officialese (ai-tells §1).** «است» not «می‌باشد»; «سه اتاق دارد» not «دارای سه اتاق است»;

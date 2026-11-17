@@ -43,6 +43,7 @@ for _stream in (sys.stdout, sys.stderr, sys.stdin):
     try:
         _stream.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
+        # A substituted or already-read stream may not support reconfiguration.
         pass
 
 ZWNJ = "‌"     # نیم‌فاصله / zero-width non-joiner
@@ -82,11 +83,11 @@ HEH_STOPWORDS = {"که", "چه", "نه", "به", "سه", "بله", "آنچه", "
 _PROTECT = re.compile(
     r"```.*?```"
     r"|`[^`\n]*`"
-    r"|^(?: {4,}|\t)\S.*$"
+    r"|^(?: {4,}|\t)\S[^\r\n]*$"
     r"|(?:https?://|www\.)\S+"
     r"|[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"
     r"|\bv\d+(?:\.\d+)+\b"
-    r"|\b\d+\.\d+\.\d+\b",
+    r"|\b\d+(?:\.\d+){2,}\b",
     re.DOTALL | re.MULTILINE,
 )
 _SENTINEL = "\x00"
@@ -149,7 +150,8 @@ def _convert_punct(line, latin, persian, persian_line, between_digits_ok=False):
     out, n, i = [], 0, 0
     while i < len(line):
         ch = line[i]
-        if ch == latin and (persian_line or _persian_neighbours(line, i)):
+        if (ch == latin and not (i > 0 and re.fullmatch(r"[A-Za-z]", line[i - 1]))
+                and (persian_line or _persian_neighbours(line, i))):
             prev_d = i > 0 and re.match(r"[0-9۰-۹]", line[i - 1])
             next_d = i + 1 < len(line) and re.match(r"[0-9۰-۹]", line[i + 1])
             if between_digits_ok or not (prev_d and next_d):
@@ -166,13 +168,12 @@ _QUOTE_PAIR = re.compile(r'"([^"\n]*)"|“([^“”\n]*)”')
 
 
 def _quotes_to_guillemets(line, persian_line):
-    """Convert a quote pair to «…» when it is Persian: the line is Persian, or the
-    quoted content itself is Persian-majority."""
+    """Use guillemets for Persian quotes; preserve Latin quotes in mixed prose."""
     n = [0]
 
     def repl(m):
         inner = m.group(1) if m.group(1) is not None else m.group(2)
-        if persian_line or (inner.strip() and _is_persian_line(inner)):
+        if _is_persian_line(inner) or (persian_line and not re.search(r"[A-Za-z]", inner)):
             n[0] += 1
             return "«" + inner + "»"
         return m.group(0)

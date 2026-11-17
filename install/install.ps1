@@ -15,11 +15,12 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $engine = Join-Path $PSScriptRoot 'installer.py'
-foreach ($name in 'python3','python','py') {
-    $command = Get-Command -Name $name -CommandType Application -ErrorAction SilentlyContinue |
+foreach ($name in 'python3','python','py','py -3.14','py -3.13','py -3.12','py -3.11') {
+    $executable, $selector = $name -split ' ', 2
+    $command = Get-Command -Name $executable -CommandType Application -ErrorAction SilentlyContinue |
         Select-Object -First 1
     if (-not $command) { continue }
-    $prefix = if ($name -eq 'py') { @('-3') } else { @() }
+    $prefix = if ($selector) { @($selector) } elseif ($name -eq 'py') { @('-3') } else { @() }
     try {
         & $command.Source @prefix -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' 2>$null
         if ($LASTEXITCODE -ne 0) { continue }
