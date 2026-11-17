@@ -11,16 +11,11 @@
 # forks subprocesses over untrusted PDFs and the one part that drives a COM
 # automation server were the two the advisory scan never looked at.
 #
-# No version floor, deliberately. A floor is a claim about the oldest version
-# that works, and nothing here has ever run an old one: CI installs whatever
-# resolves today. An invented number would read as tested. If one of these ever
-# needs a minimum, it belongs in `dependency-floors.json` too, which is the list
-# both floor lanes install from.
-
+# The project verifies changed page rasters with this exact OCR engine version.
 # Adds a text layer to a scanned or mixed PDF, via Tesseract and Ghostscript.
 # Those two are binaries, not wheels: `doctor` locates them and
 # `extract.OPTIONAL_TOOLS` names them. pip cannot install them and does not try.
-ocrmypdf
+ocrmypdf==17.13.0
 
 # Microsoft Word through COM, which is how the render-QA path lays a document out
 # on Windows. LibreOffice covers every other platform and needs no wheel.

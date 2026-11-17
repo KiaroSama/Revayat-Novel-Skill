@@ -369,7 +369,7 @@ def run_ocr(
     if not launcher:
         raise ExtractError(
             "this PDF needs OCR, but OCRmyPDF is not available.\n"
-            "  1. pip install ocrmypdf\n"
+            "  1. pip install ocrmypdf==17.13.0\n"
             "  2. Tesseract:   winget install tesseract-ocr.tesseract\n"
             "     (macOS: brew install tesseract · Debian: apt install tesseract-ocr)\n"
             "  3. Ghostscript: https://ghostscript.com/releases/gsdnld.html\n"

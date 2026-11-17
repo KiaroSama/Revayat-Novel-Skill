@@ -114,11 +114,8 @@ jobs:
           pip-audit -r resolved-floors.txt
 
       - name: Audit the optional wheels a reader adds separately
-        # `requirements-optional.txt` declares no floors, on purpose: nothing has
-        # ever run an old ocrmypdf here, so a floor would be an untested claim.
-        # With no floor there is only one question to ask — what resolves — and
-        # this is it. The Windows half of the set is in the job below, because
-        # `pywin32` carries a `sys_platform` marker that is false on this runner.
+        # Audit the verified OCR engine pin and its resolved dependencies.
+        # The Windows-only pywin32 marker is exercised by the job below.
         run: |
           python -m venv /tmp/optional-env
           /tmp/optional-env/bin/python -m pip install --quiet --upgrade pip

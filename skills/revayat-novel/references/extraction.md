@@ -78,10 +78,10 @@ paper instead of against the book's usual shape.
 
 ## When OCRmyPDF is not installed
 
-The error names the fix:
+Use the version verified for OCR page mapping:
 
 ```bash
-pip install ocrmypdf
+pip install ocrmypdf==17.13.0
 
 # Tesseract, the recognition engine:
 winget install tesseract-ocr.tesseract     # Windows

@@ -251,18 +251,12 @@ def test_each_floors_pin_is_the_floors_own_release_series(name, pin):
         f"{name}: {pin} is below its own declared floor {floor}")
 
 
-def test_the_optional_manifest_declares_no_floor():
-    """An untested floor reads as a tested one.
-
-    Nothing in CI has ever installed an old `ocrmypdf`, so a number here would
-    be a claim with no lane behind it — the exact defect `supported-range.yml`
-    exists to stop the core manifest making.
-    """
-    for name, (op, version) in requirements(OPTIONAL).items():
-        assert op is None and version is None, (
-            f"{name} carries {op}{version} in requirements-optional.txt. If the "
-            f"floor is real, pin it in supported-range.yml too so something "
-            f"proves it; if it is a guess, drop it")
+def test_ocr_installation_selects_the_verified_page_mapping_engine():
+    optional = requirements(OPTIONAL)
+    assert optional['ocrmypdf'] == ('==', '17.13.0')
+    assert optional['pywin32'] == (None, None)
+    workflow = (ROOT / '.github/workflows/integration.yml').read_text(encoding='utf-8')
+    assert '-r skills/revayat-novel/requirements-optional.txt' in workflow
 
 
 def test_the_windows_only_wheel_carries_its_marker():

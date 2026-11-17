@@ -252,10 +252,9 @@ Tesseract and Ghostscript over a PDF from an untrusted source, and `pywin32`,
 which drives Word through COM. Neither is installed by `requirements.txt` and
 nothing imports them at module level, but undeclared is not the same as optional
 — while they lived only in prose they were the two the advisory scan never
-looked at. They carry **no version floor** on purpose: nothing here has ever run
-an old one, and a number would read as tested. Tesseract and Ghostscript
-themselves stay outside any pip audit; they are binaries, and `doctor` locates
-them.
+looked at. OCRmyPDF is pinned to the version verified for page mapping;
+`pywin32` remains unpinned. Tesseract and Ghostscript are not pip packages.
+`doctor` locates them.
 
 `supported-range.yml` answers the one question `ci.yml` cannot: **does the oldest
 declared set actually work?** Every CI job installs `-c constraints-ci.txt`, so
