@@ -1,17 +1,17 @@
 <div dir="rtl">
 
-# روایت — Revayat Novel
+<h1 align="center">روایت — Revayat Novel</h1>
 
 <div align="center">
 
 [![اجرای دستی CI پروژه](https://img.shields.io/badge/CI-manual-2563eb)](.github/workflows/ci.yml)
 [![مجوز GPL نسخهٔ ۳ یا بالاتر](https://img.shields.io/badge/license-GPL%203.0%2B-7c3aed)](LICENSE)
 [![نسخهٔ پلاگین ۲٫۰٫۰](https://img.shields.io/badge/plugin-2.0.0-15803d)](.claude-plugin/plugin.json)
-[![نسخهٔ آزمایش‌شدهٔ محلی پایتون ۳٫۱۴٫۸](https://img.shields.io/badge/python%203.14.8-verified%20local-8b5cf6)](skills/revayat-novel/requirements.txt)
+[![پیاده‌سازی با پایتون ۳٫۱۴٫۷، پشتیبانی از پایتون ۳٫۱۱ به بالا](https://img.shields.io/badge/python-3.14.7-8b5cf6)](skills/revayat-novel/requirements.txt)
 [![پشتیبانی از ویندوز، مک‌اواس و لینوکس](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0891b2)](.github/workflows/ci.yml)
 [![نصب پلاگین و نسخهٔ مستقل](https://img.shields.io/badge/install-plugin%20%7C%20standalone-0369a1)](install/README.md)
 [![راهنمای ترجمهٔ کتاب](https://img.shields.io/badge/docs-book%20workflow-0f766e)](skills/revayat-novel/SKILL.md)
-[![حجم فایل‌های ثبت‌شده در نسخهٔ e25c33c: ۳٫۰۰ مگابایت](https://img.shields.io/badge/repo%20size-3.00%20MB%20e25c33c-ca8a04)](https://github.com/KiaroSama/Revayat-Novel-Skill/tree/e25c33c754673ef511a763328a597e8b843a7152)
+[![حجم درخت منتشرشده (git archive از HEAD) حدود ۳٫۴ مگابایت](https://img.shields.io/badge/repo%20size-3.4%20MB-ca8a04)](#معماری)
 [![ورودی‌های PDF، EPUB، DOCX و متن](https://img.shields.io/badge/sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-b45309)](skills/revayat-novel/SKILL.md)
 [![خروجی ورد فارسی](https://img.shields.io/badge/output-Persian%20DOCX-be123c)](skills/revayat-novel/SKILL.md)
 [![سه اسکیل ویرایش همراه پلاگین](https://img.shields.io/badge/writing%20skills-3%20bundled-4d7c0f)](skills/README.md)

@@ -1,15 +1,15 @@
-# Revayat Novel — روایت
+<h1 align="center">Revayat Novel — روایت</h1>
 
 <div align="center">
 
 [![Project CI runs on manual dispatch](https://img.shields.io/badge/CI-manual-2563eb)](.github/workflows/ci.yml)
 [![GPL 3.0 or later](https://img.shields.io/badge/license-GPL%203.0%2B-7c3aed)](LICENSE)
 [![Plugin version 2.0.0](https://img.shields.io/badge/plugin-2.0.0-15803d)](.claude-plugin/plugin.json)
-[![Verified local development interpreter Python 3.14.8](https://img.shields.io/badge/python%203.14.8-verified%20local-8b5cf6)](skills/revayat-novel/requirements.txt)
+[![Implemented in Python 3.14.7, supported from Python 3.11](https://img.shields.io/badge/python-3.14.7-8b5cf6)](skills/revayat-novel/requirements.txt)
 [![Windows, macOS and Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0891b2)](.github/workflows/ci.yml)
 [![Claude Code plugin and standalone installers](https://img.shields.io/badge/install-plugin%20%7C%20standalone-0369a1)](install/README.md)
 [![Book workflow documentation](https://img.shields.io/badge/docs-book%20workflow-0f766e)](skills/revayat-novel/SKILL.md)
-[![Published baseline e25c33c: 3.00 MB of tracked files](https://img.shields.io/badge/repo%20size-3.00%20MB%20e25c33c-ca8a04)](https://github.com/KiaroSama/Revayat-Novel-Skill/tree/e25c33c754673ef511a763328a597e8b843a7152)
+[![Published tree (git archive of HEAD) is about 3.4 MB](https://img.shields.io/badge/repo%20size-3.4%20MB-ca8a04)](#how-it-works)
 [![PDF, EPUB, DOCX and text sources](https://img.shields.io/badge/sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-b45309)](skills/revayat-novel/SKILL.md)
 [![Persian Word output](https://img.shields.io/badge/output-Persian%20DOCX-be123c)](skills/revayat-novel/SKILL.md)
 [![Three bundled writing skills](https://img.shields.io/badge/writing%20skills-3%20bundled-4d7c0f)](skills/README.md)
