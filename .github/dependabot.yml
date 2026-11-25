@@ -4,6 +4,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       rust-dependencies:
         patterns: ['*']
@@ -12,6 +14,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ['*']
@@ -20,3 +24,5 @@ updates:
     directory: /tests/sandbox
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7

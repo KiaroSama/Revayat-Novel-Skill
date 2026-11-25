@@ -10,7 +10,7 @@ use walkdir::{DirEntry, WalkDir};
 
 pub(crate) const MAX_RECORD: u64 = 1024 * 1024;
 const MAX_FILES: usize = 20_000;
-const MAX_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_BYTES: u64 = 512 * 1024 * 1024;
 
 pub(crate) fn kind(path: &Path) -> Result<Option<Metadata>, InstallError> {
     let metadata = match fs::symlink_metadata(path) {

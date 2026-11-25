@@ -143,9 +143,9 @@ jobs:
       - name: Install and verify all eight project targets
         shell: bash
         run: |
-          cargo build --locked --bin revayat-novel
+          cargo build --release --locked --bin revayat-novel
           mkdir -p bin
-          install -m 755 target/debug/revayat-novel bin/revayat-novel
+          install -m 755 target/release/revayat-novel bin/revayat-novel
           agents=(.claude .kiro .codex .cursor .cline .hermes .opencode .agents)
           for agent in "${agents[@]}"; do mkdir -p "$RUNNER_TEMP/proj/$agent"; done
           ./bin/revayat-novel install --agent all --scope project --path "$RUNNER_TEMP/proj" \
@@ -177,9 +177,9 @@ jobs:
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          cargo build --locked --bin revayat-novel
+          cargo build --release --locked --bin revayat-novel
           New-Item -ItemType Directory -Force bin | Out-Null
-          Copy-Item target/debug/revayat-novel.exe bin
+          Copy-Item target/release/revayat-novel.exe bin
           $project = Join-Path $env:RUNNER_TEMP 'proj'
           $agents = '.claude', '.kiro', '.codex', '.cursor', '.cline', '.hermes', '.opencode', '.agents'
           foreach ($agent in $agents) {
