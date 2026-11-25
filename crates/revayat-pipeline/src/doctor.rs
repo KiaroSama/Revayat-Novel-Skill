@@ -106,13 +106,8 @@ pub fn run_doctor(repo_or_skill_root: Option<&Path>) -> DoctorReport {
             )
         })
         .collect();
-    let tesseract = if cfg!(windows) {
-        "tesseract.exe"
-    } else {
-        "tesseract"
-    };
     let optional_tools = BTreeMap::from([
-        ("tesseract", render::locate(&[tesseract])),
+        ("tesseract", render::tesseract()),
         ("libreoffice", render::libreoffice()),
         ("word", render::word()),
     ]);

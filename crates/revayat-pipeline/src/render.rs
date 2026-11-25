@@ -167,6 +167,26 @@ fn executable(path: &Path) -> bool {
     meta.is_file()
 }
 
+pub(crate) fn tesseract() -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["tesseract.exe"]
+    } else {
+        &["tesseract"]
+    };
+    locate(names).or_else(|| {
+        if !cfg!(windows) {
+            return None;
+        }
+        ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"]
+            .into_iter()
+            .filter_map(env::var_os)
+            .map(PathBuf::from)
+            .filter(|base| base.is_absolute())
+            .map(|base| base.join("Tesseract-OCR/tesseract.exe"))
+            .find(|path| executable(path))
+    })
+}
+
 pub(crate) fn libreoffice() -> Option<PathBuf> {
     let names: &[&str] = if cfg!(windows) {
         &["soffice.com", "soffice.exe", "libreoffice.exe"]
@@ -177,10 +197,12 @@ pub(crate) fn libreoffice() -> Option<PathBuf> {
         ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"]
             .into_iter()
             .filter_map(env::var_os)
+            .map(PathBuf::from)
+            .filter(|base| base.is_absolute())
             .flat_map(|base| {
                 [
-                    PathBuf::from(&base).join("LibreOffice/program/soffice.com"),
-                    PathBuf::from(&base).join("LibreOffice/program/soffice.exe"),
+                    base.join("LibreOffice/program/soffice.com"),
+                    base.join("LibreOffice/program/soffice.exe"),
                 ]
             })
             .find(|path| executable(path))
@@ -195,15 +217,29 @@ pub(crate) fn word() -> Option<PathBuf> {
         ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"]
             .into_iter()
             .filter_map(env::var_os)
+            .map(PathBuf::from)
+            .filter(|base| base.is_absolute())
             .flat_map(|base| {
                 [
-                    "Microsoft Office/root/Office16/WINWORD.EXE",
-                    "Microsoft Office/Office16/WINWORD.EXE",
+                    base.join("Microsoft Office/root/Office16/WINWORD.EXE"),
+                    base.join("Microsoft Office/Office16/WINWORD.EXE"),
                 ]
-                .map(|name| PathBuf::from(&base).join(name))
             })
             .find(|path| executable(path))
     })
+}
+
+fn strip_verbatim_prefix(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    if let Some(raw) = path.to_str() {
+        if let Some(unc) = raw.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{unc}"));
+        }
+        if let Some(local) = raw.strip_prefix(r"\\?\") {
+            return PathBuf::from(local);
+        }
+    }
+    path.to_path_buf()
 }
 
 fn profile_uri(profile: &Path) -> Result<String, PipelineError> {
@@ -372,6 +408,8 @@ pub fn wordrender(
         }
         WordBackend::Word(_) => {
             let shell = locate(&["pwsh.exe"]).ok_or(PipelineError::RendererUnavailable)?;
+            let word_input = strip_verbatim_prefix(&original);
+            let word_output = strip_verbatim_prefix(&rendered);
             let mut command = Command::new(&shell);
             command
                 .args([
@@ -381,8 +419,8 @@ pub fn wordrender(
                     "-Command",
                     WORD_EXPORT,
                 ])
-                .env("REVAYAT_RENDER_INPUT", &original)
-                .env("REVAYAT_RENDER_OUTPUT", &rendered);
+                .env("REVAYAT_RENDER_INPUT", word_input)
+                .env("REVAYAT_RENDER_OUTPUT", word_output);
             run_bounded(command, &shell, timeout)?;
         }
     }

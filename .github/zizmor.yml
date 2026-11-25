@@ -1,0 +1,5 @@
+# actionlint 1.7.12 (latest) rejects the `$/` self-repository syntax that this
+# rule requires (rhysd/actionlint#711). Re-enable once actionlint supports it.
+rules:
+  self-repository:
+    disable: true

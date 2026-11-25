@@ -5,12 +5,13 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -103,8 +104,10 @@ jobs:
           fi
           grep -qx 'channel = "1.100.0"' rust-toolchain.toml
           for manifest in .claude-plugin/plugin.json .codex-plugin/plugin.json .cursor-plugin/plugin.json .antigravity-plugin/plugin.json plugin.json; do
-            jq -e '.name == "revayat-novel" and .version == "3.0.0" and .license == "GPL-3.0-or-later"' "$manifest" >/dev/null
+            jq -e '.name == "revayat-novel" and .version == "3.0.0" and .license == "GPL-3.0-or-later" and .author.email == "Kiaro.Sama.Dev@gmail.com"' "$manifest" >/dev/null
           done
+          jq -e '(keys - ["$schema", "name", "version", "description", "author", "homepage", "repository", "license", "keywords", "extensions"]) == []' plugin.json >/dev/null
+          jq -e '(keys - ["$schema", "name", "version", "description", "author", "homepage", "repository", "license", "keywords", "extensions", "displayName", "display_name", "disabled", "logo", "suggestedPrompts", "suggested_prompts", "skills"]) == []' .antigravity-plugin/plugin.json >/dev/null
           for marketplace in .claude-plugin/marketplace.json .agents/plugins/marketplace.json .cursor-plugin/marketplace.json; do
             jq -e 'any(.plugins[]; .name == "revayat-novel" and (.version // "3.0.0") == "3.0.0")' "$marketplace" >/dev/null
           done

@@ -91,6 +91,44 @@ pub fn locate_tool(names: &[&str]) -> Option<PathBuf> {
     None
 }
 
+/// Find Tesseract on PATH or in its default Windows installation directory.
+pub fn locate_tesseract() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        locate_tool(&["tesseract.exe"]).or_else(|| {
+            ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"]
+                .into_iter()
+                .filter_map(env::var_os)
+                .find_map(|base| locate_installed_tesseract(Path::new(&base)))
+        })
+    }
+    #[cfg(not(windows))]
+    locate_tool(&["tesseract"])
+}
+
+#[cfg(windows)]
+fn locate_installed_tesseract(base: &Path) -> Option<PathBuf> {
+    let candidate = base.join("Tesseract-OCR/tesseract.exe");
+    (base.is_absolute() && executable(&candidate))
+        .then(|| candidate.canonicalize().ok())
+        .flatten()
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn detects_tesseract_under_program_files() -> std::io::Result<()> {
+    let base = tempfile::tempdir()?;
+    let candidate = base.path().join("Tesseract-OCR/tesseract.exe");
+    assert_eq!(locate_installed_tesseract(base.path()), None);
+    fs::create_dir_all(base.path().join("Tesseract-OCR"))?;
+    fs::write(&candidate, b"test fixture")?;
+    assert_eq!(
+        locate_installed_tesseract(base.path()),
+        Some(candidate.canonicalize()?)
+    );
+    Ok(())
+}
+
 const TSV_COLUMNS: &str =
     "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
 
@@ -215,7 +253,7 @@ pub fn run_tesseract_tsv(
     if timeout_secs == 0 {
         return Err(IngestError::Timeout("tesseract"));
     }
-    let tool = locate_tool(&["tesseract"]).ok_or(IngestError::ToolMissing("tesseract"))?;
+    let tool = locate_tesseract().ok_or(IngestError::ToolMissing("tesseract"))?;
     let absolute = image.canonicalize().map_err(|e| io("resolve", image, e))?;
     crate::assets::dimensions(&read_file(&absolute, MAX_IMAGE_BYTES)?)?;
     let mut output = tempfile::tempfile().map_err(|e| io("stage OCR output for", image, e))?;

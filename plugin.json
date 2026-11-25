@@ -5,10 +5,22 @@
   "description": "Translate books into Persian with a six-stage multi-agent workflow. A pure-Rust native binary builds Word files with the bundled Vazirmatn font.",
   "author": {
     "name": "Kiaro Sama",
-    "url": "https://github.com/KiaroSama"
+    "url": "https://github.com/KiaroSama",
+    "email": "Kiaro.Sama.Dev@gmail.com"
   },
   "homepage": "https://github.com/KiaroSama/Revayat-Novel-Skill",
   "repository": "https://github.com/KiaroSama/Revayat-Novel-Skill",
   "license": "GPL-3.0-or-later",
-  "keywords": ["translation", "persian", "farsi", "rtl", "docx", "ocr", "epub", "pdf", "book", "typography"]
+  "keywords": [
+    "translation",
+    "persian",
+    "farsi",
+    "rtl",
+    "docx",
+    "ocr",
+    "epub",
+    "pdf",
+    "book",
+    "typography"
+  ]
 }

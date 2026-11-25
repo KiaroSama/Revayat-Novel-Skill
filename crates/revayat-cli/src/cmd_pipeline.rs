@@ -250,7 +250,7 @@ pub fn run_chunk(cmd: ChunkCmd) -> Result<u8> {
             json,
         } => {
             let book = load_book(work.join(BOOK_FILENAME))?;
-            let out_dir = out.unwrap_or_else(|| work.join("worksheets"));
+            let out_dir = out.unwrap_or_else(|| work.join(revayat_pipeline::chunk::CHUNKS_DIR));
             let budget = ChunkBudget {
                 max_tokens,
                 ..ChunkBudget::default()
@@ -268,7 +268,7 @@ pub fn run_chunk(cmd: ChunkCmd) -> Result<u8> {
         }
         ChunkCmd::Status { work, dir, json } => {
             let book = load_book(work.join(BOOK_FILENAME))?;
-            let target = dir.unwrap_or_else(|| work.join("worksheets"));
+            let target = dir.unwrap_or_else(|| work.join(revayat_pipeline::chunk::CHUNKS_DIR));
             let status = chunk_status(&book, &target)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&status)?);

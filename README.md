@@ -6,16 +6,16 @@
 [![CodeQL](https://img.shields.io/github/actions/workflow/status/KiaroSama/Revayat-Novel-Skill/codeql.yml?style=flat-square&color=0d9488&label=CodeQL)](.github/workflows/codeql.yml)
 [![Gitleaks](https://img.shields.io/github/actions/workflow/status/KiaroSama/Revayat-Novel-Skill/gitleaks.yml?style=flat-square&color=2563eb&label=Gitleaks)](.github/workflows/gitleaks.yml)
 [![License](https://img.shields.io/github/license/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=4f46e5)](LICENSE)
-[![Latest Git tag](https://img.shields.io/github/v/tag/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=7c3aed&label=Version)](https://github.com/KiaroSama/Revayat-Novel-Skill/tags)
-[![Rust 1.100.0](https://img.shields.io/badge/Rust-1.100.0-8b5cf6?style=flat-square)](#installation)
-[![64-bit Windows and Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20(64--bit)-0891b2?style=flat-square)](#installation)
-[![Five plugin formats](https://img.shields.io/badge/Plugins-5%20formats-0284c7?style=flat-square)](#plugin-formats)
-[![Bundled Vazirmatn v33.003](https://img.shields.io/badge/Font-Vazirmatn%20v33.003-059669?style=flat-square)](#vazirmatn-font)
-[![Six-stage multi-agent workflow](https://img.shields.io/badge/Workflow-6--stage%20multi--agent-d97706?style=flat-square)](#six-stage-workflow)
+[![Latest Git tag](https://img.shields.io/github/v/tag/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=7c3aed&label=Version)](#releases-and-tags)
+[![Rust 1.100.0](https://img.shields.io/badge/Rust-1.100.0-8b5cf6)](#installation)
+[![64-bit Windows and Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%2864--bit%29-0891b2)](#installation)
+[![Five plugin formats](https://img.shields.io/badge/Plugins-5%20formats-0284c7)](#plugin-formats)
+[![Bundled Vazirmatn v33.003](https://img.shields.io/badge/Font-Vazirmatn%20v33.003-059669)](#vazirmatn-font)
+[![Six-stage multi-agent workflow](https://img.shields.io/badge/Workflow-6--stage%20multi--agent-d97706)](#six-stage-workflow)
 [![Repository size](https://img.shields.io/github/repo-size/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=ca8a04)](#repository-layout)
-[![Pure Rust](https://img.shields.io/badge/Built%20with-Pure%20Rust-ea580c?style=flat-square)](#architecture)
-[![Four bundled skills](https://img.shields.io/badge/Skills-4%20bundled-65a30d?style=flat-square)](skills/README.md)
-[![Support donations](https://img.shields.io/badge/Support-donations-d04a9a?style=flat-square)](#donate)
+[![Pure Rust](https://img.shields.io/badge/Built%20with-Pure%20Rust-ea580c)](#architecture)
+[![Four bundled skills](https://img.shields.io/badge/Skills-4%20bundled-65a30d)](skills/README.md)
+[![Support donations](https://img.shields.io/badge/Support-donations-d04a9a)](#donate)
 
 </div>
 
@@ -193,6 +193,22 @@ specific revision. Optional local programs cover OCR and Word rendering.
 
 The original orchestration draws on [deusyu/translate-book](https://github.com/deusyu/translate-book).
 The book representation follows the layout-preservation idea in [BabelDOC](https://github.com/funstory-ai/BabelDOC).
+
+## Releases and tags
+
+When we push a new annotated tag such as `v3.0.0`, the live Version badge updates automatically from [Git tags](https://github.com/KiaroSama/Revayat-Novel-Skill/tags). Download packages from [GitHub Releases](https://github.com/KiaroSama/Revayat-Novel-Skill/releases).
+
+The release workflow signs binaries in the protected `revayat-novel-signing` GitHub Actions environment. The [signature verification instructions](docs/signing/README.md) cover Windows Authenticode, Linux Ed25519, `SHA256SUMS.txt` checksums, and the GitHub build provenance attestation.
+
+Windows x64 benchmarks (median of five runs per command):
+
+| Command | v2.0.0 (Python) | v3.0.0 (pure Rust) | Change |
+| --- | --- | --- | --- |
+| `doctor --json` | 2194.1 ms / 137.0 MB RAM | 42.3 ms / 6.3 MB RAM | 98.1% faster, 95.4% less RAM |
+| `persian-lint` (500 lines) | 160.9 ms / 18.1 MB RAM | 59.2 ms / 7.6 MB RAM | 63.2% faster, 57.9% less RAM |
+| `chunk build` (sample book) | 255.0 ms / 24.1 MB RAM | 41.1 ms / 7.5 MB RAM | 83.9% faster, 68.8% less RAM |
+| `persian-lookup` (200 lines) | 142.5 ms / 14.7 MB RAM | 184.7 ms / 8.1 MB RAM | 29.7% slower, 45.3% less RAM |
+| Standalone footprint | 238 Python and shell scripts (2.5 MB), plus the Python runtime and virtual environment | 1 native binary (22.4 MB), 0 Python dependencies | |
 
 ## Author
 
