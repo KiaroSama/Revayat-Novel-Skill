@@ -97,6 +97,7 @@ jobs:
 
   sign-and-release:
     name: Sign and publish release
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: windows-2025
     timeout-minutes: 20
@@ -317,7 +318,16 @@ jobs:
           if ($exists) {
             gh release upload "$env:RELEASE_TAG" @assets --clobber
           } else {
-            gh release create "$env:RELEASE_TAG" @assets --target "$env:GITHUB_SHA" `
-              --title "Revayat Novel $env:RELEASE_TAG" --notes 'Signed revayat-novel binaries for Windows and Linux (x64 and arm64). See docs/signing/README.md for verification commands.'
+            $createArgs = @(
+              'release', 'create', "$env:RELEASE_TAG"
+            ) + $assets + @(
+              '--target', "$env:GITHUB_SHA",
+              '--title', "Revayat Novel $env:RELEASE_TAG",
+              '--notes', 'Signed revayat-novel binaries for Windows and Linux (x64 and arm64). See docs/signing/README.md for verification commands.'
+            )
+            if ($env:RELEASE_TAG -match '-') {
+              $createArgs += '--prerelease'
+            }
+            & gh @createArgs
           }
           if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI failed to publish the release assets.' }

@@ -16,7 +16,7 @@ The signer thumbprint must be `9914D665F5EE65433E098B84A6F3E50891B18087`, matchi
 
 ## Linux Ed25519 and checksums
 
-Use OpenSSL 3 with [`revayat-novel-release-ed25519.pub.pem`](revayat-novel-release-ed25519.pub.pem) from this directory. Verify the signature on the checksum list before relying on it:
+Use OpenSSL 3 with [`revayat-novel-release-ed25519.pub.pem`](revayat-novel-release-ed25519.pub.pem) from this directory. Verify the signature on the checksum list before relying on it. If you downloaded the Linux ARM64 build, replace both `revayat-novel-v3.0.0-linux-x64` and `revayat-novel-v3.0.0-linux-x64.sig` with `revayat-novel-v3.0.0-linux-arm64` and `revayat-novel-v3.0.0-linux-arm64.sig`:
 
 ```bash
 openssl pkeyutl -verify -pubin -inkey revayat-novel-release-ed25519.pub.pem -rawin -in SHA256SUMS.txt -sigfile SHA256SUMS.txt.sig
