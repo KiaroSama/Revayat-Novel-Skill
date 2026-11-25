@@ -7,10 +7,9 @@ The supported scope is book translation, not general form or Track Changes editi
 ## Inspect and extract
 
 Start the adjacent workflow log required by preservation-and-logging.md. Preserve
-the original file. Run the skill's doctor and extract commands with the source
-language, then inspect the extraction report and Book IR before translating.
+the original file. Run `revayat-novel doctor`, then `revayat-novel extract <input.docx> --out <work>`. Inspect the report and Book IR before translating.
 
-The native reader combines python-docx with namespace-aware package XML for notes,
+The Rust intake engine reads namespaced OOXML directly for notes,
 hyperlink targets, section breaks and running heads. Check those surfaces as well
 as the body: a correct paragraph count does not establish complete extraction.
 Record source section width/height/orientation, image native pixels and placed
@@ -35,8 +34,7 @@ objects in a separate faithful copy; never delete them merely to clear a gate.
 
 ## Translate the structured book
 
-Keep Book IR authoritative. Use normal chunks, shared names/voice, merge,
-typography, meaning review and independent Persian reading. Never replace this
+Keep Book IR authoritative. Use `revayat-novel chunk build`, then follow the [six-stage workflow](multi-agent-workflow.md). Verify names and specialized terms online, record the sources in the locked glossary, and preserve each speaker's voice in natural Persian. Never replace this
 route with a Markdown round-trip: that loses note identity and page/image geometry.
 Translate metadata and running heads too. Revisions after approval require renewed
 review; package validation alone cannot establish semantic fidelity.
@@ -60,27 +58,25 @@ control is explicitly false, not an inherited accidental template value.
 
 ## Build using the native writer
 
-Use the main skill's build command. The existing builder and OOXML helpers own
+Use `revayat-novel build <work> --out <file.docx>`. The Rust OOXML writer handles
 styles, paragraph/run direction, real footnotes, headings/bookmarks, hyperlinks,
 TOC fields and section page setup. Preserve source trim size instead of applying
-a generic A4/Letter template. Write Persian through native bidi/RTL properties;
+a generic A4/Letter template. Use `w:bidi`, logical start alignment, and embedded static Vazirmatn from `skills/revayat-novel/assets/fonts/vazirmatn/`. Apply the [RLI/PDI rule](persian-typography.md#mixed-persian-and-latin) to mixed-script sentences;
 never reverse Unicode strings or pre-shape their letters.
 
-Keep source image bytes where possible, set physical drawing size independently
-of pixels, and preserve aspect ratio. Treat a low-quality enhancement as a logged
+Keep original image bytes and pixel dimensions. Preserve authored drawing dimensions and aspect ratio where available. Treat a low-quality enhancement as a logged
 derivative with the original retained. Do not add a second document engine or
 machine-specific font path to the copyable skill.
 
 ## Verify and correct
 
-Run strict book QA, build, then `qa docx` against the actual output and source IR.
+Run `revayat-novel qa check` with current semantic approvals, build, then run `revayat-novel qa docx` against the actual output and source IR.
 This checks package structure and relationships, expected notes, image geometry
-and required document parts. Run `doc-qa check` to render with the available Word
-or LibreOffice backend and compare the final content/geometry.
+and required document parts. Run `revayat-novel doc-qa check` and `revayat-novel render-qa <file.docx> --out <render-dir>` with Word or LibreOffice (`soffice`) where available and compare the final content/geometry.
 
 Open every generated page image. Check joined Persian, actual font, mixed-script
 names, footnote placement, chapter hierarchy, overflow/clipping and illustration
-clarity. Record the observed answers, then run document QA again to consume that
+clarity. Record the evidence with `revayat-novel doc-qa review`, then rerun `revayat-novel doc-qa check` to consume that
 review. Correct the owning IR/build setting and rebuild; do not patch the final
 ZIP while leaving the authoritative book and its approvals stale.
 
@@ -89,8 +85,4 @@ or unresolved structure is an explicit unverified area, never an implied pass.
 
 ## Native ownership and sources
 
-Implementation: scripts/read_docx.py, opc.py, bookwrite.py, build_docx.py, ooxml.py,
-package.py, wordrender.py and docqa.py, all inside this installed skill.
-Commands and flags: [docx-and-ooxml.md](docx-and-ooxml.md).
-This independently authored native guide does not redistribute proprietary docx
-skill text or helpers. Reference: [python-docx documentation](https://python-docx.readthedocs.io/).
+See [docx-and-ooxml.md](docx-and-ooxml.md) for package checks and [ECMA-376](https://ecma-international.org/publications-and-standards/standards/ecma-376/) for the format specification.

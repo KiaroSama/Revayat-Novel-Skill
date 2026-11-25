@@ -1,298 +1,147 @@
-<div dir="rtl">
+<div dir="rtl" lang="fa">
 
-<h1 align="center">روایت — Revayat Novel</h1>
+<h1 align="center">‏⁧روایت · Revayat Novel⁩</h1>
 
 <div align="center">
 
-[![اجرای دستی CI پروژه](https://img.shields.io/badge/CI-manual-2563eb)](.github/workflows/ci.yml)
-[![مجوز GPL نسخهٔ ۳ یا بالاتر](https://img.shields.io/badge/license-GPL%203.0%2B-7c3aed)](LICENSE)
-[![نسخهٔ پلاگین ۲٫۰٫۰](https://img.shields.io/badge/plugin-2.0.0-15803d)](.claude-plugin/plugin.json)
-[![پیاده‌سازی با پایتون ۳٫۱۴٫۷، پشتیبانی از پایتون ۳٫۱۱ به بالا](https://img.shields.io/badge/python-3.14.7-8b5cf6)](skills/revayat-novel/requirements.txt)
-[![پشتیبانی از ویندوز، مک‌اواس و لینوکس](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0891b2)](.github/workflows/ci.yml)
-[![نصب پلاگین و نسخهٔ مستقل](https://img.shields.io/badge/install-plugin%20%7C%20standalone-0369a1)](install/README.md)
-[![راهنمای ترجمهٔ کتاب](https://img.shields.io/badge/docs-book%20workflow-0f766e)](skills/revayat-novel/SKILL.md)
-[![حجم درخت منتشرشده (git archive از HEAD) حدود ۳٫۴ مگابایت](https://img.shields.io/badge/repo%20size-3.4%20MB-ca8a04)](#معماری)
-[![ورودی‌های PDF، EPUB، DOCX و متن](https://img.shields.io/badge/sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-b45309)](skills/revayat-novel/SKILL.md)
-[![خروجی ورد فارسی](https://img.shields.io/badge/output-Persian%20DOCX-be123c)](skills/revayat-novel/SKILL.md)
-[![سه اسکیل ویرایش همراه پلاگین](https://img.shields.io/badge/writing%20skills-3%20bundled-4d7c0f)](skills/README.md)
-[![Support donations](https://img.shields.io/badge/Support-donations-d04a9a)](#donate)
+[![CI](https://img.shields.io/github/actions/workflow/status/KiaroSama/Revayat-Novel-Skill/ci.yml?style=flat-square&color=16a34a&label=CI)](.github/workflows/ci.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/KiaroSama/Revayat-Novel-Skill/codeql.yml?style=flat-square&color=0d9488&label=CodeQL)](.github/workflows/codeql.yml)
+[![Gitleaks](https://img.shields.io/github/actions/workflow/status/KiaroSama/Revayat-Novel-Skill/gitleaks.yml?style=flat-square&color=2563eb&label=Gitleaks)](.github/workflows/gitleaks.yml)
+[![License](https://img.shields.io/github/license/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=4f46e5)](LICENSE)
+[![Latest Git tag](https://img.shields.io/github/v/tag/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=7c3aed&label=Version)](https://github.com/KiaroSama/Revayat-Novel-Skill/tags)
+[![Rust 1.100.0](https://img.shields.io/badge/Rust-1.100.0-8b5cf6?style=flat-square)](#installation)
+[![64-bit Windows and Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20(64--bit)-0891b2?style=flat-square)](#installation)
+[![Five plugin formats](https://img.shields.io/badge/Plugins-5%20formats-0284c7?style=flat-square)](#plugin-formats)
+[![Bundled Vazirmatn v33.003](https://img.shields.io/badge/Font-Vazirmatn%20v33.003-059669?style=flat-square)](#vazirmatn-font)
+[![Six-stage multi-agent workflow](https://img.shields.io/badge/Workflow-6--stage%20multi--agent-d97706?style=flat-square)](#six-stage-workflow)
+[![Repository size](https://img.shields.io/github/repo-size/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=ca8a04)](#repository-layout)
+[![Pure Rust](https://img.shields.io/badge/Built%20with-Pure%20Rust-ea580c?style=flat-square)](#architecture)
+[![Four bundled skills](https://img.shields.io/badge/Skills-4%20bundled-65a30d?style=flat-square)](skills/README.md)
+[![Support donations](https://img.shields.io/badge/Support-donations-d04a9a?style=flat-square)](#donate)
 
 </div>
 
-**ترجمهٔ کامل یک کتاب به فارسیِ در حد چاپ، و تحویل یک فایل ورد که یک ناشر بتواند رویش کار کند.**
+**کتاب را کامل به فارسی ترجمه کنید و فایل وردی بگیرید که ناشر بتواند روی آن کار کند.**
 
-یک Agent Skill برای Claude Code، Kiro، Codex، Cursor، Cline و هر ایجنت کدنویسی دیگری که بتواند یک `SKILL.md` را بخواند. کارهایی را انجام می‌دهد که ترجمهٔ کتاب را واقعاً سخت می‌کنند: صفحه‌های اسکن‌شده، تصویرهایی که باید اندازه و جایشان حفظ شود، نام‌هایی که نباید در طول چهل فصل تغییر کنند، و تایپوگرافی فارسی‌ای که باید درست باشد، نه تقریباً درست.
+‏⁧روایت برای ترجمهٔ کتاب و رمان دنباله‌دار طراحی شده است. ورودی آن می‌تواند فایل `PDF`، `EPUB`، `DOCX`، متن ساده یا نشانی وب باشد. روایت صفحه‌های اسکن‌شده را هم می‌پذیرد، اندازهٔ تصویر را در صورت مشخص‌بودن حفظ می‌کند و واژه‌نامه‌ای مشترک در اختیار مترجم می‌گذارد تا نام‌ها از فصلی به فصل دیگر عوض نشوند. برای رمان اینترنتی می‌توانید از نشانی سایت یا فصل‌های ذخیره‌شده به‌ترتیب استفاده کنید. [راهنمای ورود رمان اینترنتی](skills/revayat-novel/references/web-novels.md) توضیح می‌دهد چطور نسخهٔ مبدأ را نگه دارید و کار نیمه‌تمام را از سر بگیرید.⁩
 
-وب‌ناول از لینک سایت یا فصل‌های ذخیره‌شدهٔ HTML و متن وارد می‌شود؛
-[راهنمای ورودی وب‌ناول](skills/revayat-novel/references/web-novels.md) ترتیب فصل‌ها و ادامهٔ امن کار را توضیح می‌دهد.
-راهنماهای بومی Word و PDF داخل اسکیل قرار دارند. ترجمه و ویرایش موازی با چند ساب‌ایجنت
-اختیاری است و اسکیل ابتدا از کاربر می‌پرسد؛ ادغام و کنترل نهایی با هماهنگ‌کننده می‌ماند.
-
-<div align="right"><a href="LICENSE">مجوز GPL-3.0</a></div>
 <div align="left"><a href="README.md">English</a></div>
 
----
-
-## چه چیزی آن را از یک مترجم عمومی جدا می‌کند
-
-| | |
-| --- | --- |
-| **کتاب اسکن‌شده، دیجیتال و ترکیبی** | لایهٔ متنی هر صفحه جداگانه بررسی می‌شود. کتاب‌های ترکیبی — که برای عنوان‌های قدیمی حالت رایج است — با `--skip-text` او‌سی‌آر می‌شوند تا صفحه‌هایی که متن سالم دارند دوباره بازشناسی نشوند. |
-| **تصویرها دست‌نخورده می‌مانند** | بایت‌های اصلی تصویر استخراج می‌شود، نه رندر دوبارهٔ صفحه، و در ورد با اندازهٔ فیزیکی و نسبت ابعاد اصلی قرار می‌گیرد. یک SHA-256 که هنگام استخراج ثبت می‌شود ثابت می‌کند تصویرِ داخل سند همان تصویرِ کتاب است. |
-| **پاورقی واقعی ورد** | یک بخش واقعی `word/footnotes.xml` ساخته می‌شود تا خود ورد هر یادداشت را پایین همان صفحه‌ای بگذارد که نشانه‌اش در آن است — نه شمارهٔ بالانویسِ دستی و فهرستی در آخر کتاب. |
-| **فهرست مطالبِ کلیک‌پذیر** | بوکمارک واقعی به‌همراه فیلد `TOC` که نتیجهٔ ذخیره‌شده‌اش از پیش یک فهرست لینک‌دار کارآمد است — پس چه نمایشگر فیلدها را به‌روزرسانی بکند و چه نکند، کار می‌کند. |
-| **تایپوگرافی فارسی، نه فقط واژهٔ فارسی** | `ی`/`ک`، `، ؛ ؟`، `«»`، ارقام فارسی، و نیم‌فاصله برای `می‌رود` و `کتاب‌ها` — در حالی که نشانی‌های اینترنتی، شناسه‌ها و واژه‌های لاتین از همهٔ قاعده‌ها در امان می‌مانند. |
-| **راست‌به‌چپِ اصولی** | `w:bidi` روی پاراگراف، `w:rtl` روی ران‌های فارسی، و نام‌های لاتین که داخل همان جمله چپ‌به‌راست می‌مانند. هیچ رشته‌ای برای جعل جهت برعکس نمی‌شود. |
-| **نام‌هایی که در کل کتاب ثابت می‌مانند** | یک واژه‌نامهٔ قفل‌شده به هر chunk تزریق می‌شود، پس فصل ۱۲ نمی‌تواند شخصیتی را که فصل ۳ معرفی کرده دوباره نام‌گذاری کند — و لقب‌ها هم لقب باقی می‌مانند. |
-| **حذف واترمارک از اسکن** | واترمارک رنگیِ سوخته‌شده در صفحهٔ اسکن با اشباع رنگ تشخیص داده می‌شود — متن بدنه دقیقاً ۰ اندازه‌گیری شد و واترمارک تا ۲۵۵ می‌رسد — و سفید می‌شود. صفحه‌هایی که واقعاً تصویرند خودکار دست‌نخورده می‌مانند. |
-| **دروازه‌های کیفیِ قطعی** | پاراگراف جاافتاده، نشانهٔ پاورقیِ حذف‌شده، حذفِ متن که با نسبت طول گرفته می‌شود، تصویر تغییریافته، و لینک مردهٔ فهرست. همه بر پایهٔ شمارش و هش، نه نظر دوبارهٔ یک مدل. |
+<a id="installation"></a>
 
 ## نصب
 
-از پایتون 3.11 یا جدیدتر استفاده کنید. در ویندوز، نصب‌کننده را از PowerShell 7 (`pwsh`) اجرا کنید. اگر اجرای اسکریپت‌ها زیر نظر مدیر سیستم است، از روش مجاز همان سیستم استفاده کنید.
+‏⁧فایل اجرایی `revayat-novel` برای ویندوز و لینوکس ۶۴ بیتی، روی پردازنده‌های `x64` و `arm64`، ساخته می‌شود. نصب افزونه جای نصب فایل اجرایی را نمی‌گیرد. اگر در [انتشارها](https://github.com/KiaroSama/Revayat-Novel-Skill/releases) بستهٔ امضاشده‌ای برای دستگاه شما هست، طبق راهنمای همان انتشار پیش بروید. اگر از روی کد می‌سازید، `Rust 1.100.0` را با [rustup](https://rustup.rs/) نصب کنید. در لینوکس به ابزارهای ساخت بومی و در ویندوز به ابزارهای ساخت ویژوال استودیو با مؤلفهٔ `C++` و `Windows SDK` نیاز دارید. ممکن است وابستگی‌های ارتباط رمزنگاری‌شده به `CMake` هم نیاز داشته باشند.⁩
 
-<div dir="ltr">
-
-```bash
-git clone https://github.com/KiaroSama/Revayat-Novel-Skill.git
-cd Revayat-Novel-Skill
-pip install -r skills/revayat-novel/requirements.txt
-```
-
-</div>
-
-سپس اسکیل را در ایجنت‌هایی که استفاده می‌کنید نصب کنید:
-
-<div dir="ltr">
+در لینوکس، از پوشهٔ اصلی مخزن اجرا کنید:
 
 ```bash
-# macOS / Linux
-./install/install.sh
-
-# Windows
-pwsh -NoProfile -File .\install\install.ps1
+cargo build --release --locked --bin revayat-novel
+install -Dm755 target/release/revayat-novel bin/revayat-novel
+./bin/revayat-novel doctor --json
+./bin/revayat-novel install --agent claude --scope project --path "/path/to/project"
 ```
 
-</div>
+‏⁧در ویندوز، از پوشهٔ اصلی مخزن و در `PowerShell 7` اجرا کنید:⁩
 
-به‌صورت پیش‌فرض در هر ایجنتی که پیدا کند نصب می‌شود — Claude Code، Kiro، Codex، Cursor، Cline، Hermes، OpenCode و Antigravity. برای OpenCode و Antigravity یک اشاره‌گر در `AGENTS.md` هم نوشته می‌شود، چون این دو دستورها را از آنجا پیدا می‌کنند. با `--agent claude` فقط یکی، و با `--scope project --path <dir>` فقط داخل یک پروژه. هر دو نصب‌کننده پیش از نصب به **Python 3.11+** نیاز دارند و از یک موتور مشترک استفاده می‌کنند. جایگزینی در اجرای غیرتعاملی فقط با `--force` یا `-Force` مجاز است؛ پاسخ پیش‌فرض تأیید تعاملی «خیر» است و پایان ورودی هم رضایت نیست.
-
-نسخه‌های قبلی و دستورهای خصوصی حذف نمی‌شوند؛ برای بازیابی در فضای محلی حفاظت‌شده نگه داشته می‌شوند. اجرای بعدی تراکنش قطع‌شده را بازیابی می‌کند یا در صورت تعارض، بدون حدس‌زدن متوقف می‌شود. فقط بخش متعلق به Revayat Novel در `AGENTS.md` تغییر می‌کند. جزئیات پشتیبان‌ها، گزارش‌ها و محدودیت‌ها در [راهنمای نصب و بازیابی](install/README.md) آمده است.
-
-### به‌عنوان پلاگین Claude Code
-
-<div dir="ltr">
-
+```powershell
+cargo build --release --locked --bin revayat-novel
+New-Item -ItemType Directory -Force bin | Out-Null
+Copy-Item target/release/revayat-novel.exe bin
+.\bin\revayat-novel.exe doctor --json
+.\bin\revayat-novel.exe install --agent claude --scope project --path 'C:\work\my project'
 ```
+
+‏⁧پوشهٔ پروژه باید از قبل وجود داشته باشد. نصب‌کننده از `claude`، `kiro`، `codex`، `cursor`، `cline`، `hermes`، `opencode` و `antigravity` پشتیبانی می‌کند. گزینهٔ `--agent all` فقط در پوشه‌های موجود عامل‌ها نصب می‌کند. برای نصب در حساب کاربری از `--scope user` استفاده کنید و برای بررسی نصب، همان دستور را با `--status` اجرا کنید. نصب‌کننده اسکیل کتاب، قلم‌ها و فایل اجرایی را کپی می‌کند و هنگام جایگزینی با `--force` نسخهٔ پیشین را نگه می‌دارد. اگر عامل فایل اجرایی را پیدا نکرد، پوشهٔ مناسب `bin/` را به `PATH` اضافه کنید.⁩
+
+‏⁧دستور `doctor --json` معماری ساخت، وضعیت قلم‌ها و پرونده‌های افزونه و ابزارهای اختیاری را گزارش می‌کند. برای بازشناسی متن اسکن، `Tesseract` را با بسته‌های زبان انگلیسی (`eng`) و فارسی (`fas`) نصب کنید. برای بازبینی ظاهر سند به `LibreOffice` (`soffice`) یا مایکروسافت ورد در ویندوز نیاز دارید. نبود این ابزارها بررسی همان مرحله را محدود می‌کند؛ خود برنامه همچنان اجرا می‌شود.⁩
+
+<a id="plugin-formats"></a>
+
+## قالب‌های افزونه
+
+- Claude Code: [Plugin](.claude-plugin/plugin.json), [marketplace](.claude-plugin/marketplace.json)
+- Codex: [Plugin](.codex-plugin/plugin.json), [marketplace](.agents/plugins/marketplace.json)
+- Cursor: [Plugin](.cursor-plugin/plugin.json), [marketplace](.cursor-plugin/marketplace.json)
+- Antigravity: [Plugin](.antigravity-plugin/plugin.json)
+- Agent Plugins: [Standard manifest](plugin.json)
+
+‏⁧برای نصب در `Claude Code`، اول بازارچه و بعد خود افزونه را اضافه کنید:⁩
+
+```text
 /plugin marketplace add KiaroSama/Revayat-Novel-Skill
 /plugin install revayat-novel@revayat-novel-skill
 ```
 
-</div>
+‏⁧برای شروع ترجمه از `/revayat-novel:translate-book`، برای ادامه از `/revayat-novel:revayat-novel-resume` و برای بررسی سند از `/revayat-novel:revayat-novel-qa` استفاده کنید. اسکیل‌های ویرایش [`persian`، `great-russian` و `humanizer` نسخهٔ `4.0.0`](skills/README.md) هم در بسته هستند. اسکیل را با توجه به زبان نثر انتخاب کنید؛ خروجی ترجمهٔ کتاب همیشه فارسی است.⁩
 
-این پلاگین دستورهای `/revayat-novel:translate-book`، `/revayat-novel:revayat-novel-resume` و `/revayat-novel:revayat-novel-qa` را هم اضافه می‌کند.
+<a id="vazirmatn-font"></a>
 
-پلاگین سه اسکیل ویرایش فارسی، انگلیسی و روسی دارد. معیار انتخاب، زبان متنی است که ویرایش می‌کنید. اگر کتابی انگلیسی یا روسی را به فارسی ترجمه کنید، اسکیل فارسی به کار می‌آید. خروجی کتاب همچنان فارسی است. نسخهٔ مستقل هم [راهنمای فارسی خودش](skills/revayat-novel/references/writing-voice.md) را دارد. [نسخه و مجوز هر اسکیل](skills/README.md) را ببینید.
+## قلم وزیرمتن
 
-### بررسی نصب
+‏⁧چهار وزن معمولی، ضخیم، متوسط و سبکِ [وزیرمتن نسخهٔ `v33.003`](skills/revayat-novel/assets/fonts/vazirmatn/) با [مجوز آزاد قلم](skills/revayat-novel/assets/fonts/vazirmatn/OFL.txt) همراه برنامه‌اند. سازندهٔ سند برای متن فارسی از وزیرمتن استفاده می‌کند و قلم را در فایل ورد می‌گنجاند. برای اینکه بدانید نمایشگر واقعاً از همین قلم استفاده کرده و چیدمان حفظ شده است، خود سند را رندر و بررسی کنید.⁩
 
-**پایتون 3.11 یا جدیدتر** روی لینوکس، مک‌اواس یا ویندوز. ماتریس CI نسخه‌های `3.11`، `3.13` و `3.14` را پوشش می‌دهد. اگر نسخهٔ `1.x` را با پایتون `3.10` اجرا می‌کنید، پیش از به‌روزرسانی اسکیل به نسخهٔ پشتیبانی‌شدهٔ پایتون بروید. هنگام به‌روزرسانی، وابستگی‌های اعلام‌شده را دوباره نصب کنید. نسخهٔ اصلاح‌شدهٔ Pillow به پایتون `3.11` نیاز دارد.
+<a id="six-stage-workflow"></a>
 
-<div dir="ltr">
+## روال شش‌مرحله‌ای
 
-```bash
-python skills/revayat-novel/scripts/revayat-novel.py doctor
+‏⁧فایل مبدأ و مسیر خروجی را به عامل بدهید؛ مثلاً «`book.epub` را به فارسی ترجمه کن و فایل ورد قابل ویرایش را در `edition.docx` تحویل بده.» برای هر کتاب پوشهٔ کاری جدا بگذارید. ورودی‌ها، مسئولیت‌ها و شرط پایان هر مرحله در [راهنمای کامل گردش کار](skills/revayat-novel/references/multi-agent-workflow.md) آمده است.⁩
+
+1. **ترجمهٔ اولیه:** نسخهٔ مبدأ را بررسی و وارد کنید. فارسی را روان بنویسید و لحن راوی و طرز حرف‌زدن هر شخصیت را حفظ کنید. املای نام‌ها، عنوان‌ها و اصطلاحات تخصصی را همان موقع در منابع معتبر، مثل وب‌سایت ناشر یا نویسنده، بررسی کنید. نتیجه و نشانی منبع را در واژه‌نامه بنویسید. متن خصوصی کتاب را در جست‌وجوی عمومی وارد نکنید.
+2. **حروف‌چینی و صفحه‌آرایی:** برگه‌های تأییدشده را ادغام کنید و سند راست‌به‌چپ بسازید. اندازه‌های مشخص‌شده در مبدأ، بایت‌ها و نسبت ابعاد تصویرها، پاورقی‌های واقعی ورد و فهرست مطالب کلیک‌پذیر را حفظ کنید.
+3. **بازبینی مستقل:** درستی معنی و روانی فارسی را جداگانه بسنجید. پیش از اصلاح، همهٔ یافته‌ها را به هماهنگ‌کننده بدهید. اگر بازبین دومی در دسترس نیست، روشن بگویید که همان عامل متن را در نوبتی جدا بررسی کرده است.
+4. **اعمال اصلاحات:** پاسخ‌های اصلاح‌شده را ادغام کنید و واژه‌های مصوب و تأکیدهای داخل متن را حفظ کنید. سند را دوباره بسازید و تأییدها را برای نسخهٔ تازه از نو بررسی کنید.
+5. **بررسی دوبارهٔ فایل:** بررسی‌های کتاب، ساختار سند و رندر را روی همان نسخه انجام دهید. بعد از دریافت همهٔ نتایج، ایرادها را یک‌جا رفع کنید و بررسی‌های لازم را تکرار کنید.
+6. **بازبینی نهایی و تحویل:** فقط نسخه‌ای را تحویل دهید که بررسی همان نسخه تکمیل شده باشد. فایل ورد و گزارش گردش کار را با هم تحویل دهید.
+
+‏⁧کار موازی اختیاری است و به اجازهٔ شما نیاز دارد. دستور `batch plan-shards` یک کتاب را به بخش‌های مستقل تقسیم می‌کند و `batch merge-shards` پاسخ‌ها را دوباره کنار هم می‌گذارد. برای چند کتاب از `batch plan-books` استفاده کنید و برای هر کتاب پوشه و خروجی جدا بگیرید. هر شش مرحله برای تک‌تک کتاب‌ها لازم است. هماهنگ‌کننده واژه‌نامه و گزارش کار را نگه می‌دارد و پاسخ‌ها را ادغام می‌کند.⁩
+
+‏⁧هنگامی که خط فارسی با واژه‌ای انگلیسی آغاز می‌شود، `RLI` (`U+2067`) و `PDI` (`U+2069`) جهت آن خط را از متن اطراف جدا می‌کنند. در متن ساده یا با جهت خودکار، پیش از `RLI` نشانهٔ `RLM` (`U+200F`) را بگذارید. ورد جهت پاراگراف، تراز در ابتدای سطر و قلم خط فارسی را جداگانه تنظیم می‌کند.⁩
+
+## نمونه‌دستورها
+
+‏⁧نمونه‌ها با فرض قرارگرفتن `revayat-novel` در `PATH` نوشته شده‌اند. بین استخراج و ساخت سند باید ترجمه و بازبینی را انجام دهید. گزینه‌های هر دستور را با `--help` ببینید.⁩
+
+```text
+revayat-novel extract "book.epub" --out "work/book"
+revayat-novel web-import "https://example.org/novel/" --out "work/web-book"
+revayat-novel build "work/book" --out "output/edition.docx"
+revayat-novel doc-qa check --help
+revayat-novel persian-lint --check --style "excerpt.txt"
+revayat-novel eval-score --answers "evaluation-answers.json"
 ```
 
-</div>
+## گزارش‌ها و محدودیت‌ها
 
-اختیاری. فایل `skills/revayat-novel/requirements-optional.txt` دو wheelی را اعلام می‌کند که دو مرحله به آن‌ها نیاز دارند: `ocrmypdf` برای PDF‌های اسکن‌شده یا ترکیبی، و `pywin32` برای مسیر رندر Word روی ویندوز. بقیهٔ خط لوله بی آن‌ها کار می‌کند و `doctor` می‌گوید کدام نصب است.
+‏⁧هماهنگ‌کننده کنار فایل ورد گزارش `translation_YYYY-MM-DD_HH-mm-ss_UTC.log` را با کدگذاری `UTF-8` می‌نویسد. وضعیت ورودی، اصلاحات، دلیل توقف، نتیجهٔ بررسی‌ها و شناسهٔ نسخهٔ تحویلی را در آن ثبت کنید. برای ثبت گزارش هر دستور، گزینهٔ `--log-dir <work>` را بدهید تا برنامه گزارش را در `<work>/logs/` بنویسد. گزارش و پوشهٔ کاری را برای ادامهٔ کار نگه دارید و پیش از اشتراک‌گذاری، اطلاعات خصوصی را از گزارش حذف کنید. [راهنمای نگهداری و گزارش کار](skills/revayat-novel/references/preservation-and-logging.md) جزئیات را توضیح می‌دهد.⁩
 
-<div dir="ltr">
+برای بازشناسی طولانی یا کتابی با بیش از حدود ۲۰۰٬۰۰۰ نویسه در متن مبدأ، اول اجازه بگیرید. بررسی پوشش متنِ اسکن، دقت بازشناسی را ثابت نمی‌کند. کتاب‌هایی که متنشان با اندازهٔ صفحه جابه‌جا می‌شود شاید اصلاً ابعاد ثابتی نداشته باشند. اگر بخشی از مبدأ استخراج نشده یا معلوم نیست بازبینی و رندر چه بخش‌هایی را پوشش داده‌اند، تحویل را متوقف کنید.
 
-```bash
-pip install -r skills/revayat-novel/requirements-optional.txt
+‏⁧[نمونه‌های ارزیابی](evaluation/cases.json) و [آزمون آفلاین محیط ایزوله](tests/sandbox/README.md) تعداد مشخصی از حالت‌ها را بررسی می‌کنند. نتیجهٔ آن‌ها گواه کیفیت ادبی کتاب یا ممیزی کامل امنیتی نیست.⁩
 
-# Tesseract (موتور OCR):
-winget install tesseract-ocr.tesseract     # Windows
-brew install tesseract                     # macOS
-sudo apt install tesseract-ocr             # Debian/Ubuntu
-
-# Ghostscript — در winget نیست؛ نصب‌کننده را از اینجا بگیرید:
-#   https://ghostscript.com/releases/gsdnld.html
-brew install ghostscript                   # macOS
-sudo apt install ghostscript               # Debian/Ubuntu
-```
-
-</div>
-
-هیچ‌کدام لازم نیست روی `PATH` باشند. `doctor` اول `PATH` را نگاه می‌کند، بعد پوشهٔ
-اسکریپت‌های همان مفسری که با آن `pip install` کرده‌اید — یک محیط مجازی معمولاً روی
-`PATH` نیست — و بعد جایی که نصب‌کنندهٔ هر ابزار آن را می‌گذارد.
-
-## حفظ ساختار و حدود تأیید
-
-ورودی بومی، جدول‌های خالی و تو‌در‌تو، کنترل‌های چیدمان، تأکید خط‌های پیچیده و هر بار رسم واقعی تصویر PDF را حفظ می‌کند. هندسهٔ پشتیبانی‌نشده به‌جای تغییر خاموش تصویر رد می‌شود. پذیرش صفحه وابستگی‌های زندهٔ واژه‌نامه و بافت را دوباره بررسی می‌کند و تأیید بصری به تمام تصاویر فعلی نیاز دارد. پوشش OCR به منبع و خروجی متصل است؛ نقش تصویرهای خاموش مبهم باید با `--ocr-page-roles` مشخص شود. تصویرِ تأییدشده حتی با شناسایی زیرنویس در OCR حفظ می‌شود؛ تصویرهای بزرگ با منشأ مبهم در جای‌گذاری MinerU نگه داشته و گزارش می‌شوند.
-
-نصب‌کننده `--status` فقط‌خواندنی دارد (`-Status` در PowerShell)؛ مشاهدهٔ وضعیت پایدار، تضمین انحصار قفل سیستم‌عامل نیست. [پروتکل داوری](evaluation/README.md) هر ۲۸ مورد را در انتظار داوری آماده می‌کند و نتیجهٔ مستقل را اعتبارسنجی می‌کند؛ تأیید ادبی انسانی ساخته نمی‌شود. CI فقط شواهد خطای مصنوعی محدود و مجاز را نگه می‌دارد، نه کتاب واقعی.
-
-## استفاده
-
-به ایجنت‌تان بگویید، با هر عبارتی که دوست دارید:
-
-> این `book.pdf` را به فارسی ترجمه کن و یک فایل ورد بده.
-
-یا با پلاگین: `/translate-book ./book.pdf`
-
-ایجنت ابتدا می‌پرسد ترجمه و ویرایش با چند subagent موازی انجام شود یا به‌صورت سری؛ فقط با موافقت شما حالت موازی را فعال می‌کند. سپس خط لوله را اجرا می‌کند و آنجاهایی که تصمیم شما لازم است می‌ایستد — مهم‌تر از همه در واژه‌نامه، جایی که تعیین می‌کنید هر شخصیت در فارسی چه نامی داشته باشد.
-
-### یا خودتان مرحله‌به‌مرحله اجرا کنید
-
-<div dir="ltr">
-
-```bash
-S=skills/revayat-novel/scripts
-# ‏$PY همان مفسری است که دارید: python3 روی مک و لینوکس، python یا py -3 روی
-# ویندوز، که معمولاً python3 ندارد.
-
-$PY $S/revayat-novel.py extract book.pdf --out work/
-$PY $S/revayat-novel.py glossary scan --book work/book.json --out work/glossary.json
-#   … نام‌های فارسی را در work/glossary.json پر کنید …
-
-# ‏PDF صفحه‌به‌صفحه بریده می‌شود — یک کار برای هر صفحهٔ مبدأ، تا هر کدام با
-# صفحه‌ای که از آن آمده مقایسه شود. ‏EPUB و DOCX و متن ساده صفحه ندارند و
-# به‌جایش `chunk build --out work/chunks` می‌گیرند.
-$PY $S/revayat-novel.py pages build --book work/book.json --out work/pages --glossary work/glossary.json
-
-# سپس برای هر صفحه: work/pages/pageNNNN.md را ترجمه و در out_pageNNNN.md بنویسید، بعد
-$PY $S/revayat-novel.py pages     merge   --book work/book.json --pages work/pages --page 1 --glossary work/glossary.json
-$PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1
-#   … renders/source/page-0001.png را کنار renders/target/page-0001.png ببینید …
-$PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
-$PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
-
-# متنِ منتشرشدنی را *پیش از* آنکه کسی بخواندش تمام کنید: تایپوگرافی مکانیکی است
-# و صفحهٔ عنوان هم متنِ منتشرشدنی است. هر دو شناسهٔ بازنگری‌ای را جابه‌جا می‌کنند
-# که تأییدهای پایین به آن بسته‌اند، پس اجرای آن‌ها بعد از تأیید، تأیید را کهنه می‌کند.
-#   … ابتدا meta.title_target و meta.author_target را با bookwrite.transaction ثبت کنید …
-$PY $S/revayat-novel.py falint fix --book work/book.json
-
-# فارسی را کنار انگلیسی بخوانید. سه rubric دربارهٔ معنا هستند و جلو را
-# می‌گیرند؛ دو تای دیگر دربارهٔ سبک‌اند و عمداً چیزی نمی‌خواهند.
-$PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
-#   … work/review/sheet_NNNN.md را بخوانید و یافته‌ها را در out_sheet_NNNN.md بنویسید …
-$PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
-$PY $S/revayat-novel.py meaning status --book work/book.json --out work/review
-
-# سپس فارسی را مستقل بخوانید؛ این مرحله مکمل بازبینی دوزبانه است.
-$PY $S/revayat-novel.py fluency sheets --book work/book.json --out work/fluency --meaning work/review
-#   … work/fluency/sheet_NNNN.md را بخوانید و جانشین‌ها را در out_sheet_NNNN.md بنویسید …
-$PY $S/revayat-novel.py fluency record --book work/book.json --out work/fluency
-$PY $S/revayat-novel.py fluency apply  --book work/book.json --out work/fluency
-#   … کتاب تغییر کرد، پس بازبینی کامل `meaning` بالا را دوباره انجام دهید: همان
-#       اجرای دوباره، مقایسه با متن اصلی است و بی آن هیچ چیز سبز نمی‌شود …
-$PY $S/revayat-novel.py fluency status --book work/book.json --out work/fluency --meaning work/review
-
-# دیگر چیزی برای اصلاح تایپوگرافی نمانده باشد، وگرنه تأییدهای بالا دربارهٔ متنی
-# قدیمی‌ترند و باید دوباره گرفته شوند.
-$PY $S/revayat-novel.py falint lint  --book work/book.json
-# `--review` و `--fluency` همان جایی هستند که دو حکم معنایی اعمال می‌شوند؛ بی آن‌ها
-# گزارش `semantic-unverified` می‌دهد و `--strict` روی همان می‌ایستد.
-$PY $S/revayat-novel.py qa check --book work/book.json --assets work/assets \
-  --glossary work/glossary.json --review work/review --fluency work/fluency --strict
-$PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"
-
-# دو دروازهٔ پایانی؛ تا هر دو سبز نشوند فایل آماده نیست: یکی بستهٔ فایل،
-# یکی کتاب نهایی که رندر و نگاه شده است.
-$PY $S/revayat-novel.py qa     docx  --file out/book.fa.docx --book work/book.json
-$PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
-$PY $S/revayat-novel.py doc-qa review --work work --answer …
-$PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
-```
-
-</div>
+<a id="architecture"></a>
 
 ## معماری
 
-<div dir="ltr">
+‏⁧خط فرمان و فضای کاری با `Rust` نوشته شده‌اند. `book.json` مرجع اصلی وضعیت کتاب است. پاسخ‌های تأییدشده پس از اعتبارسنجی و زیر قفل اعمال می‌شوند تا اطلاعات لازم برای بازیابی از بین نرود. سازندهٔ ورد کتاب و دارایی‌هایش را می‌خواند. ابزارهای بررسی، ساختار سند را می‌سنجند و مدرک بازبینی را به نسخهٔ مشخصی از کتاب پیوند می‌دهند.⁩
 
-```
-book.pdf / .epub / .docx
-        │
-        ▼  probe every page: digital · scanned · mixed
-   OCRmyPDF ──────── only the pages that need it, images untouched
-        │
-        ▼
-   Book IR  ── blocks, runs, image bytes + geometry, footnotes, page setup
-        │      (book.json — the source of truth; Markdown deliberately is not)
-        ├──────────────▶ glossary.json ── locked names, aliases, character voices
-        ▼
-   chapter-aware worksheets ── term table + neighbouring context per chunk
-        │
-        ▼  translated serially, or in parallel with user consent
-   merge ── every @@ id must return exactly once, or it is a named error
-        │
-        ▼
-   metadata + Persian typography ── settle the published text first
-        ▼
-   bilingual review → independent Persian review → renewed source confirmation
-        │
-        ▼
-   quality gates ── coverage, footnote parity, omissions, image hashes, glossary
-        │
-        ▼
-   build ── python-docx + raw OOXML for footnotes, bookmarks, TOC, bidi
-        │
-        ▼
-   book.fa.docx  +  package-level verification
-```
+<a id="repository-layout"></a>
 
-</div>
+## چیدمان مخزن
 
-**تصمیم اصلی معماری، همان Book IR است.** اگر کتاب را از مسیر Markdown عبور بدهیم، هندسهٔ تصویر، هویت پاورقی و تنظیمات صفحه از دست می‌رود و هیچ دقتی در مراحل بعد آن را برنمی‌گرداند. تنها تأکیدهای درون‌متنی به‌شکل markup منتقل می‌شوند — چون مدل‌ها `*کج*` را به‌مراتب قابل‌اعتمادتر از یک XML اختصاصی مدیریت می‌کنند، و چون QA می‌تواند آن را با شمارش راستی‌آزمایی کند.
+‏⁧`crates/` شامل خط فرمان، مدل کتاب، ابزارهای ورود، پردازش فارسی، ساخت ورد، مراحل ترجمه، نصب و ارزیابی است.⁩
 
-## آنچه صادقانه باید گفت
+‏⁧`bin/` محل فایل نهایی `revayat-novel.exe` در ویندوز و `revayat-novel` در لینوکس است. [پوشهٔ اسکیل‌ها](skills/README.md) راهنمای کتاب، اسکیل‌های ویرایش و قلم‌ها را دارد. نمونه‌های ارزیابی در [`evaluation/`](evaluation/) و تعریف آزمون‌های خودکار در [`.github/workflows/`](.github/workflows/) هستند.⁩
 
-ورد بازجریان (reflow) دارد. طول یک پاراگراف فارسی به‌ندرت با اصل انگلیسی‌اش برابر است، بنابراین یک سند **قابل‌ویرایش** نمی‌تواند هم‌زمان صفحه‌به‌صفحه با PDF مبدأ یکسان باشد. هر ابزاری که هر دو را وعده بدهد، در عمل text boxهای غیرقابل‌ویرایش تولید می‌کند.
+‏⁧شیوهٔ تقسیم و هماهنگی کار از [deusyu/translate-book](https://github.com/deusyu/translate-book) الهام گرفته است. ایدهٔ حفظ چیدمان با مدل میانی کتاب از [BabelDOC](https://github.com/funstory-ai/BabelDOC) می‌آید.⁩
 
-اما این‌ها دقیق‌اند: بایت‌های تصویر، اندازهٔ فیزیکی و نسبت ابعاد؛ جای هر تصویر در متن؛ سلسله‌مراتب عنوان‌ها و شکست فصل‌ها؛ بولد و ایتالیک؛ جایگذاری و شماره‌گذاری پاورقی‌ها — و پی‌نوشت‌های آخر کتاب که به پاورقی تبدیل می‌شوند؛ شکست بخش‌های مبدأ و هندسهٔ صفحهٔ هر بخش؛ مقصد لینک‌ها که هرجا عبارت نمایشی در ترجمه مانده باشد به لینک زنده بازساخته می‌شوند؛ سربرگ‌های کتاب که به فارسی منتقل می‌شوند؛ لینک فصل‌ها؛ و متن فارسیِ قابل‌انتخاب، قابل‌جست‌وجو و قابل‌ویرایش.
+## نویسنده
 
-دو محدودیت دیگر که بهتر است از ابتدا بدانید:
+[Kiaro Sama](https://github.com/KiaroSama) · [Kiaro.Sama.Dev@gmail.com](mailto:Kiaro.Sama.Dev@gmail.com)
 
-- تشخیص عنوان در PDF بر پایهٔ اندازهٔ فونت است و در طراحی‌های غیرمعمول اشتباه می‌کند؛ سطح‌ها را پیش از chunk کردن در `book.json` اصلاح کنید، یا از MinerU استفاده کنید.
-- در کتاب اسکن‌شده، تصویر معمولاً بخشی از رستر صفحه است نه یک شیء تصویری مستقل، پس چیزی برای استخراج وجود ندارد. مدل layout در MinerU آن‌ها را پیدا می‌کند و `--from-mineru` خروجی‌اش را وارد می‌کند.
-- با `doc-qa check --keep-pdf` یک PDF از کتاب نهایی هم می‌گیرید؛ فارسی‌اش قابل انتخاب و جست‌وجو است و فونت در آن جاسازی شده. فهرست مطالبش **متن** است نه outline کلیک‌پذیرِ PDF، و صفحه‌بندی‌اش صفحه‌بندی همان برنامه‌ای است که رندر کرده — فایل `.docx` همان خروجی قابل‌ویرایش باقی می‌ماند.
+## مجوز
 
-## مستندات
-
-اسکیل این‌ها را در زمان نیاز می‌خواند، نه از ابتدا:
-
-- [`translation-policy.md`](skills/revayat-novel/references/translation-policy.md) — یک ترجمهٔ ادبی وفادار چه چیزهایی می‌خواهد
-- [`persian-typography.md`](skills/revayat-novel/references/persian-typography.md) — RTL، نیم‌فاصله، نشانه‌گذاری، متن دوخطی
-- [`extraction.md`](skills/revayat-novel/references/extraction.md) — مسیریابی OCR، کتاب‌های دشوار، ساختار IR
-- [`watermarks.md`](skills/revayat-novel/references/watermarks.md) — حذف واترمارک رنگی از اسکن، و کاری که از آن برنمی‌آید
-- [`glossary-and-voice.md`](skills/revayat-novel/references/glossary-and-voice.md) — سیاست نام‌گذاری، نام‌های مستعار، لحن شخصیت
-- [`docx-and-ooxml.md`](skills/revayat-novel/references/docx-and-ooxml.md) — همهٔ گزینه‌های ساخت و ساختار ورد حاصل از هرکدام
-- [`troubleshooting.md`](skills/revayat-novel/references/troubleshooting.md) — پرتکرارترین مشکل‌هایی که به آن‌ها برمی‌خورید
-
-## توسعه
-
-<div dir="ltr">
-
-```bash
-pip install -r skills/revayat-novel/requirements.txt
-python -m pytest tests -q
-```
-
-</div>
-
-فایل‌های آزمون ساخته می‌شوند، نه commit: مجموعهٔ تست خودش PDF و EPUB و DOCX می‌سازد، پس سریع می‌ماند و هیچ متن کتاب متعلق به دیگران در مخزن قرار نمی‌گیرد.
-
-`tests/e2e_pipeline.py` تمام مراحل را روی یک کتاب ساختگی اجرا می‌کند — استخراج، واژه‌نامه، chunk، merge، بازبینی دوزبانه، تایپوگرافی، QA، ساخت و بازبینی package — تا شکستگی در درزِ میان دو مرحله حتی وقتی تست‌های هر ماژول سبزند هم گرفته شود. CI آن را روی Linux و macOS و Windows اجرا می‌کند.
-
-## سپاس
-
-شکل کلی orchestration — تکه‌کردن کتاب، ترجمهٔ موازی تکه‌ها با subagentها و یک واژه‌نامهٔ مشترک، و ازسرگیری اجرای ناتمام — از رویکردی پیروی می‌کند که [deusyu/translate-book](https://github.com/deusyu/translate-book) (MIT) نشان داده است. استخراج و مسیریابی OCR بر [PyMuPDF](https://github.com/pymupdf/PyMuPDF)، [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF) و به‌صورت اختیاری [MinerU](https://github.com/opendatalab/MinerU) استوارند. ایدهٔ استفاده از یک نمایش میانی برای حفظ صفحه‌آرایی در ترجمه، از [BabelDOC](https://github.com/funstory-ai/BabelDOC) می‌آید.
+‏⁧حق نشر روایت متعلق به `Kiaro Sama` است. این پروژه با مجوز [GPL-3.0-or-later](LICENSE) منتشر می‌شود.⁩
 
 <a id="donate"></a>
 
@@ -312,30 +161,3 @@ python -m pytest tests -q
 | Litecoin (LTC) | LTC | `ltc1qntqnnrunadurnw4cshv3qgspywrueyyeyngwuy` |
 | Solana (SOL) | Solana | `7B2wkczUjmkDhETwQuknBL8sUsbuV7nErxc317TmQuwR` |
 | Polygon (POL) | Polygon | `0x0Bd0BA443a8B9cf15922bf7f0Bb0a4b495fD06Ef` |
-
-<div dir="rtl">
-
-## قواعد ترجمه و حفظ کیفیت
-
-هر ایجنتی که از اسکیل استفاده می‌کند باید لاگ روند ترجمه، اصلاح و بررسی را با
-کدگذاری UTF-8 کنار فایل ترجمه ذخیره کند. [قواعد حفظ کیفیت و لاگ](skills/revayat-novel/references/preservation-and-logging.md)
-حفظ ابعاد اصلی صفحه، رزولوشن تصویر و نسخهٔ اصلی هنگام بهبود کیفیت را توضیح می‌دهد.
-[راهنمای زبان مبدأ](skills/revayat-novel/references/source-languages.md) نیز برای
-ژاپنی، کره‌ای، چینی، فرانسوی، اسپانیایی و انگلیسی به فارسی در روند اسکیل استفاده می‌شود.
-
-## نویسنده
-
-نویسنده: Kiaro Sama
-گیت‌هاب: https://github.com/KiaroSama
-
-## مجوز
-
-[GNU General Public License v3.0 or later](LICENSE).
-
-این نرم‌افزار آزاد است: می‌توانید بر پایهٔ شرایط «پروانهٔ عمومی همگانی گنو» که
-بنیاد نرم‌افزار آزاد منتشر کرده — نسخهٔ ۳ یا هر نسخهٔ بعدی — آن را بازتوزیع یا
-دگرگون کنید. این برنامه به امید سودمندبودن منتشر شده، اما **بدون هیچ ضمانتی**؛
-حتی بدون ضمانت ضمنی قابلیت فروش یا مناسب‌بودن برای هدفی خاص. برای جزئیات،
-متن پروانه را ببینید.
-
-</div>

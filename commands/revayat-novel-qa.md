@@ -3,45 +3,12 @@ description: Run the Revayat Novel quality gates over a book or a built Word fil
 argument-hint: [working directory, default ./work]
 ---
 
-Run the Revayat Novel quality gates for `${1:-work}` and explain the results in plain
-language.
+Run Stage 5 of the [six-stage workflow](../skills/revayat-novel/references/multi-agent-workflow.md) in `${1:-work}`. Check that the Book IR, current meaning and fluency records, locked glossary, and any built Word file refer to the same revision. Use the installed `revayat-novel` help for flags and quote paths containing spaces.
 
-`$PY` is the interpreter you resolved for this platform: `python3` on macOS and
-Linux, `python` or `py -3` on Windows, where `python3` usually does not exist.
+- `revayat-novel falint lint`: check Persian typography in the current book.
+- `revayat-novel qa check`: run strict book QA with the current meaning and fluency evidence. A stale or missing approval cannot pass.
+- If a `.docx` exists, also run `revayat-novel qa docx`, `revayat-novel doc-qa check`, and `revayat-novel render-qa <file.docx> --out <render-dir>`. Package checks cover OOXML structure, links, and assets. Visual checks need someone to open and inspect the rendered pages.
 
-```bash
-$PY <skill>/scripts/revayat-novel.py qa check --book ${1:-work}/book.json --assets ${1:-work}/assets --glossary ${1:-work}/glossary.json --review ${1:-work}/review --fluency ${1:-work}/fluency --strict
-$PY <skill>/scripts/revayat-novel.py falint lint --book ${1:-work}/book.json
-```
+Run the available checks together against the same revision. Wait for all results before editing. Collect every finding, repair one batch through the coordinator, rebuild with `revayat-novel build` if the candidate changed, and rerun affected checks. Record observed page evidence with `revayat-novel doc-qa review`, then rerun `revayat-novel doc-qa check`. An unreviewed render is unverified. Without a built Word file, state that package and render checks were not run.
 
-`--review` and `--fluency` are the directories the two semantic stages wrote to.
-They are how their verdicts are enforced *here*, for the book as it now stands: a
-review recorded against an earlier revision comes back `semantic-rejected`. Leave
-them out and the report says `semantic-unverified` — a warning naming what was not
-asked, never a pass — and `--strict` turns that into an error. `falint lint` must
-report nothing: typography runs before the reviews, so anything left to fix means
-the approvals describe older text.
-
-Read `references/review-contracts.md` for review states and migration. Empty edit
-lists, unknown digests, refused passes and pending recovery never approve delivery.
-
-If a built `.docx` exists, gate it **twice** — the two answer different
-questions and neither substitutes for the other:
-
-```bash
-$PY <skill>/scripts/revayat-novel.py qa docx --file out/book.fa.docx --book ${1:-work}/book.json
-$PY <skill>/scripts/revayat-novel.py doc-qa check --book ${1:-work}/book.json --work ${1:-work} --docx out/book.fa.docx
-```
-
-`qa docx` reads the package: footnotes, bookmarks, image bytes, the TOC field.
-`doc-qa check` renders the book and asks what only a rendered page can answer —
-nothing off the trim, no hole, no text on a plate — plus the one question no
-single page can: is every translated block in the finished book exactly once.
-
-It returns `unverified` rather than passing until somebody has looked at
-`${1:-work}/renders/final/pages/`. That is not a soft pass; say so.
-
-For each finding, say what it means for the reader and what you recommend —
-distinguish the ones that need a page or chunk re-translated — whichever unit
-the book was cut into — from the ones that are cosmetic. Do not simply paste the
-JSON.
+Keep results in the workflow log. Explain what each finding means for the reader, where it occurs, and whether it blocks Stage 6. Report the verified scope and any missing coverage.

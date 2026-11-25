@@ -93,3 +93,35 @@ Thumbs.db
 
 # Codebase Memory MCP artifact: regenerated on every index, never committed.
 /.codebase-memory/
+
+# Deliberate narrow exception for the tracked Codex marketplace manifest
+# (modeled on cloudflare/skills); all other paths under /.agents/ stay ignored.
+!/.agents/
+/.agents/*
+!/.agents/plugins/
+/.agents/plugins/*
+!/.agents/plugins/marketplace.json
+
+# Rust
+/target/
+**/target/
+/bin/
+/debug/
+**/*.rs.bk
+*.pdb
+**/mutants.out*/
+rustc-ice-*.txt
+/.cargo/*
+!/.cargo/config.toml
+**/.cargo/credentials*
+/vendor/
+*.profraw
+*.profdata
+lcov.info
+tarpaulin-report.*
+cobertura.xml
+flamegraph.svg
+perf.data
+perf.data.old
+/criterion/
+

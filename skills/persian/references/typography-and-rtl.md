@@ -1,12 +1,11 @@
 # typography-and-rtl.md: Persian text mechanics
 
-The deterministic parts are enforced by `scripts/persian_lint.py`. This file explains the rules
-behind it and, more important, the cases the script leaves to your judgment. If you cannot run
-scripts (no code execution), apply sections 1 to 4 by hand; they are short.
+Run `revayat-novel persian-lint` for mechanical checks. Use this reference to resolve the cases
+it flags without fixing. If the binary is unavailable, apply sections 1 to 4 by hand.
 
-    python scripts/persian_lint.py --check file.txt          # report
-    python scripts/persian_lint.py --fix   file.txt          # normalized text to stdout
-    python scripts/persian_lint.py --check --style file.txt  # also flag bureaucratic / AI phrases
+    revayat-novel persian-lint --check file.txt          # report
+    revayat-novel persian-lint --fix   file.txt          # normalized text to stdout
+    revayat-novel persian-lint --check --style file.txt  # also flag bureaucratic / AI phrases
 
 ## 1. Letters: Persian, not Arabic
 Persian and Arabic share a script but differ in a few letters. Mixed text is the most common
@@ -71,6 +70,9 @@ Persian runs right-to-left, but numbers, Latin words, and some punctuation are l
 Where they meet, glyphs can land on the visually wrong side. This is layout, not characters, so the
 linter cannot fully fix it. Handle it consciously:
 
+- When the first word is English, enclose the whole Persian sentence, including final punctuation,
+  in `RLI` (`U+2067`) and `PDI` (`U+2069`). In plain text and `dir="auto"`, prepend `RLM`
+  (`U+200F`) before `RLI` to set the outer paragraph direction. Purely English lines stay unwrapped.
 - A number or Latin run inside Persian keeps its own LTR order. That is correct. Don't reorder
   digits.
 - Parentheses and brackets mirror automatically in a proper RTL renderer: type «(۲۰۲۰)» logically
@@ -102,10 +104,8 @@ The linter fixes characters; a file also needs direction, alignment, and a Persi
 Apply all three to every Persian document you generate. RTL without right alignment still looks
 wrong.
 
-Defaults: direction = RTL · alignment = start/leading (visually right; justify only if asked) ·
-font = Arial, set as the complex-script font. Arial ships with Windows and Office and renders
-Persian, so it needs no install and won't be substituted. For a nicer face (Vazirmatn, IRANSans),
-use one the readers have, or embed it.
+Default to RTL with logical start alignment and Vazirmatn as the complex-script font. Embed the
+font in the document to avoid substitution on machines that do not have it installed.
 
 **docx (docx-js):** set the font on ascii/hAnsi and `cs` (complex script), and align to START:
 ```js
@@ -114,11 +114,11 @@ new Paragraph({
   alignment: AlignmentType.START,      // logical leading edge = visually right for RTL
   children: [ new TextRun({
     text, rightToLeft: true,
-    font: { ascii: 'Arial', hAnsi: 'Arial', cs: 'Arial' },   // cs = the Persian font
+    font: { ascii: 'Vazirmatn', hAnsi: 'Vazirmatn', cs: 'Vazirmatn' },   // cs = the Persian font
   }) ],
 });
 ```
-If the toolkit won't emit `w:cs`, post-process `word/document.xml` and add `w:cs="Arial"` to each
+If the toolkit won't emit `w:cs`, post-process `word/document.xml` and add `w:cs="Vazirmatn"` to each
 `<w:rFonts>`; otherwise Word renders the Persian in its default complex-script font.
 
 **Alignment gotcha (important):** in a bidi paragraph Word reads `w:jc` logically: `left` = start,
@@ -128,23 +128,13 @@ with the leading edge: `w:jc="start"` (docx-js `AlignmentType.START`). Never `ri
 This was confirmed on a real file: a `<w:bidi/>` paragraph with `w:jc="right"` rendered
 left-aligned in Word; changing it to `w:jc="start"` fixed it.
 
-**python-docx:** the alignment enum has no START, so set the XML directly:
-```python
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
-pPr = paragraph._p.get_or_add_pPr()
-if pPr.find(qn('w:bidi')) is None:
-    pPr.insert_element_before(OxmlElement('w:bidi'), 'w:spacing', 'w:ind', 'w:jc')
-pPr.get_or_add_jc().set(qn('w:val'), 'start')
-rPr = run._r.get_or_add_rPr()
-rFonts = OxmlElement('w:rFonts')
-for k in ('w:ascii', 'w:hAnsi', 'w:cs'): rFonts.set(qn(k), 'Arial')
-rPr.append(rFonts); rPr.append(OxmlElement('w:rtl'))
-```
+**Native book builder:** `revayat-novel build <work> --out <file.docx>` writes `w:bidi`
+and logical-start paragraph alignment. Check `w:rFonts` for `w:cs="Vazirmatn"` and confirm
+that the font is embedded. The alignment value is `start`, emitted as `<w:jc w:val="start"/>`.
 
 **HTML/CSS:**
 ```css
 body { direction: rtl; text-align: start;
-       font-family: Arial, 'Vazirmatn', 'IRANSans', Tahoma, sans-serif; }
+       font-family: 'Vazirmatn', Tahoma, sans-serif; }
 ```
 Add `lang="fa"` on the root element so browsers pick Persian glyph shapes and hyphenation.

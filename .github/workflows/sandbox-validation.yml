@@ -1,6 +1,9 @@
 name: Sandbox validation
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -12,56 +15,37 @@ concurrency:
 
 jobs:
   sandbox:
-    name: offline isolation and synthetic boundaries
+    name: Offline Rust CLI smoke
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Prepare runtime without target execution
+      - name: Build the sandbox from tracked workspace files
         shell: bash
         run: |
-          set -euo pipefail
-          context="$GITHUB_WORKSPACE/.pytest-tmp/sandbox-build"
-          mkdir -p "$context"
-          cp tests/sandbox/Dockerfile "$context/Dockerfile"
-          cp tests/sandbox/Dockerfile.dockerignore "$context/.dockerignore"
-          cp skills/revayat-novel/requirements.txt "$context/requirements.txt"
-          cp constraints-ci.txt "$context/constraints-ci.txt"
-          timeout --signal=TERM --kill-after=10s 310s python3 - "$context" <<'PY'
-          import runpy
-          import sys
-          import time
-          import signal
-          controller = runpy.run_path('tests/sandbox/runner.py')
-          signal.signal(signal.SIGTERM, controller['cancel'])
-          signal.signal(signal.SIGINT, controller['cancel'])
-          controller['bounded'](['docker', 'build', '--progress=plain', '--iidfile', sys.argv[1] + '/image-id', sys.argv[1]], deadline=time.monotonic() + 300, idle=60)
-          PY
-      - name: Prove controls before finite target fixtures
+          context=$(mktemp -d "$RUNNER_TEMP/sandbox.XXXXXXXX")
+          trap 'rm -rf -- "$context"' EXIT
+          git archive HEAD Cargo.toml Cargo.lock rust-toolchain.toml crates skills evaluation/cases.json \
+            | tar -xf - -C "$context"
+          docker build --file - --tag revayat-novel:sandbox "$context" < tests/sandbox/Dockerfile
+      - name: Check doctor, Persian lint, and evaluation without network or writes
         shell: bash
         run: |
-          set -euo pipefail
-          image="$(cat .pytest-tmp/sandbox-build/image-id)"
-          timeout --signal=TERM --kill-after=20s 240s python3 tests/sandbox/runner.py --image "$image" --report .pytest-tmp/sandbox-evidence/result.json
-      - name: Remove only task-owned containers after cancellation
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          containers="$(timeout 10s docker ps --all --filter 'label=revayat-novel-sandbox-validation=true' --format '{{.ID}}')"
-          if [ -n "$containers" ]; then
-            timeout --signal=TERM --kill-after=5s 20s docker rm --force $containers
-          fi
-          test -z "$(timeout 10s docker ps --all --filter 'label=revayat-novel-sandbox-validation=true' --format '{{.ID}}')"
-      - name: Keep bounded safe control evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: sandbox-control-evidence
-          path: |
-            .pytest-tmp/sandbox-evidence/result.json
-            .pytest-tmp/sandbox-evidence/*.log
-          retention-days: 7
-          if-no-files-found: error
+          sandbox=(docker run --rm --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges)
+          [[ "$(docker image inspect --format '{{.Config.User}}' revayat-novel:sandbox)" == '65532:65532' ]]
+          "${sandbox[@]}" revayat-novel:sandbox doctor --json \
+            | jq -e '.version == "3.0.0" and .requires_python == false and (.fonts | length == 5 and all(.[]; . == true)) and all(.optional_tools[]; . == null)'
+          printf '%s\n' 'این کتاب را می‌خوانم.' \
+            | "${sandbox[@]}" -i revayat-novel:sandbox persian-lint --check --style
+          printf '%s\n' 'این كتاب را می خوانم.' \
+            | "${sandbox[@]}" -i revayat-novel:sandbox persian-lint --fix \
+            | cmp - <(printf '%s\n' 'این کتاب را می‌خوانم.')
+          answers=$(mktemp "$RUNNER_TEMP/answers.XXXXXXXX.json")
+          trap 'rm -f -- "$answers"' EXIT
+          jq '.cases | map({key: .id, value: .accepts[0]}) | from_entries' evaluation/cases.json > "$answers"
+          chmod a+r "$answers"
+          "${sandbox[@]}" --mount "type=bind,src=$answers,dst=/answers.json,readonly" \
+            revayat-novel:sandbox eval-score --answers /answers.json --json \
+            | jq -e '(.cases | length == 28 and all(.[]; .verdict == "pass")) and .overall == null'

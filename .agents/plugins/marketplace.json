@@ -1,0 +1,20 @@
+{
+  "name": "revayat-novel",
+  "interface": {
+    "displayName": "Revayat Novel"
+  },
+  "plugins": [
+    {
+      "name": "revayat-novel",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/KiaroSama/Revayat-Novel-Skill.git"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

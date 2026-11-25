@@ -1,19 +1,18 @@
 # CLAUDE.md
 
-Read `AGENTS.md` — it is the full guide for working on this repository and
-applies unchanged here.
+Read [AGENTS.md](AGENTS.md) for repository rules. Read
+[CONTEXT.md](CONTEXT.md) for domain terms.
 
-Two Claude-specific notes:
+- Translate a book: start at `skills/revayat-novel/SKILL.md` and follow its
+  six-stage workflow. Activate by `name: revayat-novel`. In Claude Code,
+  `{SKILL_DIR}` resolves to `${CLAUDE_PLUGIN_ROOT}/skills/revayat-novel`.
+- Run the Rust `1.100.0` workspace in `crates/` through the staged
+  `bin/revayat-novel.exe` on Windows or `bin/revayat-novel` on Linux.
+  `revayat-novel doctor --json` reports package and optional tool availability.
+- Change plugin metadata or skills: maintain all five plugin formats and one
+  physical line per front matter field. See [skills/README.md](skills/README.md)
+  for the bundled Vazirmatn v33.003 fonts and editorial skills, including
+  `humanizer` v4.0.0.
 
-- **Using the skill**: it activates by the `name:` in
-  `skills/revayat-novel/SKILL.md`, which is `revayat-novel` — not the folder name.
-- **Inside a plugin**, `{SKILL_DIR}` in `SKILL.md` resolves to
-  `${CLAUDE_PLUGIN_ROOT}/skills/revayat-novel`.
-
-When changing `SKILL.md`, keep every front-matter field on a single line.
-Several agents parse it with a line-oriented reader, and CI checks it.
-
-## Agent skills
-
-Development work is tracked locally; see `docs/agents/issue-tracker.md`.
-The single domain glossary is `CONTEXT.md`; see `docs/agents/domain.md`.
+Development work is tracked locally; see
+[the issue-tracker guide](docs/agents/issue-tracker.md).

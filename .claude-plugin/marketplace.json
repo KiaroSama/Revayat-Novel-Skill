@@ -1,6 +1,6 @@
 {
   "name": "revayat-novel-skill",
-  "description": "Persian book translation with Persian, English and Russian editorial skills.",
+  "description": "Persian book translation with a six-stage multi-agent workflow, a pure-Rust native binary, and the bundled Vazirmatn font.",
   "owner": {
     "name": "Kiaro Sama",
     "url": "https://github.com/KiaroSama"
@@ -9,8 +9,13 @@
     {
       "name": "revayat-novel",
       "source": "./",
-      "description": "Translate a whole book into publication-quality Persian and build a professional Word file: OCR for scanned and mixed PDFs, original illustrations at their real size, Word-native footnotes, a clickable table of contents, RTL typography and a locked name glossary.",
-      "version": "2.0.0",
+      "description": "Translate books into Persian with a six-stage multi-agent workflow. A pure-Rust native binary builds Word files with the bundled Vazirmatn font.",
+      "version": "3.0.0",
+      "author": {
+        "name": "Kiaro Sama",
+        "url": "https://github.com/KiaroSama"
+      },
+      "repository": "https://github.com/KiaroSama/Revayat-Novel-Skill",
       "license": "GPL-3.0-or-later"
     }
   ]

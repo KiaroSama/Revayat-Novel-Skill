@@ -1,0 +1,31 @@
+[package]
+name = "revayat-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "revayat-novel"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+revayat-core.workspace = true
+revayat-eval.workspace = true
+revayat-ingest.workspace = true
+revayat-installer.workspace = true
+revayat-ooxml.workspace = true
+revayat-persian.workspace = true
+revayat-pipeline.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+trycmd.workspace = true
+
+[lints]
+workspace = true

@@ -3,6 +3,11 @@
 A book translation workflow producing reviewed Persian editions while preserving
 source structure, illustrations and traceable decisions.
 
+The Rust `1.100.0` workspace (`crates/*`) provides the native CLI at
+`bin/revayat-novel.exe` on Windows or `bin/revayat-novel` on Linux. The skill ships
+in five plugin formats with Vazirmatn v33.003 and three editorial companions,
+including `humanizer` v4.0.0. See [repository guidance](AGENTS.md) for crate owners.
+
 ## Language
 
 **Book**: An ordered work with source content, translation and publication structure.
@@ -47,8 +52,13 @@ unfinished receipt housekeeping does not mean that publication was rolled back.
 **Recovery conflict**: A persisted or current state that differs from both recorded
 states, requiring preservation and explicit resolution rather than guessed recovery.
 
-**Control preflight**: Proof that every required isolation boundary is active before
-any work under review is allowed to execute. Unknown means no execution.
+**Six-stage workflow**: Initial translation, typesetting and layout, independent review,
+application of edits, re-check and repairs, then final review and delivery. Each book
+completes all stages whether one agent or a team does the work.
 
-**Target validation**: Execution of the declared finite fixture corpus after control
-admission; distinct from a complete source security audit.
+**Shard**: Independent worksheet or review assignments for one book and revision.
+The coordinator combines replies before applying them to the book.
+
+**Offline smoke**: The fixed `doctor`, Persian lint and evaluation cases run in a
+non-root, read-only container with networking disabled. This is a CLI check with
+known inputs, not a complete security audit.

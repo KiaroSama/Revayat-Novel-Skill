@@ -1,6 +1,10 @@
-# Bundled writing skills
+# Bundled skills
 
-Claude Code exposes these skills under the `revayat-novel` plugin namespace. Select by the language of the prose you are writing, not by the document's source language. [Revayat Novel's writing guide](revayat-novel/references/writing-voice.md) explains how this works in a book translation.
+[Revayat Novel](revayat-novel/SKILL.md) translates books into Persian through a
+[six-stage workflow](revayat-novel/references/multi-agent-workflow.md). The bundle
+includes the book skill and the three editorial skills below. Choose an editorial
+skill by the language of the prose you are writing, regardless of the source
+language. Claude Code exposes the skills under the `revayat-novel` namespace.
 
 | Language | Skill | Upstream revision | License |
 | --- | --- | --- | --- |
@@ -8,4 +12,15 @@ Claude Code exposes these skills under the `revayat-novel` plugin namespace. Sel
 | English | [humanizer](humanizer/SKILL.md) | [blader/humanizer v4.0.0](https://github.com/blader/humanizer/tree/b48c832f0f809c1b5658edbb838c2521b72f2413) | [MIT](humanizer/LICENSE) |
 | Russian | [great-russian](great-russian/SKILL.md) | [frolin/great-russian-skill](https://github.com/frolin/great-russian-skill/tree/c9ba8661768927c21b7ba5608e63dce832c568b5) | [MIT](great-russian/LICENSE) |
 
-The bundle includes the skill instructions, runtime references, and Persian helpers and seed data. It omits upstream installers, CI, plugin manifests and test suites. The bundled copies include local fixes for fidelity, safe file editing and Persian text normalization. The Persian instructions point to the upstream self-test rather than to an omitted local file. The standalone Revayat Novel installer only copies the book skill.
+The Rust `1.100.0` workspace in `crates/` provides `persian-lint` and
+`persian-lookup` through `bin/revayat-novel` or `bin/revayat-novel.exe`.
+Use `revayat-novel persian-lint --help` or `revayat-novel persian-lookup --help`
+for CLI options. The [bundled font](revayat-novel/assets/fonts/vazirmatn/) is
+Vazirmatn v33.003; read its [OFL license](revayat-novel/assets/fonts/vazirmatn/OFL.txt)
+for redistribution terms. The standalone installer stages the book skill,
+its fonts, and the binary.
+
+The [five plugin formats](../README.md#plugin-formats) are Claude Code, Codex,
+Cursor, Antigravity, and Agent Plugins. See the
+[writing guide](revayat-novel/references/writing-voice.md) for host-specific skill
+keys and the fallback for standalone installations.

@@ -14,7 +14,7 @@ routes; root tables omit them.
 An explicitly malformed or nonpositive `gridSpan` is a named refusal; an absent
 span means one column. A populated vertical-merge continuation is refused because
 its extra body cannot be silently discarded. Generated empty continuations remain
-supported. With `--page-breaks source`, hard breaks are emitted as native `w:br`
+supported. The OOXML writer represents retained hard breaks as native `w:br`
 events, including inside cells. Word can lay out a cell-scoped break differently
 from a body break; emitted OOXML does not guarantee identical pagination across
 viewers. The default `chapter` policy and soft-break behavior are unchanged.
@@ -29,9 +29,7 @@ The writer and package gate compare their position among prose, pictures and
 other source events, not merely a filtered list of tables and blank paragraphs.
 A mandatory final cell paragraph is distinct from additional authored blanks.
 
-`bookstructure.py` owns validation and the shared projection; `docxtables.py`
-reads native topology, `docxproperties.py` resolves bounded effective properties,
-and `docxbody.py` writes native body/cell events. Books without the optional
+The Rust reader projects table topology and effective properties into Book IR; the OOXML writer emits native body and cell events. Books without the optional
 inventory keep the established content-derived compatibility path; that path
 cannot reconstruct empty source shape which the earlier import never recorded.
 Reimport from the preserved original into a new workspace when that fidelity is
@@ -77,6 +75,8 @@ is reported as a warning while its picture bytes and placement remain retained.
 
 ## Verification
 
+Run `revayat-novel extract <input.docx> --out <work>` and inspect the source structure before translating. After `revayat-novel build <work> --out <file.docx>`, use `revayat-novel qa docx` and `revayat-novel doc-qa check` on the exact candidate.
+
 Run the native event-order and two-route pipeline regressions plus the complete
 repository suite. Inspect the actual generated Word package and rendered pages:
 a correct note count does not prove its marker remained next to the right words.
@@ -84,7 +84,7 @@ The synthetic transport tests do not certify literary translation. Keep the
 bilingual meaning review and independent Persian fluency pass for real books.
 
 Primary references:
-- [python-docx run content](https://python-docx.readthedocs.io/en/latest/_modules/docx/text/run.html)
+- [ECMA-376: Office Open XML](https://ecma-international.org/publications-and-standards/standards/ecma-376/)
 - [Open XML note identity](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.footnoteendnoteseparatorreferencetype.id)
 - [Pandoc's typed DOCX reader, for comparison](https://github.com/jgm/pandoc/blob/main/src/Text/Pandoc/Readers/Docx/Parse.hs)
 

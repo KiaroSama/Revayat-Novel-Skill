@@ -17,9 +17,8 @@ Two jobs:
 - **Mechanics.** The small things that make Persian look right regardless of word choice: RTL,
   ZWNJ, correct ی/ک, digits, punctuation, spacing.
 
-Mechanics are deterministic, so they live in a script (`scripts/persian_lint.py`). Craft is
-judgment, so it lives in this file and the references. Any Persian you emit should pass the linter
-and respect the craft rules.
+Use `revayat-novel persian-lint` to check text mechanics. Use this guide and its references for
+judgment calls about meaning, voice, and register.
 
 ## Routing: pick the task first
 
@@ -27,9 +26,9 @@ and respect the craft rules.
 |---|---|---|
 | English → Persian translation | **A** | full workflow below |
 | Persian → English translation | **B** | reverse workflow |
-| "fix / clean up / normalize this Persian", RTL, نیم‌فاصله, encoding | **C** | `persian_lint.py` only, no translation |
+| "fix / clean up / normalize this Persian", RTL, نیم‌فاصله, encoding | **C** | `revayat-novel persian-lint` only, no translation |
 | write, edit, or review Persian; "make it sound human / not like AI" | **D** | craft rules + `references/ai-tells.md`, then the linter |
-| "what's the natural Persian for X", an idiom or term | **E** | `lookup.py` and `references/lexicon.md` |
+| "what's the natural Persian for X", an idiom or term | **E** | `revayat-novel persian-lookup` and `references/lexicon.md` |
 
 Routes C and D work standalone. You don't need a translation task to fix or improve Persian.
 
@@ -40,7 +39,7 @@ anything longer or important.
 
 **1. Prep.** Read the source. Name its register (literary, contemporary dialogue, nonfiction,
 official, children's) and audience; see `references/register-guide.md`. Build a terminology brief
-with `python scripts/lookup.py <source_file>` (`--json` for structured output); it surfaces only the
+with `revayat-novel persian-lookup <source_file>` (`--json` for structured output); it surfaces only the
 idioms and collocations that occur in this text. If the text has measurements, settle the unit
 policy with the user before drafting (see Numbers and units).
 
@@ -54,12 +53,12 @@ you have them, inline otherwise.
 **4. Synthesis.** Merge the feedback in this priority (highest wins): meaning fidelity →
 terminology → grammar → no AI tells → oral fluency → register → modern accessibility → taste.
 
-**5. Delivery.** Run `python scripts/persian_lint.py --fix` on the Persian. Run the verification
+**5. Delivery.** Run `revayat-novel persian-lint --fix` on the Persian. Run the verification
 check. Deliver only the final translation plus two or three sentences on the choices that matter.
 No drafts, lens reports, or back-translations unless asked.
 
 **Route B (Persian → English)** reverses this: draft the English, review for English quality and
-fidelity, skip the linter (the output is English). Still run `lookup.py --reverse` for consistent
+fidelity, skip the linter (the output is English). Still run `revayat-novel persian-lookup --reverse` for consistent
 terminology and still verify names and numbers.
 
 ## The machine-Persian checklist
@@ -76,7 +75,7 @@ The highest-frequency ways a draft betrays itself. Apply while drafting; the ful
 - **Drop only redundant words (P2).** *wedding night* → «شب عروسی».
 - **«چرا» answers a negative question (P35).** *Isn't it…?* answered yes → «چرا، هست».
 - **Verb-final order (P6).** *Upstairs was my room* → «اتاقم … در طبقهٔ بالا بود».
-- **Persian collocations (P12, P13).** *the lights went out* → «چراغ‌ها خاموش شدند»; *perfect timing* → «چه به‌موقع!».
+- **Persian collocations (P12, P13).** Use «برق رفت» when the context confirms a power outage. *Perfect timing* → «چه به‌موقع!».
 - **Flatten dialogue tags (P20).** suggested / conceded / announced → usually «گفت».
 - **Re-segment to Persian rhythm (P5).** Shorter clauses; don't keep English dashes or clause order.
 - **No officialese (ai-tells §1).** «است» not «می‌باشد»; «سه اتاق دارد» not «دارای سه اتاق است»;
@@ -89,9 +88,9 @@ The highest-frequency ways a draft betrays itself. Apply while drafting; the ful
 
 Finish every piece of Persian by running the linter:
 
-    python scripts/persian_lint.py --check  file.txt          # report issues
-    python scripts/persian_lint.py --fix    file.txt          # normalized text to stdout
-    python scripts/persian_lint.py --check --style file.txt   # also flag officialese / AI phrases
+    revayat-novel persian-lint --check  file.txt          # report issues
+    revayat-novel persian-lint --fix    file.txt          # normalized text to stdout
+    revayat-novel persian-lint --check --style file.txt   # also flag officialese / AI phrases
 
 It fixes Arabic → Persian letters (ي→ی, ك→ک, ة→ه, ى→ی), kashida, digits, punctuation
 (, → «،», ; → «؛», ? → «؟», quotes → «…»), ZWNJ for می/نمی + ها + ترین + heh enclitics, and
@@ -100,8 +99,15 @@ where a Persian character sits next to it, so English inside a Persian document 
 is idempotent. Ambiguous cases (a bare «تر» that might mean "wet", a glued «میرود», an em dash) are
 reported, never auto-changed; resolve those with judgment.
 
-If you cannot run scripts, apply sections 1 to 4 of `references/typography-and-rtl.md` by hand:
+If the binary is unavailable, apply sections 1 to 4 of `references/typography-and-rtl.md` by hand:
 ZWNJ for می‌/نمی‌، ‌ها، ‌تر/‌ترین and enclitics; «…» for quotes; «،» «؛» «؟»; Persian digits in prose.
+
+### Mixed-script sentences
+
+When a Persian sentence starts with an English word, wrap the entire sentence, including its
+final punctuation, in `RLI` (`U+2067`) and `PDI` (`U+2069`). In plain-text lines or `dir="auto"`
+containers, put `RLM` (`U+200F`) before `RLI` to set the outer paragraph direction. Leave purely
+English lines unwrapped. Check the result by sight; never reverse the stored text.
 
 ### Numbers, digits, and units
 - **Digits:** Persian (۰–۹) in prose; Latin inside code, URLs, and version numbers. The linter does
@@ -115,12 +121,12 @@ ZWNJ for می‌/نمی‌، ‌ها، ‌تر/‌ترین and enclitics; «…�
 
 Characters aren't enough; the layout must be Persian too. Apply all three:
 
-1. **Direction RTL.** docx: `bidirectional: true`; HTML: `dir="rtl"` and `lang="fa"`.
+1. **Direction RTL.** DOCX: `w:bidi`; HTML: `dir="rtl"` and `lang="fa"`.
 2. **Alignment: leading edge (logical start).** Do not set physical `right`: under bidi, Word reads
    `w:jc="right"` as the trailing edge and flips the text to the left. Use `w:jc="start"` (docx-js
    `AlignmentType.START`); CSS `text-align: start`.
-3. **Font: Arial by default,** set as the complex-script font too (Word's `w:cs`), or the Persian
-   glyphs ignore your choice. Vazirmatn or IRANSans if the readers have them or you embed them.
+3. **Font: Vazirmatn by default.** Set it as the complex-script font (`w:cs`) in Word and embed it
+   in the packaged document so readers do not need to install it.
 
 Run the linter on the text before placing it in the file. Snippets: `references/typography-and-rtl.md` §8.
 
@@ -144,6 +150,5 @@ Read on demand, not all up front.
 | `references/review-lenses.md` | Phase 3 lenses, priority order, verification checklist |
 | `references/lexicon.md` | idioms, collocations, never-soften list, opt-in house-style coinages |
 
-Paths are relative to the skill root (the folder holding this file); run scripts from there.
-Scripts: `scripts/persian_lint.py`, `scripts/lookup.py`. Data: `scripts/data/{idioms,glossary}.tsv`,
-never loaded into context. The self-test is available in the upstream repository.
+Reference paths are relative to this skill. Run the native commands on your text files from any
+working directory.

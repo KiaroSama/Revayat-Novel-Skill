@@ -8,16 +8,13 @@ permissions:
 
 jobs:
   review:
-    name: review dependency changes
-    runs-on: ubuntu-latest
+    name: Review dependency changes
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - name: Flag vulnerable or incompatibly-licensed dependencies
-        uses: actions/dependency-review-action@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
         with:
           fail-on-severity: moderate
-          # This project is GPL-3.0-or-later, so a copyleft dependency is no
-          # longer a problem — the denial that used to sit here was written for
-          # an MIT project and would now reject licences this one is compatible
-          # with. Vulnerability severity remains the gate.

@@ -3,15 +3,15 @@
 `cases.json` contains 28 rights-clean original cases: 23 English source controls
 and five Japanese, Korean, Chinese, French and Spanish controls targeting Persian.
 Each names one axis, source, rationale, multiple accepted renderings and plausible
-wrong controls. `score.py` compares recorded forms per axis; unseen renderings are
+wrong controls. `revayat-novel eval-score` compares recorded forms per axis; unseen renderings are
 `unknown`, with no overall score. This is not a real-book extraction benchmark or
 a literary-quality certificate. Independent human verdicts are currently pending.
 
 ## Prepare the complete review matrix
 
 ```bash
-python evaluation/adjudicate.py prepare --out pending-review.json
-python evaluation/adjudicate.py validate --review completed-review.json --out validated-review.json
+revayat-novel eval-adjudicate prepare --out pending-review.json
+revayat-novel eval-adjudicate validate --review completed-review.json
 ```
 
 Use `--cases <file>` only for a deliberately selected benchmark. Each output is a

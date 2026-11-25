@@ -1,0 +1,5 @@
+bin.name = "revayat-novel"
+args = ["--version"]
+status.code = 0
+stdout = "revayat-novel 3.0.0\n"
+stderr = ""
