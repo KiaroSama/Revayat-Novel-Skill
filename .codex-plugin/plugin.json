@@ -1,8 +1,8 @@
 {
   "name": "revayat-novel",
-  "displayName": "Revayat Novel — Persian Book Translation",
-  "version": "2.0.0",
-  "description": "Translate a whole book into publication-quality Persian and build a professional Word file: OCR for scanned and mixed PDFs, original illustrations at their real size, Word-native footnotes, a clickable table of contents, RTL typography and a locked name glossary.",
+  "displayName": "Revayat Novel",
+  "version": "3.0.0",
+  "description": "Translate books into Persian with a six-stage multi-agent workflow. A pure-Rust native binary builds Word files with the bundled Vazirmatn font.",
   "author": {
     "name": "Kiaro Sama",
     "url": "https://github.com/KiaroSama"
@@ -27,7 +27,7 @@
   "interface": {
     "displayName": "Revayat Novel",
     "shortDescription": "Translate a book into Persian and build a professional Word file.",
-    "longDescription": "Translate a whole book into publication-quality Persian and build a professional Word file: OCR for scanned and mixed PDFs, original illustrations at their real size, Word-native footnotes, a clickable table of contents, RTL typography and a locked name glossary.",
+    "longDescription": "Translate books into Persian with a six-stage multi-agent workflow. A pure-Rust native binary builds Word files with the bundled Vazirmatn font.",
     "developerName": "Kiaro Sama",
     "category": "Productivity",
     "capabilities": [

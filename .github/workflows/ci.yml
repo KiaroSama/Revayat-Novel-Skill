@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -10,590 +13,259 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: never
+
 jobs:
-  test:
-    name: tests (${{ matrix.os }}, py${{ matrix.python }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+  rust-build-and-test:
+    name: Rust build and test (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        # All three platforms people actually run this on, at the oldest and
-        # newest supported versions, plus 3.13 for existing installations.
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.11", "3.13", "3.14"]
-
+        include:
+          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, exe: revayat-novel, test: true }
+          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, exe: revayat-novel, test: true }
+          - { runner: windows-2025, target: x86_64-pc-windows-msvc, exe: revayat-novel.exe, test: true }
+          - { runner: windows-11-arm, target: aarch64-pc-windows-msvc, exe: revayat-novel.exe, test: false }
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RUST_TARGET: ${{ matrix.target }}
+      RUSTUP_TOOLCHAIN: 1.100.0-${{ matrix.target }}
+      REVAYAT_BINARY: ${{ matrix.exe }}
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: ${{ matrix.python }}
-          cache: pip
-          cache-dependency-path: |
-            skills/revayat-novel/requirements.txt
-            constraints-ci.txt
-
-      - name: Install dependencies
+          persist-credentials: false
+      - name: Install the pinned target toolchain
+        run: rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build and stage the release binary
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
-
-      - name: Run tests
-        env:
-          PYTHONIOENCODING: utf-8
-        run: python -m pytest tests -q --durations=10 --junitxml=results.xml
-
-      # A bare runner has no Word, no LibreOffice and no Tesseract, so the render
-      # and OCR tiers skip themselves here — by design; a missing external tool
-      # is not a defect. But `27 skipped` inside a green summary is invisible,
-      # and a *new* kind of skip looks exactly the same: a fixture that starts
-      # skipping because an import moved arrives as a slightly larger number in a
-      # line nobody reads. So every skip has to name a cause this project already
-      # knows about, read out of the run's own junit document rather than grepped
-      # from its console output.
-      - name: Only the skips this runner is allowed
-        if: always()
-        run: python tests/skip_budget.py --junit results.xml --profile bare
-
-      # The evidence, kept on failure as well as on success — a red run is the one
-      # whose junit document and resolved versions somebody actually needs, and
-      # those are exactly the runs where a step that only runs on success does
-      # not. It is also what makes the expensive tiers cost a contributor
-      # nothing: the answer is downloadable instead of re-derivable.
-      - name: Keep the junit document and the versions it ran against
-        if: always()
-        run: python -m pip freeze > resolved-versions.txt
-
-      - name: Upload the evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: tests-${{ matrix.os }}-py${{ matrix.python }}
-          path: |
-            results.xml
-            resolved-versions.txt
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Smoke-test the CLI
-        env:
-          PYTHONIOENCODING: utf-8
-        run: python skills/revayat-novel/scripts/revayat-novel.py doctor
-
-  pipeline:
-    name: end-to-end pipeline (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: |
-            skills/revayat-novel/requirements.txt
-            constraints-ci.txt
-
-      - name: Install dependencies
+          $PSNativeCommandUseErrorActionPreference = $true
+          cargo build --workspace --release --locked --target $env:RUST_TARGET --bin revayat-novel
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Copy-Item "target/$env:RUST_TARGET/release/$env:REVAYAT_BINARY" bin
+      - name: Run the target binary
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
-
-      # Runs every stage against a generated book, so a break anywhere in the
-      # chain fails here even when each module's unit tests still pass.
-      - name: extract -> chunk -> merge -> typography -> QA -> build -> verify
-        id: synthetic-pipeline
-        env:
-          PYTHONIOENCODING: utf-8
-        run: python tests/e2e_pipeline.py
-
-      - name: Retain bounded synthetic failure evidence
-        if: ${{ failure() && steps.synthetic-pipeline.outcome == 'failure' && hashFiles('.pytest-tmp/e2e-artifact/manifest.json') != '' }}
+          $PSNativeCommandUseErrorActionPreference = $true
+          $doctor = & "./bin/$env:REVAYAT_BINARY" doctor --json | ConvertFrom-Json
+          if ($doctor.version -ne '3.0.0' -or $doctor.build_target -cne $env:RUST_TARGET -or
+              $doctor.requires_python -cne $false -or $doctor.fonts.'Vazirmatn-Regular.ttf' -cne $true) {
+            throw 'The target binary did not report the expected version, target, and font.'
+          }
+      - name: Upload the unsigned CI build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: synthetic-e2e-${{ matrix.os }}-${{ github.sha }}
-          path: .pytest-tmp/e2e-artifact/
-          retention-days: 7
+          name: revayat-novel-${{ matrix.target }}
+          path: bin/${{ matrix.exe }}
           if-no-files-found: error
-          include-hidden-files: false
+      - name: Test the workspace
+        if: matrix.test
+        run: cargo test --workspace --locked
 
-  # The matrix above runs on bare runners, so every test that needs LibreOffice,
-  # Tesseract, Ghostscript or OCRmyPDF skips itself there — by design, because a
-  # missing tool is not a defect. But six green jobs full of skips prove nothing
-  # about the code those skips cover, and the skipped set is not small: the whole
-  # render-and-accept path and the whole OCR tier. This job installs the tools
-  # and runs the same suite, so that code is executed somewhere on every push.
-  full-coverage:
-    name: nothing skipped (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        # The two platforms that reach the document through LibreOffice *and*
-        # can install it quickly.
-        #
-        # Windows is NOT excluded because the matrix above covers it — that
-        # claim used to be here and it was false. Measured on run 34076799340:
-        # all six matrix jobs reported 608 passed / 27 skipped, Windows
-        # included, because a hosted Windows runner has neither Office nor
-        # LibreOffice, so `wordrender.backend()` is empty and the render tier
-        # skips exactly as it does on a bare Linux runner.
-        #
-        # It is excluded on cost. `choco install libreoffice-fresh` wedged past
-        # 30 minutes on three separate runs against this job's 60-minute
-        # ceiling, while every other job on those runs went green. That is the
-        # same judgement `integration.yml` already makes about apt and a 200 MB
-        # OCR toolchain, so the Windows render tier lives there instead —
-        # dispatchable, off the push path.
-        os: [ubuntu-latest, macos-latest]
-
+  fmt-and-clippy:
+    name: Rust formatting and Clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: |
-            skills/revayat-novel/requirements.txt
-            constraints-ci.txt
+          persist-credentials: false
+      - run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
-      - name: Install the tools the other jobs go without (linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libreoffice-writer tesseract-ocr tesseract-ocr-fas ghostscript
-
-      - name: Install the tools the other jobs go without (macos)
-        if: runner.os == 'macOS'
-        run: |
-          brew install --cask libreoffice
-          # tesseract-lang carries every pack, fas among them; the base
-          # formula ships English only and would skip the Persian tests.
-          brew install tesseract tesseract-lang ghostscript
-
-      - name: Python dependencies
+  pure-rust-and-manifest-guard:
+    name: Rust-only tree, manifests, skills, and fonts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify tracked source and package metadata
         shell: bash
         run: |
-          python -m pip install --upgrade pip
-          # The optional set is a tracked manifest rather than a bare `ocrmypdf`
-          # argument, so the one tool that forks subprocesses over untrusted PDFs
-          # is declared somewhere `dependency-audit.yml` can also read it.
-          # `pywin32` carries a `sys_platform == "win32"` marker and is simply not
-          # selected here.
-          python -m pip install \
-            -r skills/revayat-novel/requirements.txt \
-            -r skills/revayat-novel/requirements-optional.txt \
-            -c constraints-ci.txt
-
-      - name: Every one of them is really on PATH
-        shell: bash
-        run: |
-          # The cask puts soffice inside the app bundle rather than on PATH.
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            echo "/Applications/LibreOffice.app/Contents/MacOS" >> "$GITHUB_PATH"
-            export PATH="/Applications/LibreOffice.app/Contents/MacOS:$PATH"
+          legacy=$(git ls-files -- ':(icase)*.py' ':(icase)*.ps1' ':(icase)*.sh')
+          if [[ -n "$legacy" ]]; then
+            printf 'Unexpected interpreter source files remain tracked.\n' >&2
+            exit 1
           fi
-          # Chocolatey installs to Program Files and does not always amend the
-          # PATH this shell inherited.
-          soffice --version
-          tesseract --version | head -1
-          tesseract --list-langs | grep -qx fas
-          gs --version
-          ocrmypdf --version
-
-      - name: Which backend this runner will use
-        shell: bash
-        env:
-          PYTHONIOENCODING: utf-8
-        run: |
-          python - <<'PY'
-          import sys
-          sys.path.insert(0, "skills/revayat-novel/scripts")
-          import wordrender
-          chosen = wordrender.backend()
-          print("backend:", chosen or wordrender.unavailable_reason())
-          # A job whose whole purpose is that the render tier runs must not
-          # start with no renderer. Failing here names the cause; failing in
-          # the suite would name a dozen skips instead.
-          assert chosen, "no rendering backend on the job that exists to use one"
-          PY
-
-      # A skip here is the hole this job exists to close, so it fails the build.
-      # Without this the job could install nothing, skip everything and go green
-      # exactly like the jobs it is meant to cover for.
-      #
-      # Still not executed anywhere in CI, and deliberately: the Word backend.
-      # A hosted runner has no Office licence, so `_with_word` and its COM
-      # teardown run only on a developer machine that has Word. `doctor` and
-      # `wordrender.unavailable_reason()` both name that, and every render
-      # report records `laid_out_by`, so a reader can always tell which backend
-      # produced a given result.
-      # Decided from the junit document, not from a grep over the summary line.
-      # The grep that used to live here matched `[0-9]+ skipped` in console
-      # output, so it could only ever see the number pytest chose to print: a run
-      # that collected nothing printed no skip count at all and passed the check,
-      # and the failure it did catch named no test. The document carries the
-      # reason per test, which is what `--profile full` reports.
-      - name: The full suite, where a skip is a failure
-        shell: bash
-        env:
-          PYTHONIOENCODING: utf-8
-        run: python -m pytest tests -q -rs --junitxml=results.xml
-
-      - name: Nothing skipped, and the document says so
-        if: always()
-        shell: bash
-        run: python tests/skip_budget.py --junit results.xml --profile full
-
-      # The evidence for the one job that runs every tier. Without it the
-      # strongest run in CI left nothing behind: which backend laid the documents
-      # out, and at which versions, are exactly the two facts a later reader needs
-      # to know whether a result is comparable with theirs.
-      - name: Keep the junit document, the versions and the renderer identity
-        if: always()
-        shell: bash
-        env:
-          PYTHONIOENCODING: utf-8
-        run: |
-          python -m pip freeze > resolved-versions.txt
-          python - > renderer.txt <<'PY'
-          import sys
-          sys.path.insert(0, "skills/revayat-novel/scripts")
-          import wordrender
-          print("backend:", wordrender.backend() or wordrender.unavailable_reason())
-          PY
-          cat renderer.txt
-
-      - name: Upload the evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: no-skips-${{ matrix.os }}
-          path: |
-            results.xml
-            resolved-versions.txt
-            renderer.txt
-          if-no-files-found: warn
-          retention-days: 14
-
-  install:
-    name: installer (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-
-      - name: Install into every agent layout (POSIX)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash -n install/install.sh
-          target="$(mktemp -d "$GITHUB_WORKSPACE/.pytest-tmp-install-XXXXXX")"
-          trap 'rm -rf -- "$target"' EXIT
-          for dir in .claude .kiro .codex .cursor .cline .hermes .opencode .agents; do
-            mkdir -p "$target/$dir"
+          grep -qx 'channel = "1.100.0"' rust-toolchain.toml
+          for manifest in .claude-plugin/plugin.json .codex-plugin/plugin.json .cursor-plugin/plugin.json .antigravity-plugin/plugin.json plugin.json; do
+            jq -e '.name == "revayat-novel" and .version == "3.0.0" and .license == "GPL-3.0-or-later"' "$manifest" >/dev/null
           done
-          bash install/install.sh --scope project --path "$target" --agent all --force
-          found=$(find "$target" -name SKILL.md | wc -l | tr -d ' ')
-          test "$found" -eq 8 || { echo "expected 8 skill copies, found $found"; exit 1; }
-          test -f "$target/AGENTS.md"
-          # Re-running must replace the pointer section, never stack copies.
-          bash install/install.sh --scope project --path "$target" --agent opencode --force
-          marks=$(grep -c 'BEGIN revayat-novel' "$target/AGENTS.md")
-          test "$marks" -eq 1 || { echo "AGENTS.md pointer duplicated ($marks)"; exit 1; }
-          test -z "$(find "$target" -name __pycache__)"
-          echo "installer OK: 8 copies, single pointer, no caches"
+          for marketplace in .claude-plugin/marketplace.json .agents/plugins/marketplace.json .cursor-plugin/marketplace.json; do
+            jq -e 'any(.plugins[]; .name == "revayat-novel" and (.version // "3.0.0") == "3.0.0")' "$marketplace" >/dev/null
+          done
+          for skill in revayat-novel persian great-russian humanizer; do
+            awk -v skill="$skill" '
+              NR == 1 { if ($0 != "---") exit 1; next }
+              $0 == "---" { closed = 1; exit }
+              !/^[a-z][a-z0-9_-]*:[[:blank:]]+[^[:blank:]]/ || /:[[:blank:]]*[|>][-+0-9]*[[:blank:]]*$/ { exit 1 }
+              /^name:/ { name = ($0 == "name: " skill) }
+              /^description:/ { description = 1 }
+              END { if (!closed || !name || !description) exit 1 }
+            ' "skills/$skill/SKILL.md"
+          done
+          fonts=skills/revayat-novel/assets/fonts/vazirmatn
+          for weight in Regular Bold Medium Light; do test -s "$fonts/Vazirmatn-$weight.ttf"; done
+          test -s "$fonts/OFL.txt"
+          while IFS= read -r -d '' file; do
+            lines=$(awk 'END { print NR }' "$file")
+            if (( lines > 800 )); then
+              printf 'Tracked source exceeds 800 lines: %s (%s).\n' "$file" "$lines" >&2
+              exit 1
+            fi
+          done < <(git ls-files -z -- '*.rs' '*.toml' '*.yml' '*.yaml' '*.json' '*.md' ':(glob)**/Dockerfile')
 
-      - name: Install into every agent layout (Windows)
-        if: runner.os == 'Windows'
+  installer-smoke-linux:
+    name: Installer smoke (Linux x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install and verify all eight project targets
+        shell: bash
+        run: |
+          cargo build --locked --bin revayat-novel
+          mkdir -p bin
+          install -m 755 target/debug/revayat-novel bin/revayat-novel
+          agents=(.claude .kiro .codex .cursor .cline .hermes .opencode .agents)
+          for agent in "${agents[@]}"; do mkdir -p "$RUNNER_TEMP/proj/$agent"; done
+          ./bin/revayat-novel install --agent all --scope project --path "$RUNNER_TEMP/proj" \
+            | jq -e '.committed == true and .cleanup_pending == false and .journal == null'
+          for agent in "${agents[@]}"; do
+            skill="$RUNNER_TEMP/proj/$agent/skills/revayat-novel"
+            cmp skills/revayat-novel/SKILL.md "$skill/SKILL.md"
+            cmp bin/revayat-novel "$skill/bin/revayat-novel"
+            test -x "$skill/bin/revayat-novel"
+            for font in Vazirmatn-{Regular,Bold,Medium,Light}.ttf OFL.txt; do
+              cmp "skills/revayat-novel/assets/fonts/vazirmatn/$font" "$skill/assets/fonts/vazirmatn/$font"
+            done
+          done
+          ./bin/revayat-novel install --agent all --scope project --path "$RUNNER_TEMP/proj" --status \
+            | jq -e '.status == "committed" and .installed == 8 and .receipts == 1 and .backups == 0'
+
+  installer-smoke-windows:
+    name: Installer smoke (Windows x64)
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install and verify all eight project targets
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $parseErrors = $null
-          $scriptPath = (Resolve-Path 'install/install.ps1').Path
-          $null = [System.Management.Automation.Language.Parser]::ParseFile(
-            $scriptPath, [ref]$null, [ref]$parseErrors)
-          if ($parseErrors) { $parseErrors; throw 'install.ps1 does not parse' }
-
-          $target = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
-          foreach ($d in '.claude','.kiro','.codex','.cursor','.cline','.hermes','.opencode','.agents') {
-            New-Item -ItemType Directory -Path (Join-Path $target $d) -Force | Out-Null
+          $PSNativeCommandUseErrorActionPreference = $true
+          cargo build --locked --bin revayat-novel
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Copy-Item target/debug/revayat-novel.exe bin
+          $project = Join-Path $env:RUNNER_TEMP 'proj'
+          $agents = '.claude', '.kiro', '.codex', '.cursor', '.cline', '.hermes', '.opencode', '.agents'
+          foreach ($agent in $agents) {
+            New-Item -ItemType Directory -Force (Join-Path $project $agent) | Out-Null
           }
-          & ./install/install.ps1 -Agent all -Scope project -Path $target -Force | Out-Null
-          $found = @(Get-ChildItem -Path $target -Recurse -Filter SKILL.md).Count
-          if ($found -ne 8) { throw "expected 8 skill copies, found $found" }
-          if (-not (Test-Path (Join-Path $target 'AGENTS.md'))) { throw 'no AGENTS.md pointer' }
-          & ./install/install.ps1 -Agent opencode -Scope project -Path $target -Force | Out-Null
-          $marks = (Select-String -Path (Join-Path $target 'AGENTS.md') -Pattern 'BEGIN revayat-novel').Count
-          if ($marks -ne 1) { throw "AGENTS.md pointer duplicated ($marks)" }
-          Write-Output 'installer OK: 8 copies, single pointer'
+          $report = ./bin/revayat-novel.exe install --agent all --scope project --path $project | ConvertFrom-Json
+          if ($report.committed -cne $true -or $report.cleanup_pending -cne $false -or $null -ne $report.journal) {
+            throw 'The installer did not commit cleanly.'
+          }
+          $files = @('SKILL.md', 'bin/revayat-novel.exe')
+          $files += 'Regular', 'Bold', 'Medium', 'Light' | ForEach-Object { "assets/fonts/vazirmatn/Vazirmatn-$_.ttf" }
+          $files += 'assets/fonts/vazirmatn/OFL.txt'
+          foreach ($agent in $agents) {
+            $skill = Join-Path $project "$agent/skills/revayat-novel"
+            foreach ($file in $files) {
+              $source = if ($file -like 'bin/*') { $file } else { "skills/revayat-novel/$file" }
+              if ((Get-FileHash -LiteralPath $source).Hash -cne (Get-FileHash -LiteralPath (Join-Path $skill $file)).Hash) {
+                throw "The installer changed $file in $agent."
+              }
+            }
+          }
+          $status = ./bin/revayat-novel.exe install --agent all --scope project --path $project --status | ConvertFrom-Json
+          if ($status.status -cne 'committed' -or $status.installed -ne 8 -or $status.receipts -ne 1 -or $status.backups -ne 0) {
+            throw 'Installer status did not confirm eight installed targets and one clean receipt.'
+          }
 
-  lint:
-    name: manifests and encoding
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  integration-ocr-linux:
+    name: OCR integration (Linux x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: |
-            skills/revayat-novel/requirements.txt
-            constraints-ci.txt
-
-      # Two checks below import the project, so they need its dependencies.
-      # Without them pytest collects nothing and the coverage check reads that
-      # as "every suite is unreachable".
-      - name: Install dependencies
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Run ingestion tests with English and Persian OCR available
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r skills/revayat-novel/requirements.txt -c constraints-ci.txt
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-fas
+          languages=$(tesseract --list-langs)
+          grep -qx eng <<< "$languages"
+          grep -qx fas <<< "$languages"
+          cargo test -p revayat-ingest --locked
+          cargo run --locked --bin revayat-novel -- doctor --json | jq -e '.optional_tools.tesseract | type == "string" and length > 0'
 
-      - name: Nothing unused, nothing undefined
+  integration-render-linux:
+    name: Rendering integration (Linux x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Run document and pipeline tests with LibreOffice available
+        shell: bash
         run: |
-          # Pinned in a tracked manifest rather than on this line, so Dependabot
-          # can see it: the `/` pip entry already collects `requirements-lint.txt`
-          # beside `constraints-ci.txt`, while an inline `pip install X==Y` here
-          # was in no lane at all and could never be told it was out of date.
-          # `requirements-lint.txt` carries the reason the pin exists.
-          python -m pip install -r requirements-lint.txt
-          # Defaults only. The repository had seven dead imports in the
-          # published scripts when this went in, two of them left behind by
-          # refactors that moved the code but not the import — the kind of thing
-          # nothing else here would ever have mentioned.
-          ruff check skills/revayat-novel/scripts tests evaluation install
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+          cargo test -p revayat-ooxml -p revayat-pipeline --locked
+          cargo build --locked --bin revayat-novel
+          mkdir -p bin
+          install -m 755 target/debug/revayat-novel bin/revayat-novel
+          ./bin/revayat-novel doctor --json | jq -e '.optional_tools.libreoffice | type == "string" and (split("/") | last | . == "soffice" or . == "libreoffice")'
+          work=$(mktemp -d "$RUNNER_TEMP/render.XXXXXXXX")
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s\n' 'این کتاب را می‌خوانم.' > "$work/sample.txt"
+          ./bin/revayat-novel extract "$work/sample.txt" --out "$work/book"
+          ./bin/revayat-novel build "$work/book" --out "$work/sample.docx"
+          ./bin/revayat-novel wordrender "$work/sample.docx" --out "$work/render" --timeout 60
+          test -s "$work/render/sample.pdf"
 
-      - name: Every plugin manifest is valid JSON and agrees on version
-        run: |
-          python - <<'PY'
-          import json, pathlib
-
-          manifests = sorted(pathlib.Path(".").glob("*-plugin/plugin.json"))
-          assert manifests, "no plugin manifests found"
-          versions = set()
-          for path in manifests:
-              data = json.loads(path.read_text(encoding="utf-8"))
-              for field in ("name", "version", "description", "license"):
-                  assert data.get(field), f"{path}: missing {field}"
-              versions.add(data["version"])
-              print(f"ok {path} -> {data['name']} {data['version']}")
-
-          market = json.loads(
-              pathlib.Path(".claude-plugin/marketplace.json").read_text(encoding="utf-8")
-          )
-          versions.add(market["plugins"][0]["version"])
-          assert len(versions) == 1, f"plugin versions disagree: {versions}"
-          print("ok marketplace.json, all manifests at", versions.pop())
-          PY
-
-      - name: Every tracked text file is valid UTF-8
-        run: |
-          python - <<'PY'
-          import pathlib, subprocess, sys
-
-          binary_suffixes = {
-              ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".docx",
-              ".epub", ".zip", ".ico", ".woff", ".woff2", ".ttf", ".otf",
-          }
-          tracked = subprocess.run(
-              ["git", "ls-files", "-z"], capture_output=True, check=True
-          ).stdout.split(b"\0")
-
-          bad = []
-          for raw in tracked:
-              if not raw:
-                  continue
-              path = pathlib.Path(raw.decode("utf-8"))
-              if path.suffix.lower() in binary_suffixes or not path.is_file():
-                  continue
-              try:
-                  path.read_bytes().decode("utf-8")
-              except UnicodeDecodeError as error:
-                  bad.append(f"{path}: {error}")
-
-          if bad:
-              print("\n".join(bad))
-              sys.exit(1)
-          print("ok: all tracked text files decode as UTF-8")
-          PY
-
-      - name: The skill declares itself correctly
-        run: |
-          python - <<'PY'
-          import pathlib, re
-
-          text = pathlib.Path("skills/revayat-novel/SKILL.md").read_text(encoding="utf-8")
-          front = re.match(r"^---\n(.*?)\n---\n", text, re.S)
-          assert front, "SKILL.md has no YAML front matter"
-          body = front.group(1)
-          for field in ("name:", "description:"):
-              assert field in body, f"SKILL.md front matter is missing {field}"
-          # Several agents parse this front matter with a line-oriented reader,
-          # so every field has to stay on one line.
-          for line in body.splitlines():
-              assert not line.startswith(" "), f"front matter must be flat: {line!r}"
-          name = re.search(r"^name:\s*(\S+)", body, re.M).group(1)
-          assert name == "revayat-novel", f"skill name drifted: {name}"
-
-          referenced = set(re.findall(r"references/([a-z0-9-]+\.md)", text))
-          on_disk = {p.name for p in pathlib.Path("skills/revayat-novel/references").glob("*.md")}
-          missing = referenced - on_disk
-          assert not missing, f"SKILL.md references files that do not exist: {missing}"
-          print(f"ok: skill '{name}', {len(on_disk)} reference files, none dangling")
-          PY
-
-      - name: Every command the docs promise actually exists
-        run: |
-          python - <<'PY'
-          import pathlib, re, subprocess, sys
-
-          stages = subprocess.run(
-              [sys.executable, "skills/revayat-novel/scripts/revayat-novel.py", "--help"],
-              capture_output=True, text=True, check=True,
-          ).stdout
-          available = set(re.search(r"stages: (.+)", stages).group(1).split(", "))
-
-          docs = [pathlib.Path("README.md"), pathlib.Path("skills/revayat-novel/SKILL.md")]
-          docs += list(pathlib.Path("skills/revayat-novel/references").glob("*.md"))
-
-          used = set()
-          for doc in docs:
-              # A stage name may contain a hyphen (`ocr-sidecar`). Stopping at
-              # one turns it into `ocr`, which is not a stage, so the guard
-              # fails on documentation that is in fact correct.
-              used |= set(re.findall(r"revayat-novel\.py\s+([a-z][a-z_-]*)",
-                                     doc.read_text(encoding="utf-8")))
-
-          unknown = used - available
-          assert not unknown, f"docs reference stages that do not exist: {unknown}"
-          print(f"ok: {len(used)} documented stages, all real ({sorted(available)})")
-          PY
-
-      - name: Every test suite on disk is reachable
-        run: |
-          python - <<'PY'
-          import pathlib, subprocess, sys
-
-          on_disk = {p.name for p in pathlib.Path("tests").glob("test_*.py")}
-          run = subprocess.run(
-              [sys.executable, "-m", "pytest", "tests", "--collect-only", "-q"],
-              capture_output=True, text=True,
-          )
-          # Without this, a collection error would look like "no suite is
-          # reachable" and point the blame at the wrong thing entirely.
-          assert run.returncode == 0, (
-              "pytest could not collect at all: "
-              + run.stdout[-1500:] + run.stderr[-1500:]
-          )
-          missing = [name for name in on_disk if name.replace(".py", "") not in run.stdout]
-          assert not missing, f"test files never collected by CI: {missing}"
-          print(f"ok: all {len(on_disk)} test modules are collected")
-          PY
-
-      - name: No tracked file carries the previous project name
-        run: |
-          python - <<'PY'
-          import pathlib, re, subprocess, sys
-
-          sys.stdout.reconfigure(encoding="utf-8")
-
-          # The rebrand to revayat-novel was a clean break: no compatibility
-          # aliases, no deprecated commands, no legacy ids. So the old token may
-          # not appear anywhere a user or an agent could read it.
-          #
-          # Two things make this checkable. The lookahead: the new name contains
-          # the old one, so a plain substring search would match every correct
-          # line, including this project's own name. And the split literal:
-          # written whole, the needle would match this very file, and the answer
-          # to that is not an allowlist -- a clean break has nothing to allow.
-          LEGACY = "reva" + "yat"
-          STALE = re.compile(LEGACY + r"(?!-novel|_novel| novel)", re.IGNORECASE)
-          BINARY = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".zip", ".docx",
-                    ".woff", ".woff2", ".pdf", ".epub"}
-
-          tracked = subprocess.run(["git", "ls-files"], capture_output=True,
-                                   text=True, check=True).stdout.splitlines()
-          offenders = []
-          scanned = 0
-          for name in filter(None, tracked):
-              path = pathlib.Path(name)
-              if path.suffix.lower() in BINARY or not path.exists():
-                  continue
-              try:
-                  text = path.read_text(encoding="utf-8")
-              except (UnicodeDecodeError, OSError):
-                  continue
-              scanned += 1
-              for number, line in enumerate(text.splitlines(), start=1):
-                  if STALE.search(line):
-                      offenders.append(f"{name}:{number}: {line.strip()[:100]}")
-
-          if offenders:
-              print("the previous project name survives in tracked files:")
-              for offender in offenders[:40]:
-                  print("   ", offender)
-              raise SystemExit(1)
-          print(f"ok: {scanned} tracked text files, zero legacy-name matches")
-          PY
-
-      - name: Nor does the live repository metadata
-        if: github.repository == 'KiaroSama/Revayat-Novel-Skill'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api repos/${{ github.repository }} > repo.json
-          python - <<'PY'
-          import json, pathlib, re, sys
-
-          sys.stdout.reconfigure(encoding="utf-8")
-
-          # The scan above reads tracked files. It cannot see the fields GitHub
-          # itself serves -- name, homepage, description -- and the homepage is
-          # exactly where the previous identity survived a rename, pointing at a
-          # URL that only worked because GitHub redirects. Same split literal and
-          # same lookahead as above, for the same two reasons.
-          LEGACY = "reva" + "yat"
-          STALE = re.compile(LEGACY + r"(?!-novel|_novel| novel)", re.IGNORECASE)
-          HOME = "https://github.com/KiaroSama/Revayat-Novel-Skill"
-
-          meta = json.loads(pathlib.Path("repo.json").read_text(encoding="utf-8"))
-          name = meta.get("name") or ""
-          homepage = (meta.get("homepage") or "").strip()
-          failures = []
-
-          if name != "Revayat-Novel-Skill":
-              failures.append(f"repository name is {name!r}, not 'Revayat-Novel-Skill'")
-          if homepage and homepage.rstrip("/") != HOME:
-              failures.append(f"homepage is {homepage!r}; expected {HOME!r} or empty")
-          for field in ("name", "description", "homepage"):
-              value = meta.get(field) or ""
-              if STALE.search(value):
-                  failures.append(f"{field} still carries the previous project name")
-
-          if failures:
-              print("live repository metadata is stale:")
-              for failure in failures:
-                  print("   ", failure)
-              raise SystemExit(1)
-          print(f"ok: name={name}, homepage={homepage or '(empty)'}")
-          PY
+  workflow-lint:
+    name: GitHub Actions workflow lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@1b4550e929643b8b26a62303c6bd64814271a4f1 # v0.9.2
+        with:
+          version: '1.33.1'
+          advanced-security: false

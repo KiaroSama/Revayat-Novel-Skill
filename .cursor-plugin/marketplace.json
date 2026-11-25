@@ -1,0 +1,13 @@
+{
+  "name": "revayat-novel",
+  "owner": {
+    "name": "Kiaro Sama"
+  },
+  "plugins": [
+    {
+      "name": "revayat-novel",
+      "source": "./",
+      "description": "Translate books into Persian with a six-stage multi-agent workflow. A pure-Rust native binary builds Word files with the bundled Vazirmatn font."
+    }
+  ]
+}

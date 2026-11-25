@@ -48,10 +48,11 @@ stay on the declared host, so use the inspected canonical chapter URL.
 
 ## Import, inspect and translate
 
-```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py web-import --manifest "<chapters.json>" --out $WORK
-$PY $SKILL_DIR/scripts/revayat-novel.py qa check --book $WORK/book.json --allow-incomplete
+```sh
+revayat-novel web-import "https://example.org/novel" --out "translation work"
 ```
+
+For a verified saved-chapter manifest, check `revayat-novel web-import --help` for the installed build's manifest input. If it cannot import the saved chapters directly, prepare a faithful supported EPUB and use `revayat-novel extract <input.epub> --out <work>`. Run `revayat-novel qa check` as an intake check and distinguish expected untranslated units from missing source.
 
 The importer retains source bytes, creates an ordered EPUB snapshot and feeds it
 to the native EPUB reader. Book IR and assets are already created: do not extract
@@ -61,7 +62,7 @@ parentheses; compare them with the original before interpreting their meaning.
 Complex tables, SVG/canvas and interactive media require a faithful prepared source
 instead of silent loss. Native raster intake currently accepts PNG, JPEG and GIF.
 
-Continue at the main skill's names/voice step and use the chunk route. Website
+Continue at [Stage 1](multi-agent-workflow.md#stage-1-initial-translation) and use `revayat-novel chunk build`. Verify the title, character names and specialized terms online and record the sources in the locked glossary. Website
 viewports do not establish physical book dimensions; record the chosen output trim
 and check the final document. Write agent progress and corrections beside the
 translated file as required by preservation-and-logging.md. Offer optional parallel
@@ -98,9 +99,7 @@ not relabel old answers as current or remove author text to satisfy a parser.
 
 ## Resume without overwriting translation
 
-```bash
-$PY $SKILL_DIR/scripts/revayat-novel.py web-import --manifest "<chapters.json>" --out $WORK --resume
-```
+Check `revayat-novel web-import --help` for resume support in the installed build. If it cannot revalidate the manifest without replacing the active book, keep the work directory unchanged and verify the retained acquisition record and source snapshots separately.
 
 Resume verifies the acquisition record, retained chapter/image/EPUB bytes and local
 source dependencies, then reuses the existing book without rewriting targets or

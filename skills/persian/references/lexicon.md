@@ -4,7 +4,7 @@ Idioms and collocations are where literal translation fails hardest, and the rig
 the collocation (the dictionary's first hit is often the machine-Persian tell). Don't load the whole
 banks; run the lookup so only the entries in *your* text surface:
 
-    python scripts/lookup.py <source_file>
+    revayat-novel persian-lookup <source_file>
 
 Full banks: `scripts/data/idioms.tsv` and `scripts/data/glossary.tsv` (seed sets; extend them, see
 `NOTICE`). Rule: translate the function, not the words. An English idiom maps to a Persian idiom or

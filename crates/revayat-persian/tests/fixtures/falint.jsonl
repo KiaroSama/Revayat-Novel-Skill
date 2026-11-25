@@ -1,0 +1,1749 @@
+{"fn": "mask_literals", "args": ["a"], "ok": {"$tuple": ["\u00000\u0000", ["a"]]}}
+{"fn": "mask_literals", "args": ["﻿bom"], "ok": {"$tuple": ["﻿\u00000\u0000", ["bom"]]}}
+{"fn": "mask_literals", "args": ["é"], "ok": {"$tuple": ["\u00000\u0000́", ["e"]]}}
+{"fn": "mask_literals", "args": ["ns:key.path"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000", ["ns", "key.path"]]}}
+{"fn": "mask_literals", "args": ["😀abc"], "ok": {"$tuple": ["😀\u00000\u0000", ["abc"]]}}
+{"fn": "mask_literals", "args": ["ab"], "ok": {"$tuple": ["\u00000\u0000", ["ab"]]}}
+{"fn": "mask_literals", "args": [":"], "ok": {"$tuple": [":", []]}}
+{"fn": "mask_literals", "args": ["a😀b😀c"], "ok": {"$tuple": ["\u00000\u0000😀\u00001\u0000😀\u00002\u0000", ["a", "b", "c"]]}}
+{"fn": "mask_literals", "args": ["hello"], "ok": {"$tuple": ["\u00000\u0000", ["hello"]]}}
+{"fn": "mask_literals", "args": ["key_name-1{name} has {count} items"], "ok": {"$tuple": ["\u00000\u0000{\u00001\u0000} \u00002\u0000 {\u00003\u0000} \u00004\u0000", ["key_name-1", "name", "has", "count", "items"]]}}
+{"fn": "mask_literals", "args": ["😀"], "ok": {"$tuple": ["😀", []]}}
+{"fn": "mask_literals", "args": [".leading:"], "ok": {"$tuple": [".\u00000\u0000:", ["leading"]]}}
+{"fn": "mask_literals", "args": ["key_name-1"], "ok": {"$tuple": ["\u00000\u0000", ["key_name-1"]]}}
+{"fn": "mask_literals", "args": ["Hello World"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["Hello", "World"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.json"], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000", ["x", "json"]]}}
+{"fn": "mask_literals", "args": ["ünïcödéünïcödé"], "ok": {"$tuple": ["ünïcödéünïcödé", []]}}
+{"fn": "mask_literals", "args": ["tab\tseparated"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000", ["tab", "separated"]]}}
+{"fn": "mask_literals", "args": ["a:b:c"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000:\u00002\u0000", ["a", "b", "c"]]}}
+{"fn": "mask_literals", "args": ["ünïcödé"], "ok": {"$tuple": ["ünïcödé", []]}}
+{"fn": "mask_literals", "args": ["abc"], "ok": {"$tuple": ["\u00000\u0000", ["abc"]]}}
+{"fn": "mask_literals", "args": ["straße"], "ok": {"$tuple": ["\u00000\u0000", ["straße"]]}}
+{"fn": "mask_literals", "args": ["ΣΊΣΥΦΟΣ"], "ok": {"$tuple": ["ΣΊΣΥΦΟΣ", []]}}
+{"fn": "mask_literals", "args": ["tab\tseparatedline1\nline2"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000\n\u00002\u0000", ["tab", "separatedline1", "line2"]]}}
+{"fn": "mask_literals", "args": ["  padded  "], "ok": {"$tuple": ["  \u00000\u0000  ", ["padded"]]}}
+{"fn": "mask_literals", "args": ["a..b"], "ok": {"$tuple": ["\u00000\u0000", ["a..b"]]}}
+{"fn": "mask_literals", "args": ["emoji 👍🏽 mix"], "ok": {"$tuple": ["\u00000\u0000 👍🏽 \u00001\u0000", ["emoji", "mix"]]}}
+{"fn": "mask_literals", "args": ["ns:key.pathemoji 👍🏽 mix"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000 👍🏽 \u00002\u0000", ["ns", "key.pathemoji", "mix"]]}}
+{"fn": "mask_literals", "args": ["日本語のテキストa.b.c"], "ok": {"$tuple": ["日本語のテキストa.\u00000\u0000", ["b.c"]]}}
+{"fn": "mask_literals", "args": ["a./x/**/*.json"], "ok": {"$tuple": ["\u00000\u0000./\u00001\u0000/**/*.\u00002\u0000", ["a", "x", "json"]]}}
+{"fn": "mask_literals", "args": ["İstanbul"], "ok": {"$tuple": ["\u00000\u0000", ["İstanbul"]]}}
+{"fn": "mask_literals", "args": ["日本語のテキスト"], "ok": {"$tuple": ["日本語のテキスト", []]}}
+{"fn": "mask_literals", "args": ["HELLO"], "ok": {"$tuple": ["\u00000\u0000", ["HELLO"]]}}
+{"fn": "mask_literals", "args": ["trailing."], "ok": {"$tuple": ["\u00000\u0000.", ["trailing"]]}}
+{"fn": "mask_literals", "args": ["a.b.c.leading"], "ok": {"$tuple": ["\u00000\u0000", ["a.b.c.leading"]]}}
+{"fn": "mask_literals", "args": ["  padded    padded  "], "ok": {"$tuple": ["  \u00000\u0000    \u00001\u0000  ", ["padded", "padded"]]}}
+{"fn": "mask_literals", "args": ["emoji 👍🏽 mixİstanbul"], "ok": {"$tuple": ["\u00000\u0000 👍🏽 \u00001\u0000", ["emoji", "mixİstanbul"]]}}
+{"fn": "mask_literals", "args": ["HELLOé"], "ok": {"$tuple": ["\u00000\u0000́", ["HELLOe"]]}}
+{"fn": "mask_literals", "args": [""], "ok": {"$tuple": ["", []]}}
+{"fn": "mask_literals", "args": [".leading"], "ok": {"$tuple": [".\u00000\u0000", ["leading"]]}}
+{"fn": "mask_literals", "args": ["a.b.c"], "ok": {"$tuple": ["\u00000\u0000", ["a.b.c"]]}}
+{"fn": "mask_literals", "args": ["line1\nline2"], "ok": {"$tuple": ["\u00000\u0000\n\u00001\u0000", ["line1", "line2"]]}}
+{"fn": "mask_literals", "args": ["ΣΊΣΥΦΟΣ:"], "ok": {"$tuple": ["ΣΊΣΥΦΟΣ:", []]}}
+{"fn": "mask_literals", "args": ["src/a/b.ts"], "ok": {"$tuple": ["\u00000\u0000/\u00001\u0000/\u00002\u0000", ["src", "a", "b.ts"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.jsonhello"], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000", ["x", "jsonhello"]]}}
+{"fn": "mask_literals", "args": ["src/a/b.tsa"], "ok": {"$tuple": ["\u00000\u0000/\u00001\u0000/\u00002\u0000", ["src", "a", "b.tsa"]]}}
+{"fn": "mask_literals", "args": ["éünïcödé"], "ok": {"$tuple": ["\u00000\u0000́ünïcödé", ["e"]]}}
+{"fn": "mask_literals", "args": ["{name} has {count} itemssrc/a/b.ts"], "ok": {"$tuple": ["{\u00000\u0000} \u00001\u0000 {\u00002\u0000} \u00003\u0000/\u00004\u0000/\u00005\u0000", ["name", "has", "count", "itemssrc", "a", "b.ts"]]}}
+{"fn": "mask_literals", "args": ["{name} has {count} items"], "ok": {"$tuple": ["{\u00000\u0000} \u00001\u0000 {\u00002\u0000} \u00003\u0000", ["name", "has", "count", "items"]]}}
+{"fn": "mask_literals", "args": ["HELLOhello world"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["HELLOhello", "world"]]}}
+{"fn": "mask_literals", "args": ["src/a/b.tshello world"], "ok": {"$tuple": ["\u00000\u0000/\u00001\u0000/\u00002\u0000 \u00003\u0000", ["src", "a", "b.tshello", "world"]]}}
+{"fn": "mask_literals", "args": ["  padded  straße"], "ok": {"$tuple": ["  \u00000\u0000  \u00001\u0000", ["padded", "straße"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.jsontrailing."], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000.", ["x", "jsontrailing"]]}}
+{"fn": "mask_literals", "args": ["﻿boma:b:c"], "ok": {"$tuple": ["﻿\u00000\u0000:\u00001\u0000:\u00002\u0000", ["boma", "b", "c"]]}}
+{"fn": "mask_literals", "args": ["ünïcödéa😀b😀c"], "ok": {"$tuple": ["ünïcödéa😀\u00000\u0000😀\u00001\u0000", ["b", "c"]]}}
+{"fn": "mask_literals", "args": ["hello world"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["hello", "world"]]}}
+{"fn": "mask_literals", "args": ["hello worlda😀b😀c"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000😀\u00002\u0000😀\u00003\u0000", ["hello", "worlda", "b", "c"]]}}
+{"fn": "mask_literals", "args": ["😀emoji 👍🏽 mix"], "ok": {"$tuple": ["😀\u00000\u0000 👍🏽 \u00001\u0000", ["emoji", "mix"]]}}
+{"fn": "mask_literals", "args": ["tab\tseparatedsrc/a/b.ts"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000/\u00002\u0000/\u00003\u0000", ["tab", "separatedsrc", "a", "b.ts"]]}}
+{"fn": "mask_literals", "args": ["ünïcödéabc"], "ok": {"$tuple": ["ünïcödéabc", []]}}
+{"fn": "mask_literals", "args": ["a.b.cé"], "ok": {"$tuple": ["\u00000\u0000́", ["a.b.ce"]]}}
+{"fn": "mask_literals", "args": ["key_name-1日本語のテキスト"], "ok": {"$tuple": ["\u00000\u0000", ["key_name-1日本語のテキスト"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.jsonHELLO"], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000", ["x", "jsonHELLO"]]}}
+{"fn": "mask_literals", "args": ["a😀b😀cünïcödé"], "ok": {"$tuple": ["\u00000\u0000😀\u00001\u0000😀\u00002\u0000", ["a", "b", "cünïcödé"]]}}
+{"fn": "mask_literals", "args": ["abc😀"], "ok": {"$tuple": ["\u00000\u0000😀", ["abc"]]}}
+{"fn": "mask_literals", "args": ["src/a/b.tstab\tseparated"], "ok": {"$tuple": ["\u00000\u0000/\u00001\u0000/\u00002\u0000\t\u00003\u0000", ["src", "a", "b.tstab", "separated"]]}}
+{"fn": "mask_literals", "args": ["tab\tseparatedab"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000", ["tab", "separatedab"]]}}
+{"fn": "mask_literals", "args": ["éab"], "ok": {"$tuple": ["\u00000\u0000́\u00001\u0000", ["e", "ab"]]}}
+{"fn": "mask_literals", "args": ["a.b.cHello World"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["a.b.cHello", "World"]]}}
+{"fn": "mask_literals", "args": ["tab\tseparatedhello world"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000 \u00002\u0000", ["tab", "separatedhello", "world"]]}}
+{"fn": "mask_literals", "args": ["ünïcödéHELLO"], "ok": {"$tuple": ["ünïcödéHELLO", []]}}
+{"fn": "mask_literals", "args": ["hello.leading"], "ok": {"$tuple": ["\u00000\u0000", ["hello.leading"]]}}
+{"fn": "mask_literals", "args": ["{name} has {count} itemsline1\nline2"], "ok": {"$tuple": ["{\u00000\u0000} \u00001\u0000 {\u00002\u0000} \u00003\u0000\n\u00004\u0000", ["name", "has", "count", "itemsline1", "line2"]]}}
+{"fn": "mask_literals", "args": ["emoji 👍🏽 mixtab\tseparated"], "ok": {"$tuple": ["\u00000\u0000 👍🏽 \u00001\u0000\t\u00002\u0000", ["emoji", "mixtab", "separated"]]}}
+{"fn": "mask_literals", "args": [":emoji 👍🏽 mix"], "ok": {"$tuple": [":\u00000\u0000 👍🏽 \u00001\u0000", ["emoji", "mix"]]}}
+{"fn": "mask_literals", "args": ["ünïcödéé"], "ok": {"$tuple": ["ünïcödéé", []]}}
+{"fn": "mask_literals", "args": ["hello worldstraße"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["hello", "worldstraße"]]}}
+{"fn": "mask_literals", "args": ["line1\nline2hello"], "ok": {"$tuple": ["\u00000\u0000\n\u00001\u0000", ["line1", "line2hello"]]}}
+{"fn": "mask_literals", "args": ["éa..b"], "ok": {"$tuple": ["\u00000\u0000́\u00001\u0000", ["e", "a..b"]]}}
+{"fn": "mask_literals", "args": ["abcab"], "ok": {"$tuple": ["\u00000\u0000", ["abcab"]]}}
+{"fn": "mask_literals", "args": ["abchello world"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["abchello", "world"]]}}
+{"fn": "mask_literals", "args": ["ab:"], "ok": {"$tuple": ["\u00000\u0000:", ["ab"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.jsonΣΊΣΥΦΟΣ"], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000", ["x", "jsonΣΊΣΥΦΟΣ"]]}}
+{"fn": "mask_literals", "args": ["HELLOstraße"], "ok": {"$tuple": ["\u00000\u0000", ["HELLOstraße"]]}}
+{"fn": "mask_literals", "args": ["ns:key.pathns:key.path"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000:\u00002\u0000", ["ns", "key.pathns", "key.path"]]}}
+{"fn": "mask_literals", "args": ["éHello World"], "ok": {"$tuple": ["\u00000\u0000́\u00001\u0000 \u00002\u0000", ["e", "Hello", "World"]]}}
+{"fn": "mask_literals", "args": ["a.b.c﻿bom"], "ok": {"$tuple": ["\u00000\u0000﻿\u00001\u0000", ["a.b.c", "bom"]]}}
+{"fn": "mask_literals", "args": ["tab\tseparatedemoji 👍🏽 mix"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000 👍🏽 \u00002\u0000", ["tab", "separatedemoji", "mix"]]}}
+{"fn": "mask_literals", "args": [".leadingHello World"], "ok": {"$tuple": [".\u00000\u0000 \u00001\u0000", ["leadingHello", "World"]]}}
+{"fn": "mask_literals", "args": ["a..ba.b.c"], "ok": {"$tuple": ["\u00000\u0000", ["a..ba.b.c"]]}}
+{"fn": "mask_literals", "args": ["éa.b.c"], "ok": {"$tuple": ["\u00000\u0000́\u00001\u0000", ["e", "a.b.c"]]}}
+{"fn": "mask_literals", "args": ["İstanbul日本語のテキスト"], "ok": {"$tuple": ["\u00000\u0000", ["İstanbul日本語のテキスト"]]}}
+{"fn": "mask_literals", "args": ["{name} has {count} itemsa"], "ok": {"$tuple": ["{\u00000\u0000} \u00001\u0000 {\u00002\u0000} \u00003\u0000", ["name", "has", "count", "itemsa"]]}}
+{"fn": "mask_literals", "args": ["aa😀b😀c"], "ok": {"$tuple": ["\u00000\u0000😀\u00001\u0000😀\u00002\u0000", ["aa", "b", "c"]]}}
+{"fn": "mask_literals", "args": ["😀Hello World"], "ok": {"$tuple": ["😀\u00000\u0000 \u00001\u0000", ["Hello", "World"]]}}
+{"fn": "mask_literals", "args": ["a.b.cHELLO"], "ok": {"$tuple": ["\u00000\u0000", ["a.b.cHELLO"]]}}
+{"fn": "mask_literals", "args": ["a:b:c﻿bom"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000:\u00002\u0000﻿\u00003\u0000", ["a", "b", "c", "bom"]]}}
+{"fn": "mask_literals", "args": ["abİstanbul"], "ok": {"$tuple": ["\u00000\u0000", ["abİstanbul"]]}}
+{"fn": "mask_literals", "args": ["{name} has {count} items﻿bom"], "ok": {"$tuple": ["{\u00000\u0000} \u00001\u0000 {\u00002\u0000} \u00003\u0000﻿\u00004\u0000", ["name", "has", "count", "items", "bom"]]}}
+{"fn": "mask_literals", "args": ["abhello"], "ok": {"$tuple": ["\u00000\u0000", ["abhello"]]}}
+{"fn": "mask_literals", "args": ["a:b:c.leading"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000:\u00002\u0000", ["a", "b", "c.leading"]]}}
+{"fn": "mask_literals", "args": ["hello  padded  "], "ok": {"$tuple": ["\u00000\u0000  \u00001\u0000  ", ["hello", "padded"]]}}
+{"fn": "mask_literals", "args": ["aba..b"], "ok": {"$tuple": ["\u00000\u0000", ["aba..b"]]}}
+{"fn": "mask_literals", "args": ["ns:key.pathhello"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000", ["ns", "key.pathhello"]]}}
+{"fn": "mask_literals", "args": ["abHELLO"], "ok": {"$tuple": ["\u00000\u0000", ["abHELLO"]]}}
+{"fn": "mask_literals", "args": ["İstanbulİstanbul"], "ok": {"$tuple": ["\u00000\u0000", ["İstanbulİstanbul"]]}}
+{"fn": "mask_literals", "args": ["line1\nline2line1\nline2"], "ok": {"$tuple": ["\u00000\u0000\n\u00001\u0000\n\u00002\u0000", ["line1", "line2line1", "line2"]]}}
+{"fn": "mask_literals", "args": ["key_name-1hello"], "ok": {"$tuple": ["\u00000\u0000", ["key_name-1hello"]]}}
+{"fn": "mask_literals", "args": ["hello worldkey_name-1"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["hello", "worldkey_name-1"]]}}
+{"fn": "mask_literals", "args": ["a😀b😀cstraße"], "ok": {"$tuple": ["\u00000\u0000😀\u00001\u0000😀\u00002\u0000", ["a", "b", "cstraße"]]}}
+{"fn": "mask_literals", "args": ["straßetrailing."], "ok": {"$tuple": ["\u00000\u0000.", ["straßetrailing"]]}}
+{"fn": "mask_literals", "args": ["straße:"], "ok": {"$tuple": ["\u00000\u0000:", ["straße"]]}}
+{"fn": "mask_literals", "args": ["aline1\nline2"], "ok": {"$tuple": ["\u00000\u0000\n\u00001\u0000", ["aline1", "line2"]]}}
+{"fn": "mask_literals", "args": ["a:b:cstraße"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000:\u00002\u0000", ["a", "b", "cstraße"]]}}
+{"fn": "mask_literals", "args": ["ΣΊΣΥΦΟΣstraße"], "ok": {"$tuple": ["ΣΊΣΥΦΟΣstraße", []]}}
+{"fn": "mask_literals", "args": ["é.leading"], "ok": {"$tuple": ["\u00000\u0000́.\u00001\u0000", ["e", "leading"]]}}
+{"fn": "mask_literals", "args": ["tab\tseparated:"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000:", ["tab", "separated"]]}}
+{"fn": "mask_literals", "args": [":a.b.c"], "ok": {"$tuple": [":\u00000\u0000", ["a.b.c"]]}}
+{"fn": "mask_literals", "args": ["abca..b"], "ok": {"$tuple": ["\u00000\u0000", ["abca..b"]]}}
+{"fn": "mask_literals", "args": ["emoji 👍🏽 mix﻿bom"], "ok": {"$tuple": ["\u00000\u0000 👍🏽 \u00001\u0000﻿\u00002\u0000", ["emoji", "mix", "bom"]]}}
+{"fn": "mask_literals", "args": ["helloab"], "ok": {"$tuple": ["\u00000\u0000", ["helloab"]]}}
+{"fn": "mask_literals", "args": ["hello world:"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000:", ["hello", "world"]]}}
+{"fn": "mask_literals", "args": ["emoji 👍🏽 mixns:key.path"], "ok": {"$tuple": ["\u00000\u0000 👍🏽 \u00001\u0000:\u00002\u0000", ["emoji", "mixns", "key.path"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.jsonünïcödé"], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000", ["x", "jsonünïcödé"]]}}
+{"fn": "mask_literals", "args": ["  padded  İstanbul"], "ok": {"$tuple": ["  \u00000\u0000  \u00001\u0000", ["padded", "İstanbul"]]}}
+{"fn": "mask_literals", "args": ["straßekey_name-1"], "ok": {"$tuple": ["\u00000\u0000", ["straßekey_name-1"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.jsontab\tseparated"], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000\t\u00002\u0000", ["x", "jsontab", "separated"]]}}
+{"fn": "mask_literals", "args": ["😀HELLO"], "ok": {"$tuple": ["😀\u00000\u0000", ["HELLO"]]}}
+{"fn": "mask_literals", "args": ["aba"], "ok": {"$tuple": ["\u00000\u0000", ["aba"]]}}
+{"fn": "mask_literals", "args": [".leadingab"], "ok": {"$tuple": [".\u00000\u0000", ["leadingab"]]}}
+{"fn": "mask_literals", "args": ["﻿bomtrailing."], "ok": {"$tuple": ["﻿\u00000\u0000.", ["bomtrailing"]]}}
+{"fn": "mask_literals", "args": ["line1\nline2key_name-1"], "ok": {"$tuple": ["\u00000\u0000\n\u00001\u0000", ["line1", "line2key_name-1"]]}}
+{"fn": "mask_literals", "args": ["trailing.﻿bom"], "ok": {"$tuple": ["\u00000\u0000.﻿\u00001\u0000", ["trailing", "bom"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.jsonsrc/a/b.ts"], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000/\u00002\u0000/\u00003\u0000", ["x", "jsonsrc", "a", "b.ts"]]}}
+{"fn": "mask_literals", "args": ["hellotrailing."], "ok": {"$tuple": ["\u00000\u0000.", ["hellotrailing"]]}}
+{"fn": "mask_literals", "args": ["日本語のテキストünïcödé"], "ok": {"$tuple": ["日本語のテキストünïcödé", []]}}
+{"fn": "mask_literals", "args": ["straßeabc"], "ok": {"$tuple": ["\u00000\u0000", ["straßeabc"]]}}
+{"fn": "mask_literals", "args": ["HELLO:"], "ok": {"$tuple": ["\u00000\u0000:", ["HELLO"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.jsonemoji 👍🏽 mix"], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000 👍🏽 \u00002\u0000", ["x", "jsonemoji", "mix"]]}}
+{"fn": "mask_literals", "args": ["a..bns:key.path"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000", ["a..bns", "key.path"]]}}
+{"fn": "mask_literals", "args": ["ΣΊΣΥΦΟΣ.leading"], "ok": {"$tuple": ["ΣΊΣΥΦΟΣ.\u00000\u0000", ["leading"]]}}
+{"fn": "mask_literals", "args": ["İstanbulHELLO"], "ok": {"$tuple": ["\u00000\u0000", ["İstanbulHELLO"]]}}
+{"fn": "mask_literals", "args": [":hello"], "ok": {"$tuple": [":\u00000\u0000", ["hello"]]}}
+{"fn": "mask_literals", "args": ["{name} has {count} itemsİstanbul"], "ok": {"$tuple": ["{\u00000\u0000} \u00001\u0000 {\u00002\u0000} \u00003\u0000", ["name", "has", "count", "itemsİstanbul"]]}}
+{"fn": "mask_literals", "args": ["a..b﻿bom"], "ok": {"$tuple": ["\u00000\u0000﻿\u00001\u0000", ["a..b", "bom"]]}}
+{"fn": "mask_literals", "args": [":😀"], "ok": {"$tuple": [":😀", []]}}
+{"fn": "mask_literals", "args": ["ab.leading"], "ok": {"$tuple": ["\u00000\u0000", ["ab.leading"]]}}
+{"fn": "mask_literals", "args": ["a.b.cline1\nline2"], "ok": {"$tuple": ["\u00000\u0000\n\u00001\u0000", ["a.b.cline1", "line2"]]}}
+{"fn": "mask_literals", "args": ["tab\tseparated./x/**/*.json"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000./\u00002\u0000/**/*.\u00003\u0000", ["tab", "separated", "x", "json"]]}}
+{"fn": "mask_literals", "args": ["helloemoji 👍🏽 mix"], "ok": {"$tuple": ["\u00000\u0000 👍🏽 \u00001\u0000", ["helloemoji", "mix"]]}}
+{"fn": "mask_literals", "args": ["﻿bom﻿bom"], "ok": {"$tuple": ["﻿\u00000\u0000﻿\u00001\u0000", ["bom", "bom"]]}}
+{"fn": "mask_literals", "args": ["  padded  ns:key.path"], "ok": {"$tuple": ["  \u00000\u0000  \u00001\u0000:\u00002\u0000", ["padded", "ns", "key.path"]]}}
+{"fn": "mask_literals", "args": ["a.b.ckey_name-1"], "ok": {"$tuple": ["\u00000\u0000", ["a.b.ckey_name-1"]]}}
+{"fn": "mask_literals", "args": ["日本語のテキストa:b:c"], "ok": {"$tuple": ["日本語のテキストa:\u00000\u0000:\u00001\u0000", ["b", "c"]]}}
+{"fn": "mask_literals", "args": ["a.b.ctab\tseparated"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000", ["a.b.ctab", "separated"]]}}
+{"fn": "mask_literals", "args": ["straße{name} has {count} items"], "ok": {"$tuple": ["\u00000\u0000{\u00001\u0000} \u00002\u0000 {\u00003\u0000} \u00004\u0000", ["straße", "name", "has", "count", "items"]]}}
+{"fn": "mask_literals", "args": ["ns:key.pathHELLO"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000", ["ns", "key.pathHELLO"]]}}
+{"fn": "mask_literals", "args": ["trailing.  padded  "], "ok": {"$tuple": ["\u00000\u0000.  \u00001\u0000  ", ["trailing", "padded"]]}}
+{"fn": "mask_literals", "args": ["  padded  ab"], "ok": {"$tuple": ["  \u00000\u0000  \u00001\u0000", ["padded", "ab"]]}}
+{"fn": "mask_literals", "args": ["abΣΊΣΥΦΟΣ"], "ok": {"$tuple": ["\u00000\u0000", ["abΣΊΣΥΦΟΣ"]]}}
+{"fn": "mask_literals", "args": ["a.b.c{name} has {count} items"], "ok": {"$tuple": ["\u00000\u0000{\u00001\u0000} \u00002\u0000 {\u00003\u0000} \u00004\u0000", ["a.b.c", "name", "has", "count", "items"]]}}
+{"fn": "mask_literals", "args": ["HELLOns:key.path"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000", ["HELLOns", "key.path"]]}}
+{"fn": "mask_literals", "args": ["a.b.cΣΊΣΥΦΟΣ"], "ok": {"$tuple": ["\u00000\u0000", ["a.b.cΣΊΣΥΦΟΣ"]]}}
+{"fn": "mask_literals", "args": ["{name} has {count} itemsab"], "ok": {"$tuple": ["{\u00000\u0000} \u00001\u0000 {\u00002\u0000} \u00003\u0000", ["name", "has", "count", "itemsab"]]}}
+{"fn": "mask_literals", "args": ["ünïcödéa.b.c"], "ok": {"$tuple": ["ünïcödéa.\u00000\u0000", ["b.c"]]}}
+{"fn": "mask_literals", "args": ["Hello Worlda..b"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["Hello", "Worlda..b"]]}}
+{"fn": "mask_literals", "args": ["Hello World:"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000:", ["Hello", "World"]]}}
+{"fn": "mask_literals", "args": ["hello world{name} has {count} items"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000{\u00002\u0000} \u00003\u0000 {\u00004\u0000} \u00005\u0000", ["hello", "world", "name", "has", "count", "items"]]}}
+{"fn": "mask_literals", "args": ["ΣΊΣΥΦΟΣ  padded  "], "ok": {"$tuple": ["ΣΊΣΥΦΟΣ  \u00000\u0000  ", ["padded"]]}}
+{"fn": "mask_literals", "args": ["line1\nline2a😀b😀c"], "ok": {"$tuple": ["\u00000\u0000\n\u00001\u0000😀\u00002\u0000😀\u00003\u0000", ["line1", "line2a", "b", "c"]]}}
+{"fn": "mask_literals", "args": ["a:b:ca😀b😀c"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000:\u00002\u0000😀\u00003\u0000😀\u00004\u0000", ["a", "b", "ca", "b", "c"]]}}
+{"fn": "mask_literals", "args": ["éhello world"], "ok": {"$tuple": ["\u00000\u0000́\u00001\u0000 \u00002\u0000", ["e", "hello", "world"]]}}
+{"fn": "mask_literals", "args": [".leadingsrc/a/b.ts"], "ok": {"$tuple": [".\u00000\u0000/\u00001\u0000/\u00002\u0000", ["leadingsrc", "a", "b.ts"]]}}
+{"fn": "mask_literals", "args": [".leadingHELLO"], "ok": {"$tuple": [".\u00000\u0000", ["leadingHELLO"]]}}
+{"fn": "mask_literals", "args": ["trailing.ns:key.path"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000", ["trailing.ns", "key.path"]]}}
+{"fn": "mask_literals", "args": ["a😀b😀cHELLO"], "ok": {"$tuple": ["\u00000\u0000😀\u00001\u0000😀\u00002\u0000", ["a", "b", "cHELLO"]]}}
+{"fn": "mask_literals", "args": ["a:b:ca..b"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000:\u00002\u0000", ["a", "b", "ca..b"]]}}
+{"fn": "mask_literals", "args": ["emoji 👍🏽 mixé"], "ok": {"$tuple": ["\u00000\u0000 👍🏽 \u00001\u0000́", ["emoji", "mixe"]]}}
+{"fn": "mask_literals", "args": ["ns:key.pathab"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000", ["ns", "key.pathab"]]}}
+{"fn": "mask_literals", "args": ["tab\tseparateda"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000", ["tab", "separateda"]]}}
+{"fn": "mask_literals", "args": ["HELLO日本語のテキスト"], "ok": {"$tuple": ["\u00000\u0000", ["HELLO日本語のテキスト"]]}}
+{"fn": "mask_literals", "args": ["./x/**/*.json./x/**/*.json"], "ok": {"$tuple": ["./\u00000\u0000/**/*.\u00001\u0000./\u00002\u0000/**/*.\u00003\u0000", ["x", "json", "x", "json"]]}}
+{"fn": "mask_literals", "args": ["tab\tseparateda😀b😀c"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000😀\u00002\u0000😀\u00003\u0000", ["tab", "separateda", "b", "c"]]}}
+{"fn": "mask_literals", "args": ["src/a/b.tsa.b.c"], "ok": {"$tuple": ["\u00000\u0000/\u00001\u0000/\u00002\u0000", ["src", "a", "b.tsa.b.c"]]}}
+{"fn": "mask_literals", "args": ["ünïcödé.leading"], "ok": {"$tuple": ["ünïcödé.\u00000\u0000", ["leading"]]}}
+{"fn": "mask_literals", "args": ["a😀b😀cİstanbul"], "ok": {"$tuple": ["\u00000\u0000😀\u00001\u0000😀\u00002\u0000", ["a", "b", "cİstanbul"]]}}
+{"fn": "mask_literals", "args": ["a..bé"], "ok": {"$tuple": ["\u00000\u0000́", ["a..be"]]}}
+{"fn": "mask_literals", "args": ["line1\nline2./x/**/*.json"], "ok": {"$tuple": ["\u00000\u0000\n\u00001\u0000./\u00002\u0000/**/*.\u00003\u0000", ["line1", "line2", "x", "json"]]}}
+{"fn": "mask_literals", "args": ["src/a/b.tsünïcödé"], "ok": {"$tuple": ["\u00000\u0000/\u00001\u0000/\u00002\u0000", ["src", "a", "b.tsünïcödé"]]}}
+{"fn": "mask_literals", "args": ["hello:"], "ok": {"$tuple": ["\u00000\u0000:", ["hello"]]}}
+{"fn": "mask_literals", "args": ["😀  padded  "], "ok": {"$tuple": ["😀  \u00000\u0000  ", ["padded"]]}}
+{"fn": "mask_literals", "args": ["﻿bomemoji 👍🏽 mix"], "ok": {"$tuple": ["﻿\u00000\u0000 👍🏽 \u00001\u0000", ["bomemoji", "mix"]]}}
+{"fn": "mask_literals", "args": ["hello😀"], "ok": {"$tuple": ["\u00000\u0000😀", ["hello"]]}}
+{"fn": "mask_literals", "args": ["straßea:b:c"], "ok": {"$tuple": ["\u00000\u0000:\u00001\u0000:\u00002\u0000", ["straßea", "b", "c"]]}}
+{"fn": "mask_literals", "args": ["İstanbultab\tseparated"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000", ["İstanbultab", "separated"]]}}
+{"fn": "mask_literals", "args": ["İstanbul:"], "ok": {"$tuple": ["\u00000\u0000:", ["İstanbul"]]}}
+{"fn": "mask_literals", "args": ["日本語のテキストa"], "ok": {"$tuple": ["日本語のテキストa", []]}}
+{"fn": "mask_literals", "args": ["a..bΣΊΣΥΦΟΣ"], "ok": {"$tuple": ["\u00000\u0000", ["a..bΣΊΣΥΦΟΣ"]]}}
+{"fn": "mask_literals", "args": ["éΣΊΣΥΦΟΣ"], "ok": {"$tuple": ["\u00000\u0000́ΣΊΣΥΦΟΣ", ["e"]]}}
+{"fn": "mask_literals", "args": ["hellotab\tseparated"], "ok": {"$tuple": ["\u00000\u0000\t\u00001\u0000", ["hellotab", "separated"]]}}
+{"fn": "mask_literals", "args": ["é:"], "ok": {"$tuple": ["\u00000\u0000́:", ["e"]]}}
+{"fn": "mask_literals", "args": ["héllo wörld"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["héllo", "wörld"]]}}
+{"fn": "mask_literals", "args": ["👍🏽 thumbs"], "ok": {"$tuple": ["👍🏽 \u00000\u0000", ["thumbs"]]}}
+{"fn": "mask_literals", "args": ["日本語"], "ok": {"$tuple": ["日本語", []]}}
+{"fn": "mask_literals", "args": ["ılık ırmak"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["ılık", "ırmak"]]}}
+{"fn": "mask_literals", "args": ["👨‍👩‍👧 family"], "ok": {"$tuple": ["👨‍👩‍👧 \u00000\u0000", ["family"]]}}
+{"fn": "mask_literals", "args": ["a b"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["a", "b"]]}}
+{"fn": "mask_literals", "args": ["a😀b"], "ok": {"$tuple": ["\u00000\u0000😀\u00001\u0000", ["a", "b"]]}}
+{"fn": "mask_literals", "args": ["a²b x½ y①"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000 \u00002\u0000", ["a²b", "x½", "y①"]]}}
+{"fn": "mask_literals", "args": ["aⅠb Ⅻ"], "ok": {"$tuple": ["\u00000\u0000 Ⅻ", ["aⅠb"]]}}
+{"fn": "mask_literals", "args": ["a𐐀b 𝐀bc"], "ok": {"$tuple": ["\u00000\u0000 𝐀bc", ["a𐐀b"]]}}
+{"fn": "mask_literals", "args": ["कि ٣٤"], "ok": {"$tuple": ["कि ٣٤", []]}}
+{"fn": "mask_literals", "args": ["Iı İi"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000", ["Iı", "İi"]]}}
+{"fn": "mask_literals", "args": ["K K k"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000 \u00002\u0000", ["K", "K", "k"]]}}
+{"fn": "mask_literals", "args": ["ſ s S"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000 \u00002\u0000", ["ſ", "s", "S"]]}}
+{"fn": "mask_literals", "args": ["x‍y 👨‍👩‍👧"], "ok": {"$tuple": ["\u00000\u0000‍\u00001\u0000 👨‍👩‍👧", ["x", "y"]]}}
+{"fn": "mask_literals", "args": ["a b c　d"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000 \u00002\u0000　\u00003\u0000", ["a", "b", "c", "d"]]}}
+{"fn": "mask_literals", "args": ["١٢٣ ٤٥"], "ok": {"$tuple": ["١٢٣ ٤٥", []]}}
+{"fn": "mask_literals", "args": ["𝟘𝟙 ²³"], "ok": {"$tuple": ["𝟘𝟙 ²³", []]}}
+{"fn": "mask_literals", "args": ["snake_case foo-bar o'neil"], "ok": {"$tuple": ["\u00000\u0000 \u00001\u0000 \u00002\u0000", ["snake_case", "foo-bar", "o'neil"]]}}
+{"fn": "mask_literals", "args": ["ǅungla Ǆ"], "ok": {"$tuple": ["ǅungla Ǆ", []]}}
+{"fn": "mask_literals", "args": ["one\r\ntwo threefour"], "ok": {"$tuple": ["\u00000\u0000\r\n\u00001\u0000 \u00002\u0000\u00003\u0000", ["one", "two", "three", "four"]]}}
+{"fn": "mask_literals", "args": ["café café"], "ok": {"$tuple": ["\u00000\u0000́ \u00001\u0000", ["cafe", "café"]]}}
+{"fn": "mask_literals", "args": ["ΣΑΣ σας ς"], "ok": {"$tuple": ["ΣΑΣ σας ς", []]}}
+{"fn": "unmask_literals", "args": ["src/a/b.ts", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "src/a/b.ts"}
+{"fn": "unmask_literals", "args": ["HELLOa:b:c", ["emoji 👍🏽 mix", ":"]], "ok": "HELLOa:b:c"}
+{"fn": "unmask_literals", "args": ["abcİstanbul", ["emoji 👍🏽 mix", "line1\nline2{name} has {count} items", "日本語のテキスト"]], "ok": "abcİstanbul"}
+{"fn": "unmask_literals", "args": ["a:b:c", ["hello world日本語のテキスト", "hello", "😀"]], "ok": "a:b:c"}
+{"fn": "unmask_literals", "args": ["İstanbulİstanbul", [".leading", "abc", "abc"]], "ok": "İstanbulİstanbul"}
+{"fn": "unmask_literals", "args": ["ünïcödé", ["tab\tseparatedabc"]], "ok": "ünïcödé"}
+{"fn": "unmask_literals", "args": ["emoji 👍🏽 mix", ["ns:key.path:", ":"]], "ok": "emoji 👍🏽 mix"}
+{"fn": "unmask_literals", "args": ["日本語のテキスト", ["﻿bom"]], "ok": "日本語のテキスト"}
+{"fn": "unmask_literals", "args": ["emoji 👍🏽 mix", [":"]], "ok": "emoji 👍🏽 mix"}
+{"fn": "unmask_literals", "args": ["a.b.chello world", []], "ok": "a.b.chello world"}
+{"fn": "unmask_literals", "args": ["  padded  hello", []], "ok": "  padded  hello"}
+{"fn": "unmask_literals", "args": ["abc", ["abhello world", "tab\tseparated", "é"]], "ok": "abc"}
+{"fn": "unmask_literals", "args": ["a:b:ckey_name-1", ["Hello World"]], "ok": "a:b:ckey_name-1"}
+{"fn": "unmask_literals", "args": ["a:b:c", ["Hello World", "key_name-1"]], "ok": "a:b:c"}
+{"fn": "unmask_literals", "args": ["a:b:c", ["﻿bom", "line1\nline2"]], "ok": "a:b:c"}
+{"fn": "unmask_literals", "args": ["abemoji 👍🏽 mix", ["./x/**/*.json", "abİstanbul"]], "ok": "abemoji 👍🏽 mix"}
+{"fn": "unmask_literals", "args": ["emoji 👍🏽 mixhello", []], "ok": "emoji 👍🏽 mixhello"}
+{"fn": "unmask_literals", "args": ["ünïcödé", ["key_name-1"]], "ok": "ünïcödé"}
+{"fn": "unmask_literals", "args": ["tab\tseparated", []], "ok": "tab\tseparated"}
+{"fn": "unmask_literals", "args": ["key_name-1", ["hello"]], "ok": "key_name-1"}
+{"fn": "unmask_literals", "args": ["straße", []], "ok": "straße"}
+{"fn": "unmask_literals", "args": ["HELLO", []], "ok": "HELLO"}
+{"fn": "unmask_literals", "args": ["HELLO", ["  padded  ", "ns:key.path"]], "ok": "HELLO"}
+{"fn": "unmask_literals", "args": ["  padded  ", []], "ok": "  padded  "}
+{"fn": "unmask_literals", "args": ["emoji 👍🏽 mixsrc/a/b.ts", ["a..ba"]], "ok": "emoji 👍🏽 mixsrc/a/b.ts"}
+{"fn": "unmask_literals", "args": ["a:b:c", ["Hello World"]], "ok": "a:b:c"}
+{"fn": "unmask_literals", "args": ["ab", ["src/a/b.ts"]], "ok": "ab"}
+{"fn": "unmask_literals", "args": ["a.b.chello", ["ünïcödé", "./x/**/*.json", "abca.b.c"]], "ok": "a.b.chello"}
+{"fn": "unmask_literals", "args": ["ΣΊΣΥΦΟΣ", ["./x/**/*.json", "a😀b😀c", "hello"]], "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "unmask_literals", "args": [":", []], "ok": ":"}
+{"fn": "unmask_literals", "args": ["trailing.", []], "ok": "trailing."}
+{"fn": "unmask_literals", "args": ["hello", ["a:b:c"]], "ok": "hello"}
+{"fn": "unmask_literals", "args": ["a:b:c", ["﻿bom", ""]], "ok": "a:b:c"}
+{"fn": "unmask_literals", "args": ["ab", ["a😀b😀c", "abc", "  padded  "]], "ok": "ab"}
+{"fn": "unmask_literals", "args": ["", []], "ok": ""}
+{"fn": "unmask_literals", "args": [":", ["  padded  "]], "ok": ":"}
+{"fn": "unmask_literals", "args": ["tab\tseparated", ["src/a/b.ts"]], "ok": "tab\tseparated"}
+{"fn": "unmask_literals", "args": [":", ["./x/**/*.json", "a"]], "ok": ":"}
+{"fn": "unmask_literals", "args": ["abc", ["😀", "tab\tseparatedemoji 👍🏽 mix"]], "ok": "abc"}
+{"fn": "unmask_literals", "args": ["line1\nline2", ["emoji 👍🏽 mix"]], "ok": "line1\nline2"}
+{"fn": "unmask_literals", "args": ["a:b:c", ["﻿bom"]], "ok": "a:b:c"}
+{"fn": "unmask_literals", "args": ["HELLO", ["src/a/b.tsline1\nline2", "", "{name} has {count} items"]], "ok": "HELLO"}
+{"fn": "unmask_literals", "args": ["a:b:c", []], "ok": "a:b:c"}
+{"fn": "unmask_literals", "args": ["./x/**/*.json", [""]], "ok": "./x/**/*.json"}
+{"fn": "unmask_literals", "args": ["straße", ["ΣΊΣΥΦΟΣ", "", "a.b.c"]], "ok": "straße"}
+{"fn": "unmask_literals", "args": ["  padded  ", [".leading"]], "ok": "  padded  "}
+{"fn": "unmask_literals", "args": ["a.b.cline1\nline2", ["abc"]], "ok": "a.b.cline1\nline2"}
+{"fn": "unmask_literals", "args": ["日本語のテキスト", ["  padded  HELLO", "tab\tseparated", ":"]], "ok": "日本語のテキスト"}
+{"fn": "unmask_literals", "args": ["key_name-1", ["straße", "a..b", "abc"]], "ok": "key_name-1"}
+{"fn": "unmask_literals", "args": ["./x/**/*.jsonstraße", []], "ok": "./x/**/*.jsonstraße"}
+{"fn": "unmask_literals", "args": ["{name} has {count} items", ["trailing.", "HELLO", ""]], "ok": "{name} has {count} items"}
+{"fn": "unmask_literals", "args": ["é.leading", ["İstanbul"]], "ok": "é.leading"}
+{"fn": "unmask_literals", "args": ["HELLOhello world", ["😀", "{name} has {count} items", "ab"]], "ok": "HELLOhello world"}
+{"fn": "unmask_literals", "args": [".leading", ["key_name-1"]], "ok": ".leading"}
+{"fn": "unmask_literals", "args": ["İstanbul", []], "ok": "İstanbul"}
+{"fn": "unmask_literals", "args": ["ünïcödé", ["😀", "a:b:c"]], "ok": "ünïcödé"}
+{"fn": "unmask_literals", "args": ["İstanbul", ["😀", "é"]], "ok": "İstanbul"}
+{"fn": "unmask_literals", "args": ["  padded  ", ["trailing."]], "ok": "  padded  "}
+{"fn": "unmask_literals", "args": ["﻿bom", ["straße", "a😀b😀c", "{name} has {count} items"]], "ok": "﻿bom"}
+{"fn": "unmask_literals", "args": ["key_name-1", ["a", "a..b"]], "ok": "key_name-1"}
+{"fn": "unmask_literals", "args": ["HELLO", ["ns:key.path", "line1\nline2"]], "ok": "HELLO"}
+{"fn": "unmask_literals", "args": ["{name} has {count} items", ["ab", "ünïcödé"]], "ok": "{name} has {count} items"}
+{"fn": "unmask_literals", "args": ["key_name-1é", []], "ok": "key_name-1é"}
+{"fn": "unmask_literals", "args": [".leading", ["trailing."]], "ok": ".leading"}
+{"fn": "unmask_literals", "args": [".leading", ["a:b:c"]], "ok": ".leading"}
+{"fn": "unmask_literals", "args": ["ns:key.path﻿bom", ["./x/**/*.json.leading", "hello world", ""]], "ok": "ns:key.path﻿bom"}
+{"fn": "unmask_literals", "args": ["  padded  {name} has {count} items", ["straße", "ab", "a"]], "ok": "  padded  {name} has {count} items"}
+{"fn": "unmask_literals", "args": ["HELLO", ["./x/**/*.jsonHELLO", "HELLO{name} has {count} items"]], "ok": "HELLO"}
+{"fn": "unmask_literals", "args": ["./x/**/*.json", ["src/a/b.ts  padded  "]], "ok": "./x/**/*.json"}
+{"fn": "unmask_literals", "args": ["a..b", ["hello world", "./x/**/*.json", "ab"]], "ok": "a..b"}
+{"fn": "unmask_literals", "args": ["a..b😀", []], "ok": "a..b😀"}
+{"fn": "unmask_literals", "args": ["{name} has {count} itemsHello World", []], "ok": "{name} has {count} itemsHello World"}
+{"fn": "unmask_literals", "args": ["hello", ["Hello WorldΣΊΣΥΦΟΣ", "a"]], "ok": "hello"}
+{"fn": "unmask_literals", "args": ["abcab", ["emoji 👍🏽 mix", "ünïcödéemoji 👍🏽 mix"]], "ok": "abcab"}
+{"fn": "unmask_literals", "args": ["./x/**/*.json", ["ΣΊΣΥΦΟΣ", "a:b:c", "emoji 👍🏽 mix"]], "ok": "./x/**/*.json"}
+{"fn": "unmask_literals", "args": ["emoji 👍🏽 mix", []], "ok": "emoji 👍🏽 mix"}
+{"fn": "unmask_literals", "args": ["日本語のテキスト", []], "ok": "日本語のテキスト"}
+{"fn": "unmask_literals", "args": ["İstanbul", ["straße", "a😀b😀c日本語のテキスト"]], "ok": "İstanbul"}
+{"fn": "unmask_literals", "args": ["😀ab", ["a.b.c", "emoji 👍🏽 mix"]], "ok": "😀ab"}
+{"fn": "unmask_literals", "args": ["ns:key.path", ["a:b:c", ""]], "ok": "ns:key.path"}
+{"fn": "unmask_literals", "args": ["ünïcödéHello World", [":"]], "ok": "ünïcödéHello World"}
+{"fn": "unmask_literals", "args": ["a.b.c", ["line1\nline2", "ünïcödé", "line1\nline2"]], "ok": "a.b.c"}
+{"fn": "unmask_literals", "args": ["{name} has {count} itemsünïcödé", ["src/a/b.ts", "a..b", "tab\tseparated"]], "ok": "{name} has {count} itemsünïcödé"}
+{"fn": "unmask_literals", "args": ["😀", ["ΣΊΣΥΦΟΣ"]], "ok": "😀"}
+{"fn": "unmask_literals", "args": ["é", ["trailing."]], "ok": "é"}
+{"fn": "unmask_literals", "args": ["HELLO", ["ns:key.path", "hello"]], "ok": "HELLO"}
+{"fn": "unmask_literals", "args": ["a😀b😀ctrailing.", ["a😀b😀c"]], "ok": "a😀b😀ctrailing."}
+{"fn": "unmask_literals", "args": ["line1\nline2", [".leadingé", "﻿bom"]], "ok": "line1\nline2"}
+{"fn": "unmask_literals", "args": ["ΣΊΣΥΦΟΣ", ["a.b.c", "a.b.c", "ab"]], "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "unmask_literals", "args": ["﻿bom", []], "ok": "﻿bom"}
+{"fn": "unmask_literals", "args": ["./x/**/*.json", [":"]], "ok": "./x/**/*.json"}
+{"fn": "unmask_literals", "args": ["src/a/b.ts", []], "ok": "src/a/b.ts"}
+{"fn": "unmask_literals", "args": ["ünïcödé", ["hello"]], "ok": "ünïcödé"}
+{"fn": "unmask_literals", "args": ["ΣΊΣΥΦΟΣa:b:c", []], "ok": "ΣΊΣΥΦΟΣa:b:c"}
+{"fn": "unmask_literals", "args": ["a😀b😀c", ["tab\tseparatedsrc/a/b.ts", "abc"]], "ok": "a😀b😀c"}
+{"fn": "unmask_literals", "args": ["abc", ["trailing.", "ünïcödéé", "line1\nline2"]], "ok": "abc"}
+{"fn": "unmask_literals", "args": ["ΣΊΣΥΦΟΣ", []], "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "unmask_literals", "args": ["line1\nline2", ["ünïcödé", ""]], "ok": "line1\nline2"}
+{"fn": "unmask_literals", "args": ["hello", ["😀"]], "ok": "hello"}
+{"fn": "unmask_literals", "args": ["ünïcödé﻿bom", ["İstanbul"]], "ok": "ünïcödé﻿bom"}
+{"fn": "unmask_literals", "args": ["ab", ["ΣΊΣΥΦΟΣ"]], "ok": "ab"}
+{"fn": "unmask_literals", "args": ["a", []], "ok": "a"}
+{"fn": "unmask_literals", "args": ["İstanbul", ["tab\tseparated"]], "ok": "İstanbul"}
+{"fn": "unmask_literals", "args": ["a.b.c", ["a😀b😀c", "ünïcödé"]], "ok": "a.b.c"}
+{"fn": "unmask_literals", "args": ["日本語のテキスト", [".leading", "😀"]], "ok": "日本語のテキスト"}
+{"fn": "unmask_literals", "args": ["ünïcödé", []], "ok": "ünïcödé"}
+{"fn": "unmask_literals", "args": ["./x/**/*.json", []], "ok": "./x/**/*.json"}
+{"fn": "unmask_literals", "args": [".leading", ["{name} has {count} items", "ab", "trailing."]], "ok": ".leading"}
+{"fn": "unmask_literals", "args": ["trailing.", ["  padded  ", "emoji 👍🏽 mix", "İstanbul"]], "ok": "trailing."}
+{"fn": "unmask_literals", "args": ["a.b.cab", ["😀a.b.c"]], "ok": "a.b.cab"}
+{"fn": "unmask_literals", "args": ["straße", ["hello", "emoji 👍🏽 mix", "hello worlda.b.c"]], "ok": "straße"}
+{"fn": "unmask_literals", "args": ["a..b", ["日本語のテキスト"]], "ok": "a..b"}
+{"fn": "unmask_literals", "args": ["Hello Worldé", ["key_name-1", ".leading", "helloa"]], "ok": "Hello Worldé"}
+{"fn": "unmask_literals", "args": ["hello", []], "ok": "hello"}
+{"fn": "unmask_literals", "args": ["src/a/b.ts", ["a:b:c"]], "ok": "src/a/b.ts"}
+{"fn": "unmask_literals", "args": ["ΣΊΣΥΦΟΣ:", ["hello  padded  ", "HELLO"]], "ok": "ΣΊΣΥΦΟΣ:"}
+{"fn": "unmask_literals", "args": ["a:b:c", ["key_name-1", "{name} has {count} items"]], "ok": "a:b:c"}
+{"fn": "unmask_literals", "args": ["😀key_name-1", ["a..b", "a.b.c{name} has {count} items"]], "ok": "😀key_name-1"}
+{"fn": "unmask_literals", "args": ["ab", [":", "﻿bom"]], "ok": "ab"}
+{"fn": "unmask_literals", "args": ["hello./x/**/*.json", ["", "tab\tseparated", "key_name-1"]], "ok": "hello./x/**/*.json"}
+{"fn": "unmask_literals", "args": ["abc", ["./x/**/*.json"]], "ok": "abc"}
+{"fn": "unmask_literals", "args": ["{name} has {count} items", []], "ok": "{name} has {count} items"}
+{"fn": "unmask_literals", "args": ["a..b", ["src/a/b.ts", "hello world", "日本語のテキスト"]], "ok": "a..b"}
+{"fn": "unmask_literals", "args": ["a", ["  padded  日本語のテキスト", "trailing."]], "ok": "a"}
+{"fn": "unmask_literals", "args": ["hello worldΣΊΣΥΦΟΣ", [":", "a", "ünïcödéline1\nline2"]], "ok": "hello worldΣΊΣΥΦΟΣ"}
+{"fn": "unmask_literals", "args": ["straße", ["src/a/b.ts", "é"]], "ok": "straße"}
+{"fn": "unmask_literals", "args": ["a", ["tab\tseparated"]], "ok": "a"}
+{"fn": "unmask_literals", "args": ["abc", ["ns:key.path", ":abc"]], "ok": "abc"}
+{"fn": "unmask_literals", "args": ["ab", ["tab\tseparated"]], "ok": "ab"}
+{"fn": "unmask_literals", "args": [".leadingHello World", ["éa😀b😀c", ":"]], "ok": ".leadingHello World"}
+{"fn": "unmask_literals", "args": ["hello world", ["ünïcödé", "a..b"]], "ok": "hello world"}
+{"fn": "unmask_literals", "args": ["trailing.", ["trailing.  padded  ", "emoji 👍🏽 mix", "日本語のテキスト"]], "ok": "trailing."}
+{"fn": "unmask_literals", "args": ["straße", [":", ":", "straße"]], "ok": "straße"}
+{"fn": "unmask_literals", "args": ["HELLO", ["src/a/b.ts"]], "ok": "HELLO"}
+{"fn": "unmask_literals", "args": ["﻿bom", ["key_name-1a..b"]], "ok": "﻿bom"}
+{"fn": "unmask_literals", "args": ["a😀b😀c", ["tab\tseparated{name} has {count} items"]], "ok": "a😀b😀c"}
+{"fn": "unmask_literals", "args": ["", ["a:b:c", "abcabc"]], "ok": ""}
+{"fn": "unmask_literals", "args": ["😀", ["a:b:c"]], "ok": "😀"}
+{"fn": "unmask_literals", "args": ["﻿bom", ["ab"]], "ok": "﻿bom"}
+{"fn": "unmask_literals", "args": ["abc", ["trailing.", "ns:key.path", "a..ba..b"]], "ok": "abc"}
+{"fn": "unmask_literals", "args": ["a..b", ["", "  padded  ", "ünïcödé"]], "ok": "a..b"}
+{"fn": "unmask_literals", "args": ["Hello Worldabc", ["é", "abünïcödé", "key_name-1"]], "ok": "Hello Worldabc"}
+{"fn": "unmask_literals", "args": ["HELLO:", []], "ok": "HELLO:"}
+{"fn": "unmask_literals", "args": ["a😀b😀c", ["İstanbul", "hello"]], "ok": "a😀b😀c"}
+{"fn": "unmask_literals", "args": ["ab", ["İstanbul", "straße"]], "ok": "ab"}
+{"fn": "unmask_literals", "args": [".leading", ["abc", ":"]], "ok": ".leading"}
+{"fn": "unmask_literals", "args": ["abc", ["{name} has {count} items", "ünïcödé"]], "ok": "abc"}
+{"fn": "unmask_literals", "args": ["ns:key.path", ["ab", ".leading"]], "ok": "ns:key.path"}
+{"fn": "unmask_literals", "args": ["", ["a:b:c"]], "ok": ""}
+{"fn": "unmask_literals", "args": ["﻿bom", ["HELLO"]], "ok": "﻿bom"}
+{"fn": "unmask_literals", "args": ["é", ["ns:key.path"]], "ok": "é"}
+{"fn": "unmask_literals", "args": ["a:b:c", ["key_name-1", "emoji 👍🏽 mix"]], "ok": "a:b:c"}
+{"fn": "unmask_literals", "args": ["😀", ["abc", "a:b:c"]], "ok": "😀"}
+{"fn": "unmask_literals", "args": ["trailing.", ["ünïcödé", "é"]], "ok": "trailing."}
+{"fn": "unmask_literals", "args": [":hello", ["abİstanbul"]], "ok": ":hello"}
+{"fn": "unmask_literals", "args": ["key_name-1", ["  padded  "]], "ok": "key_name-1"}
+{"fn": "unmask_literals", "args": ["  padded  é", ["a.b.c", "﻿bom"]], "ok": "  padded  é"}
+{"fn": "unmask_literals", "args": ["./x/**/*.json", ["a😀b😀c", "trailing."]], "ok": "./x/**/*.json"}
+{"fn": "unmask_literals", "args": ["ns:key.path", ["straße", "straße", "{name} has {count} items"]], "ok": "ns:key.path"}
+{"fn": "unmask_literals", "args": [".leading", []], "ok": ".leading"}
+{"fn": "unmask_literals", "args": [".leading", ["src/a/b.tsé"]], "ok": ".leading"}
+{"fn": "unmask_literals", "args": ["ünïcödéab", []], "ok": "ünïcödéab"}
+{"fn": "unmask_literals", "args": ["a", ["hello world", "src/a/b.ts", "src/a/b.ts"]], "ok": "a"}
+{"fn": "unmask_literals", "args": ["straße", ["a:b:c"]], "ok": "straße"}
+{"fn": "unmask_literals", "args": ["  padded  ", ["hello"]], "ok": "  padded  "}
+{"fn": "unmask_literals", "args": ["tab\tseparated", ["hello world", "key_name-1", "hello"]], "ok": "tab\tseparated"}
+{"fn": "unmask_literals", "args": ["ünïcödé", ["a..b", "a"]], "ok": "ünïcödé"}
+{"fn": "unmask_literals", "args": ["日本語のテキスト日本語のテキスト", [".leadingİstanbul"]], "ok": "日本語のテキスト日本語のテキスト"}
+{"fn": "unmask_literals", "args": ["Hello World", ["Hello World", "./x/**/*.json", "a😀b😀c"]], "ok": "Hello World"}
+{"fn": "unmask_literals", "args": ["trailing.", ["a.b.c", "tab\tseparated", ""]], "ok": "trailing."}
+{"fn": "unmask_literals", "args": ["a😀b😀c", ["ab"]], "ok": "a😀b😀c"}
+{"fn": "unmask_literals", "args": ["hello", ["aa.b.c", "ns:key.path﻿bom", "line1\nline2"]], "ok": "hello"}
+{"fn": "unmask_literals", "args": ["ab", ["hello world"]], "ok": "ab"}
+{"fn": "unmask_literals", "args": ["aemoji 👍🏽 mix", []], "ok": "aemoji 👍🏽 mix"}
+{"fn": "unmask_literals", "args": ["hello world", ["ünïcödé", "a..bline1\nline2", ".leading"]], "ok": "hello world"}
+{"fn": "unmask_literals", "args": ["helloHELLO", ["  padded  ", "ΣΊΣΥΦΟΣ"]], "ok": "helloHELLO"}
+{"fn": "unmask_literals", "args": ["", ["a.b.cemoji 👍🏽 mix", "a..b", "İstanbul"]], "ok": ""}
+{"fn": "unmask_literals", "args": ["ΣΊΣΥΦΟΣ", ["trailing.", "a", "a:b:c"]], "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "unmask_literals", "args": ["tab\tseparated", ["a😀b😀c", "./x/**/*.json", "trailing.ab"]], "ok": "tab\tseparated"}
+{"fn": "unmask_literals", "args": ["Hello World", ["😀", "ünïcödéHello World"]], "ok": "Hello World"}
+{"fn": "unmask_literals", "args": ["aΣΊΣΥΦΟΣ", ["key_name-1", "HELLO"]], "ok": "aΣΊΣΥΦΟΣ"}
+{"fn": "unmask_literals", "args": ["HELLO", ["tab\tseparated"]], "ok": "HELLO"}
+{"fn": "unmask_literals", "args": ["😀", []], "ok": "😀"}
+{"fn": "unmask_literals", "args": ["src/a/b.ts", ["a:"]], "ok": "src/a/b.ts"}
+{"fn": "unmask_literals", "args": ["abc", ["Hello World", "😀", "a"]], "ok": "abc"}
+{"fn": "unmask_literals", "args": ["a😀b😀c", ["hello world", "hello", "İstanbul"]], "ok": "a😀b😀c"}
+{"fn": "unmask_literals", "args": ["{name} has {count} items", ["ns:key.pathkey_name-1"]], "ok": "{name} has {count} items"}
+{"fn": "unmask_literals", "args": ["ab", ["straße", "key_name-1", ".leading"]], "ok": "ab"}
+{"fn": "unmask_literals", "args": ["src/a/b.ts", ["tab\tseparated"]], "ok": "src/a/b.ts"}
+{"fn": "unmask_literals", "args": ["emoji 👍🏽 mix", ["key_name-1"]], "ok": "emoji 👍🏽 mix"}
+{"fn": "unmask_literals", "args": ["hello world", ["a😀b😀c", ":"]], "ok": "hello world"}
+{"fn": "unmask_literals", "args": ["é", []], "ok": "é"}
+{"fn": "unmask_literals", "args": ["a.b.c", []], "ok": "a.b.c"}
+{"fn": "unmask_literals", "args": ["key_name-1", ["key_name-1", "abchello"]], "ok": "key_name-1"}
+{"fn": "unmask_literals", "args": ["{name} has {count} items", ["a.b.c.leading"]], "ok": "{name} has {count} items"}
+{"fn": "unmask_literals", "args": ["ns:key.path", ["İstanbul"]], "ok": "ns:key.path"}
+{"fn": "unmask_literals", "args": ["ns:key.path", ["😀", "  padded  ", "é"]], "ok": "ns:key.path"}
+{"fn": "unmask_literals", "args": ["src/a/b.ts", ["abc", "﻿bomhello", ":.leading"]], "ok": "src/a/b.ts"}
+{"fn": "unmask_literals", "args": ["abİstanbul", []], "ok": "abİstanbul"}
+{"fn": "unmask_literals", "args": ["./x/**/*.json", ["line1\nline2"]], "ok": "./x/**/*.json"}
+{"fn": "unmask_literals", "args": ["héllo wörld", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "héllo wörld"}
+{"fn": "unmask_literals", "args": ["👍🏽 thumbs", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "👍🏽 thumbs"}
+{"fn": "unmask_literals", "args": ["日本語", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "日本語"}
+{"fn": "unmask_literals", "args": ["", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": ""}
+{"fn": "unmask_literals", "args": ["é", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "é"}
+{"fn": "unmask_literals", "args": ["İstanbul", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "İstanbul"}
+{"fn": "unmask_literals", "args": ["straße", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "straße"}
+{"fn": "unmask_literals", "args": ["ılık ırmak", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "ılık ırmak"}
+{"fn": "unmask_literals", "args": ["👨‍👩‍👧 family", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "👨‍👩‍👧 family"}
+{"fn": "unmask_literals", "args": ["a b", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "a b"}
+{"fn": "unmask_literals", "args": ["ΣΊΣΥΦΟΣ", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "unmask_literals", "args": ["a😀b", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "a😀b"}
+{"fn": "unmask_literals", "args": ["﻿bom", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "﻿bom"}
+{"fn": "unmask_literals", "args": ["a²b x½ y①", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "a²b x½ y①"}
+{"fn": "unmask_literals", "args": ["aⅠb Ⅻ", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "aⅠb Ⅻ"}
+{"fn": "unmask_literals", "args": ["a𐐀b 𝐀bc", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "a𐐀b 𝐀bc"}
+{"fn": "unmask_literals", "args": ["कि ٣٤", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "कि ٣٤"}
+{"fn": "unmask_literals", "args": ["Iı İi", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "Iı İi"}
+{"fn": "unmask_literals", "args": ["K K k", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "K K k"}
+{"fn": "unmask_literals", "args": ["ſ s S", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "ſ s S"}
+{"fn": "unmask_literals", "args": ["x‍y 👨‍👩‍👧", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "x‍y 👨‍👩‍👧"}
+{"fn": "unmask_literals", "args": ["a b c　d", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "a b c　d"}
+{"fn": "unmask_literals", "args": ["١٢٣ ٤٥", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "١٢٣ ٤٥"}
+{"fn": "unmask_literals", "args": ["𝟘𝟙 ²³", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "𝟘𝟙 ²³"}
+{"fn": "unmask_literals", "args": ["snake_case foo-bar o'neil", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "snake_case foo-bar o'neil"}
+{"fn": "unmask_literals", "args": ["ǅungla Ǆ", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "ǅungla Ǆ"}
+{"fn": "unmask_literals", "args": ["one\r\ntwo threefour", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "one\r\ntwo threefour"}
+{"fn": "unmask_literals", "args": ["café café", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "café café"}
+{"fn": "unmask_literals", "args": ["ΣΑΣ σας ς", ["tab\tseparated", "tab\tseparatedΣΊΣΥΦΟΣ", "Hello World"]], "ok": "ΣΑΣ σας ς"}
+{"fn": "unmask_literals", "args": ["src/a/b.ts", ["b", "a", "B", "é", "10", "9", "a"]], "ok": "src/a/b.ts"}
+{"fn": "blank_protected", "args": ["a..b"], "kwargs": {"latin": true}, "ok": "    "}
+{"fn": "blank_protected", "args": ["straße😀"], "kwargs": {}, "ok": "straße😀"}
+{"fn": "blank_protected", "args": ["line1\nline2  padded  "], "kwargs": {"latin": true}, "ok": "     \n               "}
+{"fn": "blank_protected", "args": ["HELLO"], "kwargs": {}, "ok": "HELLO"}
+{"fn": "blank_protected", "args": ["a.b.c"], "kwargs": {"latin": false}, "ok": "a.b.c"}
+{"fn": "blank_protected", "args": ["﻿bom"], "kwargs": {}, "ok": "﻿bom"}
+{"fn": "blank_protected", "args": ["ΣΊΣΥΦΟΣ"], "kwargs": {"latin": false}, "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "blank_protected", "args": ["é"], "kwargs": {"latin": false}, "ok": "é"}
+{"fn": "blank_protected", "args": ["ns:key.path"], "kwargs": {"latin": true}, "ok": "  :        "}
+{"fn": "blank_protected", "args": ["😀"], "kwargs": {"latin": true}, "ok": "😀"}
+{"fn": "blank_protected", "args": ["src/a/b.ts"], "kwargs": {"latin": false}, "ok": "src/a/b.ts"}
+{"fn": "blank_protected", "args": ["emoji 👍🏽 mix"], "kwargs": {"latin": true}, "ok": "      👍🏽    "}
+{"fn": "blank_protected", "args": ["abns:key.path"], "kwargs": {}, "ok": "abns:key.path"}
+{"fn": "blank_protected", "args": ["a..bHELLO"], "kwargs": {}, "ok": "a..bHELLO"}
+{"fn": "blank_protected", "args": ["a:b:c😀"], "kwargs": {"latin": true}, "ok": " : : 😀"}
+{"fn": "blank_protected", "args": [""], "kwargs": {"latin": false}, "ok": ""}
+{"fn": "blank_protected", "args": ["  padded  "], "kwargs": {"latin": true}, "ok": "          "}
+{"fn": "blank_protected", "args": ["./x/**/*.jsontrailing."], "kwargs": {"latin": true}, "ok": "./ /**/*.            ."}
+{"fn": "blank_protected", "args": ["a"], "kwargs": {}, "ok": "a"}
+{"fn": "blank_protected", "args": ["hello"], "kwargs": {}, "ok": "hello"}
+{"fn": "blank_protected", "args": ["ünïcödé"], "kwargs": {"latin": true}, "ok": "ünïcödé"}
+{"fn": "blank_protected", "args": ["abc"], "kwargs": {"latin": false}, "ok": "abc"}
+{"fn": "blank_protected", "args": ["hello./x/**/*.json"], "kwargs": {"latin": false}, "ok": "hello./x/**/*.json"}
+{"fn": "blank_protected", "args": ["{name} has {count} items"], "kwargs": {"latin": false}, "ok": "{name} has {count} items"}
+{"fn": "blank_protected", "args": ["  padded  "], "kwargs": {}, "ok": "  padded  "}
+{"fn": "blank_protected", "args": ["emoji 👍🏽 mix"], "kwargs": {}, "ok": "emoji 👍🏽 mix"}
+{"fn": "blank_protected", "args": [".leadinga:b:c"], "kwargs": {"latin": false}, "ok": ".leadinga:b:c"}
+{"fn": "blank_protected", "args": [".leading"], "kwargs": {}, "ok": ".leading"}
+{"fn": "blank_protected", "args": ["ns:key.path"], "kwargs": {}, "ok": "ns:key.path"}
+{"fn": "blank_protected", "args": ["a:b:c"], "kwargs": {"latin": false}, "ok": "a:b:c"}
+{"fn": "blank_protected", "args": ["a:b:cHELLO"], "kwargs": {}, "ok": "a:b:cHELLO"}
+{"fn": "blank_protected", "args": ["日本語のテキスト"], "kwargs": {"latin": false}, "ok": "日本語のテキスト"}
+{"fn": "blank_protected", "args": ["abc"], "kwargs": {"latin": true}, "ok": "   "}
+{"fn": "blank_protected", "args": ["日本語のテキスト"], "kwargs": {}, "ok": "日本語のテキスト"}
+{"fn": "blank_protected", "args": ["😀ns:key.path"], "kwargs": {"latin": false}, "ok": "😀ns:key.path"}
+{"fn": "blank_protected", "args": ["src/a/b.ts{name} has {count} items"], "kwargs": {"latin": true}, "ok": "   / /    {    }     {     }      "}
+{"fn": "blank_protected", "args": ["ns:key.path"], "kwargs": {"latin": false}, "ok": "ns:key.path"}
+{"fn": "blank_protected", "args": ["日本語のテキスト"], "kwargs": {"latin": true}, "ok": "日本語のテキスト"}
+{"fn": "blank_protected", "args": ["hello worldhello"], "kwargs": {}, "ok": "hello worldhello"}
+{"fn": "blank_protected", "args": [":"], "kwargs": {"latin": true}, "ok": ":"}
+{"fn": "blank_protected", "args": ["hello"], "kwargs": {"latin": true}, "ok": "     "}
+{"fn": "blank_protected", "args": [""], "kwargs": {}, "ok": ""}
+{"fn": "blank_protected", "args": ["./x/**/*.json"], "kwargs": {"latin": true}, "ok": "./ /**/*.    "}
+{"fn": "blank_protected", "args": ["a"], "kwargs": {"latin": true}, "ok": " "}
+{"fn": "blank_protected", "args": ["a.b.c"], "kwargs": {"latin": true}, "ok": "     "}
+{"fn": "blank_protected", "args": ["trailing."], "kwargs": {"latin": true}, "ok": "        ."}
+{"fn": "blank_protected", "args": ["line1\nline2"], "kwargs": {}, "ok": "line1\nline2"}
+{"fn": "blank_protected", "args": ["hello"], "kwargs": {"latin": false}, "ok": "hello"}
+{"fn": "blank_protected", "args": ["hello日本語のテキスト"], "kwargs": {"latin": false}, "ok": "hello日本語のテキスト"}
+{"fn": "blank_protected", "args": ["😀"], "kwargs": {"latin": false}, "ok": "😀"}
+{"fn": "blank_protected", "args": ["line1\nline2"], "kwargs": {"latin": false}, "ok": "line1\nline2"}
+{"fn": "blank_protected", "args": ["a:b:c"], "kwargs": {"latin": true}, "ok": " : : "}
+{"fn": "blank_protected", "args": ["src/a/b.ts"], "kwargs": {}, "ok": "src/a/b.ts"}
+{"fn": "blank_protected", "args": ["a..b"], "kwargs": {}, "ok": "a..b"}
+{"fn": "blank_protected", "args": ["Hello World"], "kwargs": {"latin": true}, "ok": "           "}
+{"fn": "blank_protected", "args": ["ab"], "kwargs": {}, "ok": "ab"}
+{"fn": "blank_protected", "args": ["😀"], "kwargs": {}, "ok": "😀"}
+{"fn": "blank_protected", "args": ["a😀b😀c"], "kwargs": {"latin": true}, "ok": " 😀 😀 "}
+{"fn": "blank_protected", "args": ["a😀b😀c"], "kwargs": {}, "ok": "a😀b😀c"}
+{"fn": "blank_protected", "args": ["straße"], "kwargs": {}, "ok": "straße"}
+{"fn": "blank_protected", "args": ["straße"], "kwargs": {"latin": false}, "ok": "straße"}
+{"fn": "blank_protected", "args": [".leading"], "kwargs": {"latin": true}, "ok": ".       "}
+{"fn": "blank_protected", "args": ["HELLO"], "kwargs": {}, "ok": "HELLO"}
+{"fn": "blank_protected", "args": ["ab"], "kwargs": {"latin": true}, "ok": "  "}
+{"fn": "blank_protected", "args": ["İstanbul"], "kwargs": {"latin": true}, "ok": "        "}
+{"fn": "blank_protected", "args": ["﻿bom"], "kwargs": {}, "ok": "﻿bom"}
+{"fn": "blank_protected", "args": ["line1\nline2"], "kwargs": {"latin": true}, "ok": "     \n     "}
+{"fn": "blank_protected", "args": ["line1\nline2emoji 👍🏽 mix"], "kwargs": {"latin": false}, "ok": "line1\nline2emoji 👍🏽 mix"}
+{"fn": "blank_protected", "args": ["emoji 👍🏽 mix"], "kwargs": {"latin": false}, "ok": "emoji 👍🏽 mix"}
+{"fn": "blank_protected", "args": ["a..b"], "kwargs": {"latin": false}, "ok": "a..b"}
+{"fn": "blank_protected", "args": ["./x/**/*.json"], "kwargs": {}, "ok": "./x/**/*.json"}
+{"fn": "blank_protected", "args": ["a:b:cHELLO"], "kwargs": {"latin": false}, "ok": "a:b:cHELLO"}
+{"fn": "blank_protected", "args": ["key_name-1"], "kwargs": {"latin": false}, "ok": "key_name-1"}
+{"fn": "blank_protected", "args": ["line1\nline2a😀b😀c"], "kwargs": {}, "ok": "line1\nline2a😀b😀c"}
+{"fn": "blank_protected", "args": ["ab"], "kwargs": {}, "ok": "ab"}
+{"fn": "blank_protected", "args": ["İstanbul"], "kwargs": {"latin": false}, "ok": "        "}
+{"fn": "blank_protected", "args": ["a😀b😀ca.b.c"], "kwargs": {"latin": true}, "ok": " 😀 😀      "}
+{"fn": "blank_protected", "args": ["key_name-1"], "kwargs": {}, "ok": "key_name-1"}
+{"fn": "blank_protected", "args": ["İstanbulab"], "kwargs": {}, "ok": "          "}
+{"fn": "blank_protected", "args": ["{name} has {count} items"], "kwargs": {"latin": true}, "ok": "{    }     {     }      "}
+{"fn": "blank_protected", "args": [""], "kwargs": {"latin": true}, "ok": ""}
+{"fn": "blank_protected", "args": ["trailing."], "kwargs": {}, "ok": "trailing."}
+{"fn": "blank_protected", "args": [""], "kwargs": {}, "ok": ""}
+{"fn": "blank_protected", "args": ["HELLO"], "kwargs": {"latin": true}, "ok": "     "}
+{"fn": "blank_protected", "args": ["hello world"], "kwargs": {"latin": false}, "ok": "hello world"}
+{"fn": "blank_protected", "args": ["tab\tseparated{name} has {count} items"], "kwargs": {"latin": false}, "ok": "tab\tseparated{name} has {count} items"}
+{"fn": "blank_protected", "args": ["key_name-1trailing."], "kwargs": {"latin": true}, "ok": "                  ."}
+{"fn": "blank_protected", "args": ["abc"], "kwargs": {}, "ok": "abc"}
+{"fn": "blank_protected", "args": ["key_name-1"], "kwargs": {"latin": true}, "ok": "          "}
+{"fn": "blank_protected", "args": ["ünïcödé"], "kwargs": {"latin": false}, "ok": "ünïcödé"}
+{"fn": "blank_protected", "args": ["HELLO日本語のテキスト"], "kwargs": {"latin": false}, "ok": "HELLO日本語のテキスト"}
+{"fn": "blank_protected", "args": [".leadingİstanbul"], "kwargs": {"latin": true}, "ok": ".               "}
+{"fn": "blank_protected", "args": ["./x/**/*.jsonns:key.path"], "kwargs": {"latin": false}, "ok": "./x/**/*.jsonns:key.path"}
+{"fn": "blank_protected", "args": ["Hello World"], "kwargs": {"latin": false}, "ok": "Hello World"}
+{"fn": "blank_protected", "args": [".leading"], "kwargs": {"latin": false}, "ok": ".leading"}
+{"fn": "blank_protected", "args": ["{name} has {count} items"], "kwargs": {}, "ok": "{name} has {count} items"}
+{"fn": "blank_protected", "args": ["straße"], "kwargs": {}, "ok": "straße"}
+{"fn": "blank_protected", "args": ["İstanbul"], "kwargs": {}, "ok": "        "}
+{"fn": "blank_protected", "args": ["  padded  {name} has {count} items"], "kwargs": {"latin": true}, "ok": "          {    }     {     }      "}
+{"fn": "blank_protected", "args": ["  padded  "], "kwargs": {"latin": false}, "ok": "  padded  "}
+{"fn": "blank_protected", "args": ["hello world.leading"], "kwargs": {}, "ok": "hello world.leading"}
+{"fn": "blank_protected", "args": ["hello"], "kwargs": {}, "ok": "hello"}
+{"fn": "blank_protected", "args": ["a﻿bom"], "kwargs": {"latin": true}, "ok": " ﻿   "}
+{"fn": "blank_protected", "args": ["src/a/b.ts"], "kwargs": {}, "ok": "src/a/b.ts"}
+{"fn": "blank_protected", "args": ["abctrailing."], "kwargs": {}, "ok": "abctrailing."}
+{"fn": "blank_protected", "args": ["trailing..leading"], "kwargs": {"latin": false}, "ok": "trailing..leading"}
+{"fn": "blank_protected", "args": ["abcé"], "kwargs": {"latin": false}, "ok": "abcé"}
+{"fn": "blank_protected", "args": ["aemoji 👍🏽 mix"], "kwargs": {"latin": true}, "ok": "       👍🏽    "}
+{"fn": "blank_protected", "args": ["a😀b😀c"], "kwargs": {"latin": false}, "ok": "a😀b😀c"}
+{"fn": "blank_protected", "args": ["emoji 👍🏽 mix"], "kwargs": {}, "ok": "emoji 👍🏽 mix"}
+{"fn": "blank_protected", "args": ["straßehello"], "kwargs": {"latin": false}, "ok": "straßehello"}
+{"fn": "blank_protected", "args": ["a.b.ctrailing."], "kwargs": {"latin": false}, "ok": "a.b.ctrailing."}
+{"fn": "blank_protected", "args": ["ünïcödé"], "kwargs": {}, "ok": "ünïcödé"}
+{"fn": "blank_protected", "args": ["İstanbul"], "kwargs": {}, "ok": "        "}
+{"fn": "blank_protected", "args": ["hello world"], "kwargs": {}, "ok": "hello world"}
+{"fn": "blank_protected", "args": ["abc😀"], "kwargs": {}, "ok": "abc😀"}
+{"fn": "blank_protected", "args": ["src/a/b.ts"], "kwargs": {"latin": true}, "ok": "   / /    "}
+{"fn": "blank_protected", "args": ["a..b"], "kwargs": {}, "ok": "a..b"}
+{"fn": "blank_protected", "args": ["key_name-1"], "kwargs": {}, "ok": "key_name-1"}
+{"fn": "blank_protected", "args": ["abc"], "kwargs": {}, "ok": "abc"}
+{"fn": "blank_protected", "args": ["ab"], "kwargs": {"latin": false}, "ok": "ab"}
+{"fn": "blank_protected", "args": ["﻿bomstraße"], "kwargs": {"latin": false}, "ok": "﻿bomstraße"}
+{"fn": "blank_protected", "args": ["ns:key.patha"], "kwargs": {"latin": false}, "ok": "ns:key.patha"}
+{"fn": "blank_protected", "args": ["é"], "kwargs": {"latin": true}, "ok": " ́"}
+{"fn": "blank_protected", "args": ["  padded  "], "kwargs": {}, "ok": "  padded  "}
+{"fn": "blank_protected", "args": ["a:b:ckey_name-1"], "kwargs": {"latin": false}, "ok": "a:b:ckey_name-1"}
+{"fn": "blank_protected", "args": ["helloHELLO"], "kwargs": {}, "ok": "helloHELLO"}
+{"fn": "blank_protected", "args": ["😀"], "kwargs": {}, "ok": "😀"}
+{"fn": "blank_protected", "args": ["straße"], "kwargs": {"latin": true}, "ok": "      "}
+{"fn": "blank_protected", "args": ["tab\tseparated"], "kwargs": {"latin": false}, "ok": "tab\tseparated"}
+{"fn": "blank_protected", "args": ["emoji 👍🏽 mixab"], "kwargs": {"latin": true}, "ok": "      👍🏽      "}
+{"fn": "blank_protected", "args": ["hello world"], "kwargs": {}, "ok": "hello world"}
+{"fn": "blank_protected", "args": ["straßestraße"], "kwargs": {"latin": false}, "ok": "straßestraße"}
+{"fn": "blank_protected", "args": ["﻿bom😀"], "kwargs": {"latin": false}, "ok": "﻿bom😀"}
+{"fn": "blank_protected", "args": ["tab\tseparated﻿bom"], "kwargs": {}, "ok": "tab\tseparated﻿bom"}
+{"fn": "blank_protected", "args": ["ΣΊΣΥΦΟΣ"], "kwargs": {"latin": true}, "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "blank_protected", "args": ["a😀b😀ckey_name-1"], "kwargs": {"latin": true}, "ok": " 😀 😀           "}
+{"fn": "blank_protected", "args": ["﻿bom"], "kwargs": {"latin": true}, "ok": "﻿   "}
+{"fn": "blank_protected", "args": ["ns:key.patha..b"], "kwargs": {}, "ok": "ns:key.patha..b"}
+{"fn": "blank_protected", "args": ["éns:key.path"], "kwargs": {"latin": false}, "ok": "éns:key.path"}
+{"fn": "blank_protected", "args": ["trailing."], "kwargs": {"latin": false}, "ok": "trailing."}
+{"fn": "blank_protected", "args": ["trailing.ab"], "kwargs": {}, "ok": "trailing.ab"}
+{"fn": "blank_protected", "args": ["HELLO"], "kwargs": {"latin": false}, "ok": "HELLO"}
+{"fn": "blank_protected", "args": ["a.b.c"], "kwargs": {}, "ok": "a.b.c"}
+{"fn": "blank_protected", "args": ["😀line1\nline2"], "kwargs": {"latin": false}, "ok": "😀line1\nline2"}
+{"fn": "blank_protected", "args": ["hello world{name} has {count} items"], "kwargs": {}, "ok": "hello world{name} has {count} items"}
+{"fn": "blank_protected", "args": ["Hello WorldHello World"], "kwargs": {}, "ok": "Hello WorldHello World"}
+{"fn": "blank_protected", "args": ["ünïcödé"], "kwargs": {}, "ok": "ünïcödé"}
+{"fn": "blank_protected", "args": ["{name} has {count} itemsstraße"], "kwargs": {"latin": false}, "ok": "{name} has {count} itemsstraße"}
+{"fn": "blank_protected", "args": ["ΣΊΣΥΦΟΣ.leading"], "kwargs": {"latin": true}, "ok": "ΣΊΣΥΦΟΣ.       "}
+{"fn": "blank_protected", "args": ["{name} has {count} items"], "kwargs": {}, "ok": "{name} has {count} items"}
+{"fn": "blank_protected", "args": ["ΣΊΣΥΦΟΣ"], "kwargs": {}, "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "blank_protected", "args": ["a😀b😀ca.b.c"], "kwargs": {}, "ok": "a😀b😀ca.b.c"}
+{"fn": "blank_protected", "args": ["﻿bom"], "kwargs": {"latin": false}, "ok": "﻿bom"}
+{"fn": "blank_protected", "args": ["tab\tseparated"], "kwargs": {"latin": true}, "ok": "   \t         "}
+{"fn": "blank_protected", "args": ["./x/**/*.json./x/**/*.json"], "kwargs": {}, "ok": "./x/**/*.json./x/**/*.json"}
+{"fn": "blank_protected", "args": ["hello world"], "kwargs": {"latin": true}, "ok": "           "}
+{"fn": "blank_protected", "args": ["{name} has {count} items日本語のテキスト"], "kwargs": {}, "ok": "{name} has {count} items日本語のテキスト"}
+{"fn": "blank_protected", "args": ["./x/**/*.json"], "kwargs": {"latin": false}, "ok": "./x/**/*.json"}
+{"fn": "blank_protected", "args": ["a:b:c"], "kwargs": {}, "ok": "a:b:c"}
+{"fn": "blank_protected", "args": ["İstanbula.b.c"], "kwargs": {"latin": false}, "ok": "             "}
+{"fn": "blank_protected", "args": ["éhello world"], "kwargs": {"latin": false}, "ok": "éhello world"}
+{"fn": "blank_protected", "args": ["a"], "kwargs": {"latin": false}, "ok": "a"}
+{"fn": "blank_protected", "args": ["Hello World"], "kwargs": {}, "ok": "Hello World"}
+{"fn": "blank_protected", "args": ["tab\tseparated"], "kwargs": {}, "ok": "tab\tseparated"}
+{"fn": "blank_protected", "args": [":tab\tseparated"], "kwargs": {}, "ok": ":tab\tseparated"}
+{"fn": "blank_protected", "args": ["日本語のテキストa"], "kwargs": {"latin": false}, "ok": "日本語のテキストa"}
+{"fn": "blank_protected", "args": ["ΣΊΣΥΦΟΣ"], "kwargs": {}, "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "blank_protected", "args": ["./x/**/*.jsonΣΊΣΥΦΟΣ"], "kwargs": {"latin": false}, "ok": "./x/**/*.jsonΣΊΣΥΦΟΣ"}
+{"fn": "blank_protected", "args": ["Hello Worldab"], "kwargs": {"latin": true}, "ok": "             "}
+{"fn": "blank_protected", "args": [":.leading"], "kwargs": {"latin": false}, "ok": ":.leading"}
+{"fn": "blank_protected", "args": ["aa:b:c"], "kwargs": {"latin": false}, "ok": "aa:b:c"}
+{"fn": "blank_protected", "args": ["key_name-1ab"], "kwargs": {"latin": true}, "ok": "            "}
+{"fn": "blank_protected", "args": ["ns:key.path"], "kwargs": {}, "ok": "ns:key.path"}
+{"fn": "blank_protected", "args": ["日本語のテキストHello World"], "kwargs": {"latin": true}, "ok": "日本語のテキストHello      "}
+{"fn": "blank_protected", "args": ["emoji 👍🏽 mixkey_name-1"], "kwargs": {"latin": true}, "ok": "      👍🏽              "}
+{"fn": "blank_protected", "args": ["﻿bom{name} has {count} items"], "kwargs": {"latin": true}, "ok": "﻿   {    }     {     }      "}
+{"fn": "blank_protected", "args": ["hello worldemoji 👍🏽 mix"], "kwargs": {"latin": true}, "ok": "                 👍🏽    "}
+{"fn": "blank_protected", "args": ["a.b.cabc"], "kwargs": {"latin": false}, "ok": "a.b.cabc"}
+{"fn": "blank_protected", "args": ["tab\tseparated./x/**/*.json"], "kwargs": {"latin": false}, "ok": "tab\tseparated./x/**/*.json"}
+{"fn": "blank_protected", "args": ["HELLOa..b"], "kwargs": {"latin": true}, "ok": "         "}
+{"fn": "blank_protected", "args": ["ΣΊΣΥΦΟΣsrc/a/b.ts"], "kwargs": {}, "ok": "ΣΊΣΥΦΟΣsrc/a/b.ts"}
+{"fn": "blank_protected", "args": ["HELLOa..b"], "kwargs": {"latin": false}, "ok": "HELLOa..b"}
+{"fn": "blank_protected", "args": ["HELLOline1\nline2"], "kwargs": {"latin": true}, "ok": "          \n     "}
+{"fn": "blank_protected", "args": ["trailing.Hello World"], "kwargs": {"latin": false}, "ok": "trailing.Hello World"}
+{"fn": "blank_protected", "args": ["a😀b😀c日本語のテキスト"], "kwargs": {"latin": false}, "ok": "a😀b😀c日本語のテキスト"}
+{"fn": "blank_protected", "args": ["aΣΊΣΥΦΟΣ"], "kwargs": {"latin": false}, "ok": "aΣΊΣΥΦΟΣ"}
+{"fn": "blank_protected", "args": ["HELLO{name} has {count} items"], "kwargs": {"latin": false}, "ok": "HELLO{name} has {count} items"}
+{"fn": "blank_protected", "args": ["ΣΊΣΥΦΟΣns:key.path"], "kwargs": {"latin": true}, "ok": "ΣΊΣΥΦΟΣns:        "}
+{"fn": "blank_protected", "args": ["é"], "kwargs": {}, "ok": "é"}
+{"fn": "blank_protected", "args": ["ΣΊΣΥΦΟΣa..b"], "kwargs": {"latin": true}, "ok": "ΣΊΣΥΦΟΣa.. "}
+{"fn": "blank_protected", "args": ["a.b.c"], "kwargs": {}, "ok": "a.b.c"}
+{"fn": "blank_protected", "args": ["étab\tseparated"], "kwargs": {"latin": false}, "ok": "étab\tseparated"}
+{"fn": "blank_protected", "args": ["abc{name} has {count} items"], "kwargs": {"latin": true}, "ok": "   {    }     {     }      "}
+{"fn": "blank_protected", "args": [".leadinga"], "kwargs": {}, "ok": ".leadinga"}
+{"fn": "blank_protected", "args": ["a😀b😀cns:key.path"], "kwargs": {"latin": false}, "ok": "a😀b😀cns:key.path"}
+{"fn": "blank_protected", "args": ["ünïcödéstraße"], "kwargs": {"latin": false}, "ok": "ünïcödéstraße"}
+{"fn": "blank_protected", "args": [":"], "kwargs": {}, "ok": ":"}
+{"fn": "blank_protected", "args": ["a"], "kwargs": {}, "ok": "a"}
+{"fn": "blank_protected", "args": ["ns:key.path./x/**/*.json"], "kwargs": {"latin": false}, "ok": "ns:key.path./x/**/*.json"}
+{"fn": "blank_protected", "args": ["héllo wörld"], "kwargs": {"latin": true}, "ok": "           "}
+{"fn": "blank_protected", "args": ["👍🏽 thumbs"], "kwargs": {"latin": true}, "ok": "👍🏽       "}
+{"fn": "blank_protected", "args": ["日本語"], "kwargs": {"latin": true}, "ok": "日本語"}
+{"fn": "blank_protected", "args": ["ılık ırmak"], "kwargs": {"latin": true}, "ok": "          "}
+{"fn": "blank_protected", "args": ["👨‍👩‍👧 family"], "kwargs": {"latin": true}, "ok": "👨‍👩‍👧       "}
+{"fn": "blank_protected", "args": ["a b"], "kwargs": {"latin": true}, "ok": "   "}
+{"fn": "blank_protected", "args": ["a😀b"], "kwargs": {"latin": true}, "ok": " 😀 "}
+{"fn": "blank_protected", "args": ["a²b x½ y①"], "kwargs": {"latin": true}, "ok": "         "}
+{"fn": "blank_protected", "args": ["aⅠb Ⅻ"], "kwargs": {"latin": true}, "ok": "    Ⅻ"}
+{"fn": "blank_protected", "args": ["a𐐀b 𝐀bc"], "kwargs": {"latin": true}, "ok": "    𝐀bc"}
+{"fn": "blank_protected", "args": ["कि ٣٤"], "kwargs": {"latin": true}, "ok": "कि ٣٤"}
+{"fn": "blank_protected", "args": ["Iı İi"], "kwargs": {"latin": true}, "ok": "     "}
+{"fn": "blank_protected", "args": ["K K k"], "kwargs": {"latin": true}, "ok": "     "}
+{"fn": "blank_protected", "args": ["ſ s S"], "kwargs": {"latin": true}, "ok": "     "}
+{"fn": "blank_protected", "args": ["x‍y 👨‍👩‍👧"], "kwargs": {"latin": true}, "ok": " ‍  👨‍👩‍👧"}
+{"fn": "blank_protected", "args": ["a b c　d"], "kwargs": {"latin": true}, "ok": "     　 "}
+{"fn": "blank_protected", "args": ["١٢٣ ٤٥"], "kwargs": {"latin": true}, "ok": "١٢٣ ٤٥"}
+{"fn": "blank_protected", "args": ["𝟘𝟙 ²³"], "kwargs": {"latin": true}, "ok": "𝟘𝟙 ²³"}
+{"fn": "blank_protected", "args": ["snake_case foo-bar o'neil"], "kwargs": {"latin": true}, "ok": "                         "}
+{"fn": "blank_protected", "args": ["ǅungla Ǆ"], "kwargs": {"latin": true}, "ok": "ǅungla Ǆ"}
+{"fn": "blank_protected", "args": ["one\r\ntwo threefour"], "kwargs": {"latin": true}, "ok": "   \r\n             "}
+{"fn": "blank_protected", "args": ["café café"], "kwargs": {"latin": true}, "ok": "    ́     "}
+{"fn": "blank_protected", "args": ["ΣΑΣ σας ς"], "kwargs": {"latin": true}, "ok": "ΣΑΣ σας ς"}
+{"fn": "fix_prose", "args": ["tab\tseparated", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [".leading", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["line1\nline2", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [".leadinghello world", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["﻿bomhello world", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["tab\tseparated", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["straße", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [":", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["X", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a..btrailing.", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a..b", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["Hello World  padded  ", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["HELLO", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hello world", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["﻿bom😀", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["./x/**/*.json", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["tab\tseparated", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["HELLO", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["é", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [".leading", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["line1\nline2", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["tab\tseparated", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["straße", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a😀b😀ckey_name-1", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a..b", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ab./x/**/*.json", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["line1\nline2", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["abc", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["trailing.", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["﻿bom", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hello", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["line1\nline2:", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a😀b😀c", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a:b:c", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["line1\nline2", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a:b:c", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a😀b😀c", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hello world", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["aba:b:c", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["emoji 👍🏽 mixkey_name-1", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["abc", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a.b.c", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["line1\nline2", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hellotab\tseparated", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ünïcödétrailing.", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["src/a/b.ts", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ΣΊΣΥΦΟΣ", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [".leading", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["key_name-1", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ΣΊΣΥΦΟΣ", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a😀b😀c", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["{name} has {count} items", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a😀b😀c", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["  padded  ", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["Hello WorldHello World", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["abc", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a.b.c", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hello worldab", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["key_name-1", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [".leading", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["HELLO", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["./x/**/*.json", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["Hello World", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a😀b😀c", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["./x/**/*.json", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["trailing.", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["emoji 👍🏽 mix", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hello world", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [".leading{name} has {count} items", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hello", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["é:", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ΣΊΣΥΦΟΣ", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["日本語のテキスト", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["straße", "traße"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ünïcödé", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ΣΊΣΥΦΟΣHELLO", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["tab\tseparated", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a:b:c", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a..b", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ΣΊΣΥΦΟΣa", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ünïcödé", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ab", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["{name} has {count} items", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a.b.c", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ns:key.path", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["HELLOab", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["Hello World", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["straße", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["İstanbul", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["﻿bom", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["aa.b.c", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["x", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["key_name-1", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["é", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["./x/**/*.json", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ünïcödé", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["emoji 👍🏽 mixtrailing.", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["  padded  ﻿bom", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ünïcödé", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["{name} has {count} items", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["src/a/b.tshello", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["key_name-1", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [":", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["key_name-1:", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a..b", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [".leading", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["{name} has {count} items", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["HELLO", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["Hello World", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["./x/**/*.json", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["abc", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["src/a/b.ts:", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ab", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["trailing.HELLO", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["key_name-1", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["  padded  ", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["{name} has {count} items./x/**/*.json", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["éİstanbul", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ns:key.path", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["日本語のテキスト", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["./x/**/*.jsona..b", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["  padded  ", "PAD"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["é", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["éa:b:c", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["é", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["tab\tseparatedHello World", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["{name} has {count} items", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["﻿bom", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hello", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["line1\nline2", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["{name} has {count} itemsa😀b😀c", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ünïcödé", "N"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["é", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["./x/**/*.json", "**/*."], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ünïcödé", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a.b.cab", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["😀", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["İstanbul", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["abc", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ΣΊΣΥΦΟΣ", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["tab\tseparated", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [":", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["éHELLO", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["日本語のテキスト", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["é", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [":a.b.c", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["emoji 👍🏽 mixünïcödé", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["trailing.", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["😀", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ΣΊΣΥΦΟΣ", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["HELLO日本語のテキスト", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hello", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["emoji 👍🏽 mix", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["{name} has {count} itemsab", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["line1\nline2key_name-1", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["abHello World", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["日本語のテキスト", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["tab\tseparated", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a.b.c", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["é", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["😀", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a:b:cünïcödé", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["abc", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["key_name-1", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": [".leading", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["straße", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["src/a/b.ts", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ünïcödé", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["straße", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a😀b😀c", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a.b.cünïcödé", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ab", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["./x/**/*.jsonsrc/a/b.ts", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["﻿bom", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["HELLO", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ns:key.pathtrailing.", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["﻿bom", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["helloa😀b😀c", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["Hello World", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["trailing.😀", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["日本語のテキスト", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["tab\tseparated日本語のテキスト", []], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a.b.c", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["line1\nline2", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["hello world", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["  padded  ", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a😀b😀cns:key.path", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["İstanbul", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["tab\tseparated:", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["emoji 👍🏽 mixa..b", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["straße", 0], "error": "AttributeError: 'int' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["aHello World", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["", null], "error": "AttributeError: 'NoneType' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["  padded  ", "d"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["héllo wörld", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["👍🏽 thumbs", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["日本語", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["straße", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ılık ırmak", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["👨‍👩‍👧 family", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a b", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a😀b", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["﻿bom", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a²b x½ y①", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["aⅠb Ⅻ", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a𐐀b 𝐀bc", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["कि ٣٤", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["Iı İi", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["K K k", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ſ s S", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["x‍y 👨‍👩‍👧", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["a b c　d", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["١٢٣ ٤٥", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["𝟘𝟙 ²³", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["snake_case foo-bar o'neil", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ǅungla Ǆ", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["one\r\ntwo threefour", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["café café", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_prose", "args": ["ΣΑΣ σας ς", {}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["./x/**/*.json", {"$undefined": true}], "ok": "./x/\\**/*.json"}
+{"fn": "fix_text", "args": ["ΣΊΣΥΦΟΣ", {"$undefined": true}], "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "fix_text", "args": ["straße", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["é", {"$undefined": true}], "ok": "é"}
+{"fn": "fix_text", "args": ["hello", {"$undefined": true}], "ok": "hello"}
+{"fn": "fix_text", "args": ["", {"a": "b"}], "ok": ""}
+{"fn": "fix_text", "args": [":line1\nline2", {}], "ok": ":line1\nline2"}
+{"fn": "fix_text", "args": ["tab\tseparated", {"$undefined": true}], "ok": "tab\tseparated"}
+{"fn": "fix_text", "args": ["İstanbulHELLO"], "ok": "İstanbulHELLO"}
+{"fn": "fix_text", "args": ["emoji 👍🏽 mix", {"$undefined": true}], "ok": "emoji 👍🏽 mix"}
+{"fn": "fix_text", "args": ["line1\nline2", {"$undefined": true}], "ok": "line1\nline2"}
+{"fn": "fix_text", "args": ["a", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["﻿bomabc", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["tab\tseparated", {}], "ok": "tab\tseparated"}
+{"fn": "fix_text", "args": ["a..b", {"$undefined": true}], "ok": "a..b"}
+{"fn": "fix_text", "args": [":", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": [":", {"$undefined": true}], "ok": ":"}
+{"fn": "fix_text", "args": [""], "ok": ""}
+{"fn": "fix_text", "args": ["  padded  trailing.", {"$undefined": true}], "ok": "  padded trailing."}
+{"fn": "fix_text", "args": ["é", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["ab", {"$undefined": true}], "ok": "ab"}
+{"fn": "fix_text", "args": ["trailing.", {"$undefined": true}], "ok": "trailing."}
+{"fn": "fix_text", "args": ["src/a/b.ts", {"$undefined": true}], "ok": "src/a/b.ts"}
+{"fn": "fix_text", "args": ["straße", {"$undefined": true}], "ok": "straße"}
+{"fn": "fix_text", "args": ["日本語のテキスト", {}], "ok": "日本語のテキスト"}
+{"fn": "fix_text", "args": ["src/a/b.ts", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["key_name-1İstanbul", 0], "ok": "key_name-1İstanbul"}
+{"fn": "fix_text", "args": ["key_name-1", []], "ok": "key_name-1"}
+{"fn": "fix_text", "args": ["a", []], "ok": "a"}
+{"fn": "fix_text", "args": ["Hello Worlda😀b😀c", {"$undefined": true}], "ok": "Hello Worlda😀b😀c"}
+{"fn": "fix_text", "args": ["tab\tseparatedline1\nline2", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["HELLO"], "ok": "HELLO"}
+{"fn": "fix_text", "args": ["tab\tseparated"], "ok": "tab\tseparated"}
+{"fn": "fix_text", "args": ["trailing."], "ok": "trailing."}
+{"fn": "fix_text", "args": ["line1\nline2", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["src/a/b.ts", 0], "ok": "src/a/b.ts"}
+{"fn": "fix_text", "args": ["ΣΊΣΥΦΟΣ", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["a", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["a.b.c", []], "ok": "a.b.c"}
+{"fn": "fix_text", "args": ["日本語のテキスト", {"$undefined": true}], "ok": "日本語のテキスト"}
+{"fn": "fix_text", "args": ["HELLO", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["x", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["src/a/b.ts"], "ok": "src/a/b.ts"}
+{"fn": "fix_text", "args": ["a.b.c", {"$undefined": true}], "ok": "a.b.c"}
+{"fn": "fix_text", "args": ["ünïcödé", {}], "ok": "ünïcödé"}
+{"fn": "fix_text", "args": ["hello world", {"$undefined": true}], "ok": "hello world"}
+{"fn": "fix_text", "args": ["İstanbul", {"$undefined": true}], "ok": "İstanbul"}
+{"fn": "fix_text", "args": ["İstanbul./x/**/*.json"], "ok": "İstanbul./x/\\**/*.json"}
+{"fn": "fix_text", "args": ["a:b:cline1\nline2", []], "ok": "a:b:cline1\nline2"}
+{"fn": "fix_text", "args": ["  padded  ", null], "ok": "  padded  "}
+{"fn": "fix_text", "args": ["straße"], "ok": "straße"}
+{"fn": "fix_text", "args": ["abc", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["ns:key.path"], "ok": "ns:key.path"}
+{"fn": "fix_text", "args": ["HELLO", []], "ok": "HELLO"}
+{"fn": "fix_text", "args": ["{name} has {count} items"], "ok": "{name} has {count} items"}
+{"fn": "fix_text", "args": ["emoji 👍🏽 mix", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["X", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["ünïcödé"], "ok": "ünïcödé"}
+{"fn": "fix_text", "args": ["a.b.c", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["ΣΊΣΥΦΟΣ", null], "ok": "ΣΊΣΥΦΟΣ"}
+{"fn": "fix_text", "args": ["a.b.c", 0], "ok": "a.b.c"}
+{"fn": "fix_text", "args": ["ΣΊΣΥΦΟΣ", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["ünïcödé", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["a", {"$undefined": true}], "ok": "a"}
+{"fn": "fix_text", "args": ["éünïcödé"], "ok": "éünïcödé"}
+{"fn": "fix_text", "args": ["  padded  ", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["ab", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["😀", null], "ok": "😀"}
+{"fn": "fix_text", "args": [".leading"], "ok": ".leading"}
+{"fn": "fix_text", "args": ["HELLO", {"$undefined": true}], "ok": "HELLO"}
+{"fn": "fix_text", "args": ["a.b.cabc", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["abc", null], "ok": "abc"}
+{"fn": "fix_text", "args": ["hello world", {}], "ok": "hello world"}
+{"fn": "fix_text", "args": ["a:b:c", {}], "ok": "a:b:c"}
+{"fn": "fix_text", "args": ["ünïcödé", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["{name} has {count} items", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["straße", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["abc"], "ok": "abc"}
+{"fn": "fix_text", "args": ["./x/**/*.json", []], "ok": "./x/\\**/*.json"}
+{"fn": "fix_text", "args": ["hello"], "ok": "hello"}
+{"fn": "fix_text", "args": ["😀", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["a", {}], "ok": "a"}
+{"fn": "fix_text", "args": [".leadingsrc/a/b.ts", null], "ok": ".leadingsrc/a/b.ts"}
+{"fn": "fix_text", "args": ["tab\tseparatedhello", {"$undefined": true}], "ok": "tab\tseparatedhello"}
+{"fn": "fix_text", "args": ["emoji 👍🏽 mix", null], "ok": "emoji 👍🏽 mix"}
+{"fn": "fix_text", "args": ["emoji 👍🏽 mixé", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["trailing.", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["line1\nline2./x/**/*.json", {"$undefined": true}], "ok": "line1\nline2./x/\\**/*.json"}
+{"fn": "fix_text", "args": ["", null], "ok": ""}
+{"fn": "fix_text", "args": ["ab", {}], "ok": "ab"}
+{"fn": "fix_text", "args": ["HELLO", 0], "ok": "HELLO"}
+{"fn": "fix_text", "args": ["{name} has {count} items", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["😀", 0], "ok": "😀"}
+{"fn": "fix_text", "args": ["trailing.", 0], "ok": "trailing."}
+{"fn": "fix_text", "args": ["日本語のテキスト", []], "ok": "日本語のテキスト"}
+{"fn": "fix_text", "args": ["﻿bom"], "ok": "bom"}
+{"fn": "fix_text", "args": ["ns:key.path", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["./x/**/*.json"], "ok": "./x/\\**/*.json"}
+{"fn": "fix_text", "args": ["a..b"], "ok": "a..b"}
+{"fn": "fix_text", "args": ["./x/**/*.jsonİstanbul", {}], "ok": "./x/\\**/*.jsonİstanbul"}
+{"fn": "fix_text", "args": ["a:b:c", {"$undefined": true}], "ok": "a:b:c"}
+{"fn": "fix_text", "args": ["ab", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["key_name-1", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["a:b:c", 0], "ok": "a:b:c"}
+{"fn": "fix_text", "args": ["ünïcödé", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["﻿bom", {"$undefined": true}], "ok": "bom"}
+{"fn": "fix_text", "args": ["Hello World"], "ok": "Hello World"}
+{"fn": "fix_text", "args": ["Hello World", {}], "ok": "Hello World"}
+{"fn": "fix_text", "args": ["abc", {"$undefined": true}], "ok": "abc"}
+{"fn": "fix_text", "args": ["line1\nline2"], "ok": "line1\nline2"}
+{"fn": "fix_text", "args": ["İstanbul"], "ok": "İstanbul"}
+{"fn": "fix_text", "args": ["a", null], "ok": "a"}
+{"fn": "fix_text", "args": ["HELLO", {}], "ok": "HELLO"}
+{"fn": "fix_text", "args": ["ünïcödé", {"$undefined": true}], "ok": "ünïcödé"}
+{"fn": "fix_text", "args": ["éhello", []], "ok": "éhello"}
+{"fn": "fix_text", "args": ["hello", []], "ok": "hello"}
+{"fn": "fix_text", "args": ["key_name-1tab\tseparated", null], "ok": "key_name-1tab\tseparated"}
+{"fn": "fix_text", "args": ["日本語のテキスト﻿bom", {"$undefined": true}], "ok": "日本語のテキストbom"}
+{"fn": "fix_text", "args": ["emoji 👍🏽 mix", 0], "ok": "emoji 👍🏽 mix"}
+{"fn": "fix_text", "args": ["日本語のテキスト"], "ok": "日本語のテキスト"}
+{"fn": "fix_text", "args": ["é", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": [".leading", []], "ok": ".leading"}
+{"fn": "fix_text", "args": ["a:b:cab", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["./x/**/*.json", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["./x/**/*.json", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["src/a/b.ts{name} has {count} items"], "ok": "src/a/b.ts{name} has {count} items"}
+{"fn": "fix_text", "args": ["ab", []], "ok": "ab"}
+{"fn": "fix_text", "args": ["a", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["abcİstanbul", {"$undefined": true}], "ok": "abcİstanbul"}
+{"fn": "fix_text", "args": [".leading", {"$undefined": true}], "ok": ".leading"}
+{"fn": "fix_text", "args": ["😀", []], "ok": "😀"}
+{"fn": "fix_text", "args": ["a.b.c"], "ok": "a.b.c"}
+{"fn": "fix_text", "args": ["tab\tseparateda😀b😀c", []], "ok": "tab\tseparateda😀b😀c"}
+{"fn": "fix_text", "args": ["a:b:c﻿bom", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": [":"], "ok": ":"}
+{"fn": "fix_text", "args": ["tab\tseparated", []], "ok": "tab\tseparated"}
+{"fn": "fix_text", "args": ["a😀b😀c", []], "ok": "a😀b😀c"}
+{"fn": "fix_text", "args": ["./x/**/*.json", 0], "ok": "./x/\\**/*.json"}
+{"fn": "fix_text", "args": ["./x/**/*.jsonabc", {"$undefined": true}], "ok": "./x/\\**/*.jsonabc"}
+{"fn": "fix_text", "args": ["HELLOsrc/a/b.ts", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["key_name-1"], "ok": "key_name-1"}
+{"fn": "fix_text", "args": ["ab"], "ok": "ab"}
+{"fn": "fix_text", "args": ["hello world", 0], "ok": "hello world"}
+{"fn": "fix_text", "args": ["tab\tseparated", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["emoji 👍🏽 mixa:b:c", null], "ok": "emoji 👍🏽 mixa:b:c"}
+{"fn": "fix_text", "args": ["a", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["emoji 👍🏽 mixhello world", {"$undefined": true}], "ok": "emoji 👍🏽 mixhello world"}
+{"fn": "fix_text", "args": ["😀", {"$undefined": true}], "ok": "😀"}
+{"fn": "fix_text", "args": ["a"], "ok": "a"}
+{"fn": "fix_text", "args": ["tab\tseparated", 0], "ok": "tab\tseparated"}
+{"fn": "fix_text", "args": [".leadingemoji 👍🏽 mix", 0], "ok": ".leadingemoji 👍🏽 mix"}
+{"fn": "fix_text", "args": ["a😀b😀c", 0], "ok": "a😀b😀c"}
+{"fn": "fix_text", "args": ["hello", 0], "ok": "hello"}
+{"fn": "fix_text", "args": ["{name} has {count} items", {"$undefined": true}], "ok": "{name} has {count} items"}
+{"fn": "fix_text", "args": ["a:b:c", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["Hello World", "l"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["ns:key.path.leading", 0], "ok": "ns:key.path.leading"}
+{"fn": "fix_text", "args": ["hello world"], "ok": "hello world"}
+{"fn": "fix_text", "args": ["HELLO日本語のテキスト", {"$undefined": true}], "ok": "HELLO日本語のテキスト"}
+{"fn": "fix_text", "args": ["src/a/b.ts", []], "ok": "src/a/b.ts"}
+{"fn": "fix_text", "args": ["a😀b😀c"], "ok": "a😀b😀c"}
+{"fn": "fix_text", "args": ["﻿bom", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["straße", 0], "ok": "straße"}
+{"fn": "fix_text", "args": ["aline1\nline2"], "ok": "aline1\nline2"}
+{"fn": "fix_text", "args": ["{name} has {count} items  padded  ", null], "ok": "{name} has {count} items padded  "}
+{"fn": "fix_text", "args": ["😀ab", {"$undefined": true}], "ok": "😀ab"}
+{"fn": "fix_text", "args": ["Hello Worldhello world", {"$undefined": true}], "ok": "Hello Worldhello world"}
+{"fn": "fix_text", "args": ["a", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["é", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["é", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["é", 0], "ok": "é"}
+{"fn": "fix_text", "args": ["a..b", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["abΣΊΣΥΦΟΣ", {"$undefined": true}], "ok": "abΣΊΣΥΦΟΣ"}
+{"fn": "fix_text", "args": ["é", null], "ok": "é"}
+{"fn": "fix_text", "args": ["ünïcödéhello world", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["😀", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["ünïcödé", null], "ok": "ünïcödé"}
+{"fn": "fix_text", "args": ["İstanbulns:key.path"], "ok": "İstanbulns:key.path"}
+{"fn": "fix_text", "args": [":", []], "ok": ":"}
+{"fn": "fix_text", "args": [":", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["a:b:c"], "ok": "a:b:c"}
+{"fn": "fix_text", "args": ["tab\tseparated", null], "ok": "tab\tseparated"}
+{"fn": "fix_text", "args": ["İstanbul", {"a": {"b": "c"}}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["﻿bom", 0], "ok": "bom"}
+{"fn": "fix_text", "args": ["hello", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["key_name-1", {"$undefined": true}], "ok": "key_name-1"}
+{"fn": "fix_text", "args": ["trailing.", {}], "ok": "trailing."}
+{"fn": "fix_text", "args": ["a😀b😀ctab\tseparated", []], "ok": "a😀b😀ctab\tseparated"}
+{"fn": "fix_text", "args": ["ns:key.path", {"$undefined": true}], "ok": "ns:key.path"}
+{"fn": "fix_text", "args": [".leading", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["İstanbul😀", []], "ok": "İstanbul😀"}
+{"fn": "fix_text", "args": ["trailing.", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["straße", null], "ok": "straße"}
+{"fn": "fix_text", "args": ["😀"], "ok": "😀"}
+{"fn": "fix_text", "args": ["hellohello", "x"], "error": "AttributeError: 'str' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["src/a/b.ts", true], "error": "AttributeError: 'bool' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["ns:key.path", ["a", 1]], "error": "AttributeError: 'list' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["trailing.emoji 👍🏽 mix", {"$undefined": true}], "ok": "trailing.emoji 👍🏽 mix"}
+{"fn": "fix_text", "args": ["line1\nline2", null], "ok": "line1\nline2"}
+{"fn": "fix_text", "args": ["line1\nline2", {"a": "b"}], "error": "AttributeError: 'dict' object has no attribute 'quotes'"}
+{"fn": "fix_text", "args": ["héllo wörld", {"$undefined": true}], "ok": "héllo wörld"}
+{"fn": "fix_text", "args": ["👍🏽 thumbs", {"$undefined": true}], "ok": "👍🏽 thumbs"}
+{"fn": "fix_text", "args": ["日本語", {"$undefined": true}], "ok": "日本語"}
+{"fn": "fix_text", "args": ["", {"$undefined": true}], "ok": ""}
+{"fn": "fix_text", "args": ["ılık ırmak", {"$undefined": true}], "ok": "ılık ırmak"}
+{"fn": "fix_text", "args": ["👨‍👩‍👧 family", {"$undefined": true}], "ok": "👨‍👩‍👧 family"}
+{"fn": "fix_text", "args": ["a b", {"$undefined": true}], "ok": "a b"}
+{"fn": "fix_text", "args": ["a😀b", {"$undefined": true}], "ok": "a😀b"}
+{"fn": "fix_text", "args": ["a²b x½ y①", {"$undefined": true}], "ok": "a²b x½ y①"}
+{"fn": "fix_text", "args": ["aⅠb Ⅻ", {"$undefined": true}], "ok": "aⅠb Ⅻ"}
+{"fn": "fix_text", "args": ["a𐐀b 𝐀bc", {"$undefined": true}], "ok": "a𐐀b 𝐀bc"}
+{"fn": "fix_text", "args": ["कि ٣٤", {"$undefined": true}], "ok": "कि ۳۴"}
+{"fn": "fix_text", "args": ["Iı İi", {"$undefined": true}], "ok": "Iı İi"}
+{"fn": "fix_text", "args": ["K K k", {"$undefined": true}], "ok": "K K k"}
+{"fn": "fix_text", "args": ["ſ s S", {"$undefined": true}], "ok": "ſ s S"}
+{"fn": "fix_text", "args": ["x‍y 👨‍👩‍👧", {"$undefined": true}], "ok": "x‍y 👨‍👩‍👧"}
+{"fn": "fix_text", "args": ["a b c　d", {"$undefined": true}], "ok": "a b c　d"}
+{"fn": "fix_text", "args": ["١٢٣ ٤٥", {"$undefined": true}], "ok": "۱۲۳ ۴۵"}
+{"fn": "fix_text", "args": ["𝟘𝟙 ²³", {"$undefined": true}], "ok": "𝟘𝟙 ²³"}
+{"fn": "fix_text", "args": ["snake_case foo-bar o'neil", {"$undefined": true}], "ok": "snake_case foo-bar o'neil"}
+{"fn": "fix_text", "args": ["ǅungla Ǆ", {"$undefined": true}], "ok": "ǅungla Ǆ"}
+{"fn": "fix_text", "args": ["one\r\ntwo threefour", {"$undefined": true}], "ok": "one\r\ntwo threefour"}
+{"fn": "fix_text", "args": ["café café", {"$undefined": true}], "ok": "café café"}
+{"fn": "fix_text", "args": ["ΣΑΣ σας ς", {"$undefined": true}], "ok": "ΣΑΣ σας ς"}
+{"fn": "lint_text", "args": ["a😀b😀c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ΣΊΣΥΦΟΣ"], "ok": []}
+{"fn": "lint_text", "args": ["a..b"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["abc.leading"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["line1\nline2"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a:b:c  padded  "], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a:b:c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ns:key.path"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["straße"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["😀"], "ok": []}
+{"fn": "lint_text", "args": ["emoji 👍🏽 mixemoji 👍🏽 mix"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["straße  padded  "], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["İstanbulline1\nline2"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hello"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["日本語のテキスト"], "ok": []}
+{"fn": "lint_text", "args": ["hellohello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["tab\tseparated./x/**/*.json"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [".leading"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["emoji 👍🏽 mixİstanbul"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a.b.c./x/**/*.json"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["abc"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ünïcödé:"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["HELLO﻿bom"], "ok": []}
+{"fn": "lint_text", "args": ["é"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["日本語のテキストline1\nline2"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["HELLO"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["key_name-1"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["İstanbul"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["aba.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["Hello World"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [""], "ok": []}
+{"fn": "lint_text", "args": ["a"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["  padded  ΣΊΣΥΦΟΣ"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["HELLOhello"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["trailing.tab\tseparated"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hello😀"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["trailing."], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["  padded  "], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [":"], "ok": []}
+{"fn": "lint_text", "args": ["ünïcödé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["src/a/b.ts"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["{name} has {count} items"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["  padded    padded  "], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["﻿bom"], "ok": []}
+{"fn": "lint_text", "args": ["a:b:cns:key.path"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a.b.c:"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["./x/**/*.json"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hello worldé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ns:key.path./x/**/*.json"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["line1\nline2emoji 👍🏽 mix"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["tab\tseparated"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [":tab\tseparated"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["İstanbul日本語のテキスト"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ab"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["line1\nline2line1\nline2"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["{name} has {count} items:"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ΣΊΣΥΦΟΣline1\nline2"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["éns:key.path"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["key_name-1日本語のテキスト"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["trailing.İstanbul"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["日本語のテキストabc"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["src/a/b.ts./x/**/*.json"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a:"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["﻿bomemoji 👍🏽 mix"], "ok": []}
+{"fn": "lint_text", "args": ["😀straße"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["helloa"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["tab\tseparateda..b"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["tab\tseparatedhello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["{name} has {count} itemsa.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ns:key.patha.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ünïcödéns:key.path"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["İstanbul  padded  "], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [":a..b"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["emoji 👍🏽 mix"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["{name} has {count} itemshello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["key_name-1é"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["line1\nline2abc"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a😀b😀ckey_name-1"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["./x/**/*.jsonns:key.path"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["Hello Worldünïcödé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["abcHELLO"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["./x/**/*.json{name} has {count} items"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["key_name-1tab\tseparated"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ΣΊΣΥΦΟΣabc"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["key_name-1ünïcödé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["日本語のテキスト日本語のテキスト"], "ok": []}
+{"fn": "lint_text", "args": ["src/a/b.ts日本語のテキスト"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ns:key.patha..b"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["  padded  ünïcödé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["emoji 👍🏽 mixa.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["é{name} has {count} items"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["straßeİstanbul"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ns:key.pathtab\tseparated"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hellosrc/a/b.ts"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["  padded  hello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["{name} has {count} itemsHello World"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hello worldHELLO"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ésrc/a/b.ts"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["src/a/b.ts﻿bom"], "ok": []}
+{"fn": "lint_text", "args": ["{name} has {count} itemskey_name-1"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [".leadingemoji 👍🏽 mix"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["straßea..b"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a..bHELLO"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["﻿bom:"], "ok": []}
+{"fn": "lint_text", "args": ["key_name-1ab"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["日本語のテキスト./x/**/*.json"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["HELLO  padded  "], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["./x/**/*.jsonemoji 👍🏽 mix"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [":line1\nline2"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["line1\nline2key_name-1"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["😀İstanbul"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["trailing.  padded  "], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["{name} has {count} itemsns:key.path"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["Hello WorldHello World"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ékey_name-1"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["Hello Worldhello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a.b.ca.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["😀😀"], "ok": []}
+{"fn": "lint_text", "args": ["a:b:ctrailing."], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ünïcödéab"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["./x/**/*.jsonhello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hello worldemoji 👍🏽 mix"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [":.leading"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["trailing.hello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ΣΊΣΥΦΟΣ😀"], "ok": []}
+{"fn": "lint_text", "args": ["{name} has {count} itemsİstanbul"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["éİstanbul"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["abé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["İstanbulns:key.path"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["trailing.straße"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ans:key.path"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["{name} has {count} items{name} has {count} items"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [":ΣΊΣΥΦΟΣ"], "ok": []}
+{"fn": "lint_text", "args": ["éHello World"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["abstraße"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["emoji 👍🏽 mix😀"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["src/a/b.tsabc"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a😀b😀cünïcödé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["  padded  emoji 👍🏽 mix"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["tab\tseparatedΣΊΣΥΦΟΣ"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["line1\nline2İstanbul"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hello world:"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["key_name-1src/a/b.ts"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a.b.cünïcödé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["./x/**/*.jsona"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["éab"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["tab\tseparatedhello"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["İstanbulHello World"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["./x/**/*.json.leading"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ab  padded  "], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["key_name-1:"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a😀b😀ca.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["{name} has {count} itemsstraße"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [":key_name-1"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ns:key.path.leading"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["straßea"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["﻿bomkey_name-1"], "ok": []}
+{"fn": "lint_text", "args": ["{name} has {count} items😀"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ünïcödéé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["éa..b"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["trailing.﻿bom"], "ok": []}
+{"fn": "lint_text", "args": ["abca😀b😀c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["日本語のテキストns:key.path"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["é:"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["{name} has {count} itemshello"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["  padded  a:b:c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["trailing.abc"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["﻿bomhello"], "ok": []}
+{"fn": "lint_text", "args": ["line1\nline2hello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["src/a/b.tsé"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ΣΊΣΥΦΟΣ.leading"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["straßeHELLO"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["abkey_name-1"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hello worldΣΊΣΥΦΟΣ"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["HELLO😀"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ünïcödéHello World"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["src/a/b.tsa😀b😀c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["日本語のテキスト.leading"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["﻿bomline1\nline2"], "ok": []}
+{"fn": "lint_text", "args": ["a..ba..b"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["::"], "ok": []}
+{"fn": "lint_text", "args": ["HELLOİstanbul"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["Hello World😀"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a.b.chello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["abchello"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": [":hello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["éa.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["emoji 👍🏽 mixtab\tseparated"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["trailing.a.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["abca.b.c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ΣΊΣΥΦΟΣhello world"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["tab\tseparated﻿bom"], "ok": []}
+{"fn": "lint_text", "args": ["helloΣΊΣΥΦΟΣ"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["hellostraße"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ünïcödéemoji 👍🏽 mix"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["HELLOtab\tseparated"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a{name} has {count} items"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["日本語のテキストa😀b😀c"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["héllo wörld"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["👍🏽 thumbs"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["日本語"], "ok": []}
+{"fn": "lint_text", "args": ["ılık ırmak"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["👨‍👩‍👧 family"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a b"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a😀b"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a²b x½ y①"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["aⅠb Ⅻ"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a𐐀b 𝐀bc"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["कि ٣٤"], "ok": [{"code": "arabic-forms", "detail": "Arabic yeh/kaf/tatweel or Arabic-Indic digits remain"}]}
+{"fn": "lint_text", "args": ["Iı İi"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["K K k"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ſ s S"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["x‍y 👨‍👩‍👧"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["a b c　d"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["١٢٣ ٤٥"], "ok": [{"code": "arabic-forms", "detail": "Arabic yeh/kaf/tatweel or Arabic-Indic digits remain"}]}
+{"fn": "lint_text", "args": ["𝟘𝟙 ²³"], "ok": []}
+{"fn": "lint_text", "args": ["snake_case foo-bar o'neil"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ǅungla Ǆ"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["one\r\ntwo threefour"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["café café"], "ok": [{"code": "untranslated", "detail": "no Persian characters at all"}]}
+{"fn": "lint_text", "args": ["ΣΑΣ σας ς"], "ok": []}
+{"fn": "fix_book", "args": [{"10": ["a", 1]}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": {"a": "b"}, "😀": true}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": ["a", 1]}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": null, "nav": null}, []], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": null, "10": ["a", 1]}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": {"a": {"b": "c"}}}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [["a", 1], {"$undefined": true}], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"2": {}, "nav": ["a", 1]}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [true, {"$undefined": true}], "error": "AttributeError: 'bool' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"title": "x", "a.b": ["a", 1]}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [null], "error": "AttributeError: 'NoneType' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"a": ["a", 1]}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": {}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{}, "x"], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": ["a", 1], "😀": true, "b": {"a": {"b": "c"}}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": [], "😀": 0}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"10": {"a": "b"}, "ünï": null, "b": true}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": "x", "title": null, "10": []}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": null, "ünï": "x"}, []], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": ["a", 1]}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": [], "a": {}, "10": ["a", 1]}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": {"a": "b"}}, []], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": ["a", 1], "😀": {"a": {"b": "c"}}, "2": []}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{}, {}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": true, "b": null}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{}, ["a", 1]], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": null, "😀": ["a", 1]}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": 0}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": {}}, {}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": 0}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"10": [], "home": null, "2": ["a", 1]}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": "x"}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": "x", "title": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": "x", "2": {"a": {"b": "c"}}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [null, null], "error": "AttributeError: 'NoneType' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"a": []}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": {"a": "b"}, "a.b": true, "nav": true}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": ["a", 1], "a.b": ["a", 1], "home": true}, ["a", 1]], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": "b"}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": ["a", 1], "a.b": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": ["x"], "error": "AttributeError: 'str' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": true, "nav": null, "a.b": "x"}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": "x"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": {}, "ünï": {"a": "b"}}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": {}, "nav": "x", "ünï": null}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": {"a": {"b": "c"}}, "2": {}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": true, "a.b": [], "ünï": ["a", 1]}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": null, "title": {}}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [0], "error": "AttributeError: 'int' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [[]], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"a.b": {}, "10": {"a": "b"}}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": 0, "ünï": {}}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [0, []], "error": "AttributeError: 'int' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"2": ["a", 1], "title": "x"}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": null, "title": []}, {"a": {"b": "c"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": {}, "2": []}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": [], "home": []}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": {"a": "b"}, "10": {}, "a.b": []}, []], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {"a": {"b": "c"}}, "nav": "x"}, {}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": ["a", 1], "home": 0}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": 0, "a": 0}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": {"a": "b"}, "10": true, "a.b": {"a": "b"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": {"a": "b"}}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": {}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": 0}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": true, "2": true}, {}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": [], "10": true}, {}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": null, "10": {}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": 0}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"10": 0, "home": {"a": "b"}}, []], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": 0, "nav": {}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": ["x", []], "error": "AttributeError: 'str' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"nav": ["a", 1], "home": 0, "a": {"a": {"b": "c"}}}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": 0, "😀": 0, "10": null}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": true, "nav": {"a": {"b": "c"}}}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": ["a", 1], "ünï": "x"}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": true, "a": null}, ["a", 1]], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": {"a": "b"}, "b": ["a", 1], "ünï": {"a": "b"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {"a": "b"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": 0}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": {"a": "b"}, "2": null, "title": []}, []], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": {}}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": ["a", 1]}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": [], "title": {"a": "b"}, "a": true}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": {"a": "b"}, "home": []}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": null}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": null}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": "x"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": 0, "b": null, "a": 0}, ["a", 1]], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": [], "10": true}, {}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": 0, "10": ["a", 1], "home": 0}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": "x", "a": 0}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": {"a": {"b": "c"}}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": 0}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": null, "a": {"a": {"b": "c"}}, "nav": "x"}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": ["a", 1]}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": {}, "😀": ["a", 1]}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": ["x", true], "error": "AttributeError: 'str' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"a.b": "x", "a": true}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [[], {}], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"nav": []}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {}}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": 0}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": {"a": {"b": "c"}}, "title": [], "a": {}}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": [], "10": {"a": "b"}}, []], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": 0}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": "b"}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": ["a", 1]}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{}, {"a": {"b": "c"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": {"a": {"b": "c"}}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": null, "home": {"a": {"b": "c"}}}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": ["a", 1], "ünï": true, "😀": null}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": ["a", 1], "a": ["a", 1]}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [["a", 1], "x"], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"2": ["a", 1]}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": {"a": "b"}, "nav": {"a": {"b": "c"}}}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": ["a", 1], "ünï": {"a": {"b": "c"}}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": ["a", 1], "ünï": 0, "10": ["a", 1]}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": null, "nav": ["a", 1], "😀": null}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": "x", "home": null}, {"a": {"b": "c"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": true, "title": true, "2": "x"}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": [], "a": []}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": 0, "a.b": ["a", 1]}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": null, "a": []}, {"a": {"b": "c"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": ["a", 1]}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": {"a": "b"}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"10": {}, "nav": {"a": {"b": "c"}}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": true, "b": [], "nav": "x"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": [], "nav": {}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {"a": "b"}, "10": 0, "a": {"a": "b"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": "x", "nav": ["a", 1], "home": 0}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": true}, "x"], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": ["a", 1], "😀": ["a", 1]}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": true, "nav": "x"}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": ["a", 1], "nav": {}, "b": ["a", 1]}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": 0, "nav": ["a", 1]}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": 0, "home": []}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [[], {"a": {"b": "c"}}], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"a": 0, "a.b": 0}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": {"a": {"b": "c"}}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {"a": {"b": "c"}}, "title": ["a", 1]}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": ["a", 1]}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": [], "home": true}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": 0}, {}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": {}}, []], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {"a": {"b": "c"}}, "a.b": [], "b": "x"}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [true, ["a", 1]], "error": "AttributeError: 'bool' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"ünï": [], "10": {}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"😀": [], "2": {"a": "b"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [null, {"$undefined": true}], "error": "AttributeError: 'NoneType' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"a": true, "title": {}}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": []}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"b": {"a": "b"}}, {}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": "x"}, 0], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": []}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [[], true], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [["a", 1]], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"ünï": "x"}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {"a": {"b": "c"}}, "a.b": ["a", 1]}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": [], "10": {"a": "b"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [null, {"a": "b"}], "error": "AttributeError: 'NoneType' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"a": {"a": "b"}, "title": {"a": {"b": "c"}}, "a.b": true}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": {"a": {"b": "c"}}, "a.b": 0, "ünï": ["a", 1]}, []], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": ["x", {"$undefined": true}], "error": "AttributeError: 'str' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"10": "x"}, ["a", 1]], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": [], "b": 0}, {"a": {"b": "c"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"ünï": {"a": {"b": "c"}}}, {"a": {"b": "c"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"10": true, "nav": {"a": "b"}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {}, "b": "x"}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": 0, "home": null}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": {}, "a": "x"}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": {"a": {"b": "c"}}, "2": ["a", 1], "😀": 0}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": {}, "nav": true}, null], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": {"a": "b"}, "home": {}, "nav": {"a": {"b": "c"}}}, true], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [0, {"$undefined": true}], "error": "AttributeError: 'int' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"nav": {}, "b": {"a": {"b": "c"}}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": {}, "😀": {}, "10": {"a": {"b": "c"}}}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [null, true], "error": "AttributeError: 'NoneType' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"10": null, "😀": 0}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": 0, "title": {}, "a.b": 0}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a": {"b": "c"}}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"nav": ["a", 1], "10": {"a": "b"}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [["a", 1], {"a": "b"}], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "fix_book", "args": [{"b": ["a", 1], "a": ["a", 1]}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": {"a": "b"}}, {"a": "b"}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"title": "x"}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"2": [], "home": 0, "ünï": ["a", 1]}, {}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"home": "x", "b": null}, "x"], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": 0}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "fix_book", "args": [{"a.b": "x", "nav": {"a": {"b": "c"}}}, {"$undefined": true}], "ok": {"changed": [], "changed_count": 0}}
+{"fn": "lint_book", "args": [{"b": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": {"b": "c"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": 0, "10": {}, "b": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [0], "error": "AttributeError: 'int' object has no attribute 'get'"}
+{"fn": "lint_book", "args": [{}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": [], "b": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [true], "error": "AttributeError: 'bool' object has no attribute 'get'"}
+{"fn": "lint_book", "args": [{"a": {"a": "b"}, "nav": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": ["a", 1], "😀": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": {}, "home": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [null], "error": "AttributeError: 'NoneType' object has no attribute 'get'"}
+{"fn": "lint_book", "args": [{"nav": {"a": "b"}, "title": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": null, "10": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": [], "a.b": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": {"a": {"b": "c"}}, "a": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": [], "2": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": [], "b": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": {}, "😀": [], "nav": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": {"a": {"b": "c"}}, "home": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": ["a", 1], "😀": null, "title": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": true, "😀": true, "a.b": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": true, "ünï": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [[]], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "lint_book", "args": [{"a": 0, "nav": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": [], "😀": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": "x", "10": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": {"a": {"b": "c"}}, "a": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": [], "a.b": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": {}, "ünï": true, "b": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": ["a", 1], "b": ["a", 1], "😀": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": "x", "ünï": {"a": "b"}, "nav": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": "b"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": {"a": {"b": "c"}}, "a": null, "b": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": {"a": {"b": "c"}}, "10": {"a": "b"}, "ünï": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": true, "10": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": true, "title": ["a", 1], "nav": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": {}, "title": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": [], "2": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": 0, "a": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": {"a": {"b": "c"}}, "ünï": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": 0, "a.b": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": {"a": "b"}, "ünï": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": null, "title": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": {"a": {"b": "c"}}, "nav": ["a", 1], "b": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [["a", 1]], "error": "AttributeError: 'list' object has no attribute 'get'"}
+{"fn": "lint_book", "args": [{"a": 0, "nav": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": {"a": {"b": "c"}}, "home": {"a": "b"}, "a": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": {"a": {"b": "c"}}, "10": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": ["a", 1], "title": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": [], "😀": 0, "2": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": ["a", 1], "ünï": {"a": "b"}, "😀": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": true, "b": 0, "2": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": null, "2": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": {"a": "b"}, "title": null, "a": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": {"a": {"b": "c"}}, "a": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": [], "a.b": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": true, "a": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": true, "b": {"a": {"b": "c"}}, "2": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": {"a": "b"}, "a.b": {}, "title": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": [], "a": {"a": {"b": "c"}}, "nav": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": 0, "home": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": 0, "title": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": {"a": "b"}, "a.b": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": ["x"], "error": "AttributeError: 'str' object has no attribute 'get'"}
+{"fn": "lint_book", "args": [{"nav": "x", "title": [], "2": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": true, "home": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": "x", "title": [], "a": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": {}, "2": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": {"a": {"b": "c"}}, "b": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": true, "nav": {"a": {"b": "c"}}, "b": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": [], "ünï": {"a": {"b": "c"}}, "home": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": {"a": {"b": "c"}}, "b": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": "x", "title": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": [], "nav": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": [], "ünï": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": {}, "a": {}, "😀": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": {"a": "b"}, "nav": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": {"a": {"b": "c"}}, "a": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": 0, "a": 0, "b": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": ["a", 1], "ünï": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": [], "home": {"a": "b"}, "b": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": {}, "2": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": true, "a.b": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": {"a": {"b": "c"}}, "2": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": [], "nav": {"a": "b"}, "title": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": "x", "ünï": {"a": "b"}, "10": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": {"a": "b"}, "home": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": "x", "home": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": {"a": {"b": "c"}}, "ünï": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": "x", "a.b": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": [], "😀": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": true, "😀": "x", "home": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": {}, "nav": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": {"a": "b"}, "ünï": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": "x", "home": "x", "title": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": 0, "nav": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": true, "😀": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": 0, "2": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": {}, "😀": null, "b": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": null, "title": {}, "ünï": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": {"a": {"b": "c"}}, "b": ["a", 1], "a.b": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": ["a", 1], "2": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": [], "a": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": ["a", 1], "ünï": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": ["a", 1], "b": [], "2": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": {"a": "b"}, "10": 0, "2": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": "x", "a.b": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": ["a", 1], "ünï": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": {"a": {"b": "c"}}, "ünï": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": {"a": "b"}, "home": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": {"a": "b"}, "nav": ["a", 1], "a.b": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": {"a": "b"}, "a.b": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": "x", "title": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": true, "ünï": 0, "home": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": true, "b": "x", "2": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": {}, "a.b": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": "x", "😀": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": "x", "a": true, "😀": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": {"a": {"b": "c"}}, "home": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": {}, "title": 0, "b": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": {"a": "b"}, "a.b": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": {"a": "b"}, "nav": [], "2": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": 0, "10": null, "title": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": ["a", 1], "title": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": [], "10": "x", "2": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": "x", "ünï": {"a": "b"}, "😀": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": [], "nav": null, "home": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": {"a": "b"}, "10": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": {}, "a": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": 0, "b": "x", "2": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": ["a", 1], "a.b": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": true, "a.b": ["a", 1], "nav": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": {}, "a.b": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a.b": {}, "nav": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": "x", "title": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": {"a": {"b": "c"}}, "😀": {"a": {"b": "c"}}, "10": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": {"a": {"b": "c"}}, "ünï": [], "a": true}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"ünï": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"b": "x", "a": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"title": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": null, "2": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": true, "2": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": true, "10": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": true, "b": {"a": {"b": "c"}}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": {"a": "b"}, "😀": null, "b": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": 0, "a.b": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": "x", "home": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": ["a", 1], "ünï": null, "10": {}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": ["a", 1], "nav": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"home": null}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": {}, "a.b": {"a": {"b": "c"}}, "2": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": 0, "10": "x", "2": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"2": ["a", 1]}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"😀": {}, "home": 0}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"10": {}, "b": []}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"a": true, "home": {"a": "b"}}], "ok": {"findings": [], "count": 0, "by_code": {}}}
+{"fn": "lint_book", "args": [{"nav": "x"}], "ok": {"findings": [], "count": 0, "by_code": {}}}

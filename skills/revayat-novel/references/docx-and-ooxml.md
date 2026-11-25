@@ -2,36 +2,13 @@
 
 ## Build options
 
-```bash
-$PY scripts/revayat-novel.py build --book work/book.json --out out/book.fa.docx [options]
+```sh
+revayat-novel build "translation work" --out "delivery/book.fa.docx"
 ```
 
-| Option | Default | Notes |
-| --- | --- | --- |
-| `--assets DIR` | `<book dir>/assets` | where the extracted pictures live |
-| `--template REF.docx` | none | inherit styles and page setup from a Word file |
-| `--font NAME` | `Vazir` | Persian (complex-script) face |
-| `--latin-font NAME` | `Times New Roman` | Latin runs inside Persian text |
-| `--size PT` | `11.5` | body size |
-| `--toc` / `--no-toc` | on | table of contents |
-| `--toc-title TEXT` | `فهرست مطالب` | |
-| `--toc-depth N` | `2` | heading levels included |
-| `--justify` / `--no-justify` | on | justify body paragraphs |
-| `--captions` / `--no-captions` | on | render image alt text as a caption |
-| `--rtl` / `--no-rtl` | on | `--no-rtl` for a left-to-right target language |
-| `--page-breaks` | `chapter` | `chapter`, `source` or `none` |
-| `--heading-size` | `style` | `style` uses Word's Heading N sizes; `source` reproduces the point size measured in the original book |
+The Rust OOXML writer takes a work directory with its Book IR and assets. Use `revayat-novel build --help` for options supported by the installed binary. The default Persian face is the bundled static Vazirmatn, under `skills/revayat-novel/assets/fonts/vazirmatn/`. Check `w:rFonts`, its `w:cs` value, and the embedded font parts. Keep Persian text in logical order. Use `w:bidi` and `<w:jc w:val="start"/>` with [RLI/PDI isolation](persian-typography.md#mixed-persian-and-latin) at mixed-script sentence boundaries.
 
-`--heading-size style` is the default because Word's heading styles give a
-coherent document even when the source's own sizes are erratic. Use
-`--heading-size source` when the brief is to reproduce the book's exact
-typography — extraction records the real point size of every heading it finds,
-and this reinstates it.
-
-`--page-breaks chapter` breaks before each level-1 heading. `source` also
-honours hard page breaks from the original. Soft page breaks recorded from PDF
-page boundaries are always ignored: Persian reflows differently, so forcing the
-original pagination would leave large gaps mid-chapter.
+Carry through the source's dimensions, margins, orientation and authored section breaks where present. A pageless source needs an agreed output geometry. Persian reflows, so physical page dimensions do not imply identical line or page breaks.
 
 ## What gets built
 
@@ -42,20 +19,20 @@ spans. Multiple paragraphs, drawings, note markers and source-break events are
 written in order inside the owning cell; nested tables retain their immediate
 parent-cell ownership. See [docx-intake-integrity.md](docx-intake-integrity.md)
 for native intake refusals and separate-workspace migration. A cell-scoped hard
-break is emitted with `--page-breaks source`, but final pagination remains the
+break is emitted when retained by the writer, but final pagination remains the
 viewer’s layout decision.
 
 **Right-to-left, at three levels.** `w:bidi` in the section properties makes the
 section RTL; `w:bidi` on each paragraph sets its base direction; `w:rtl` on each
 Persian run marks its characters. Latin runs deliberately carry no `w:rtl`, so
-a name inside a Persian sentence stays left-to-right — see
+a name inside a Persian sentence stays left-to-right - see
 `persian-typography.md`.
 
 **Real footnotes.** A `word/footnotes.xml` part, related from the document and
 declared in `[Content_Types].xml`, with Word's reserved separator entries at ids
 -1 and 0 and content from 1 up. Each marker in the body is a `w:footnoteReference`
 in a run styled `FootnoteReference`. Word paginates them itself, so a note lands
-at the foot of whichever page its marker ends up on — which a manual superscript
+at the foot of whichever page its marker ends up on - which a manual superscript
 plus an endnote list cannot do.
 
 `FootnoteText` and `FootnoteReference` styles are created by the builder: the
@@ -71,7 +48,7 @@ working clickable list rather than a blank page.
 
 **Pictures at their real size.** Each image is placed with an explicit
 `wp:extent` in EMU derived from the points recorded at extraction. If the source
-gave no physical size — EPUB is reflowable and has none — pixels are converted
+gave no physical size - EPUB is reflowable and has none - pixels are converted
 at 96 DPI. Anything wider than the text block is scaled down with its aspect
 ratio preserved.
 
@@ -86,8 +63,8 @@ not reported as a page-size failure.
 **Order is checked separately, and twice.** Nearest-geometry matching asks only
 whether a page's size is one the book allows, so sections that came out in the
 wrong order are three runs of individually legal pages and pass. `doc-qa`
-therefore also compares the built `w:sectPr` sequence with `book["sections"]` —
-count, ordered size, orientation, start type — and requires the rendered page
+therefore also compares the built `w:sectPr` sequence with `book["sections"]` -
+count, ordered size, orientation, start type - and requires the rendered page
 shapes to be a walk *forward* through the declared sequence. The first sees a
 section duplicated while another is dropped, which leaves no trace on paper; the
 second sees a renderer that disagreed with its own package. Adjacent sections of
@@ -105,13 +82,13 @@ A section carries the heads and feet the author wrote, as pieces:
  "footers": {}}
 ```
 
-Only the slots a section *defines* appear — `default`, `first`, `even` — and a
+Only the slots a section *defines* appear - `default`, `first`, `even` - and a
 missing one inherits from the section before, exactly as Word resolves it.
 
 **The heads are translated, not copied.** Each piece with prose becomes an
 ordinary worksheet unit (`rhNNNN`, kind `header` or `footer`), so it goes out
 through the same `@@ id kind` protocol as the body, is checked by `falint`, and
-is counted by `qa check` — which reports `untranslated-running-head` for one
+is counted by `qa check` - which reports `untranslated-running-head` for one
 that never came back. A tab and a `PAGE` field are layout, not language, so a
 translator is never shown either.
 
@@ -121,9 +98,9 @@ title across a Persian one is worse than no running head at all. That judgement
 is why these were dropped wholesale before; the answer was to carry them in
 Persian rather than to drop them.
 
-**The generated page number yields to the author's.** `--page-numbers` exists
+**The generated page number yields to the author's.** Generated numbering is available
 because most sources have no foot of their own. When the first section brings
-one, the generated number is not added — two things where the author put one is
+one, the generated number is not added - two things where the author put one is
 not fidelity, and the author's foot may well be a page number already.
 
 **Structure.** `Heading 1`–`Heading 6` styles, `Quote` for block quotes,
@@ -143,17 +120,19 @@ control-bearing source labels; this is not universal hyperlink translation QA.
 
 ## Verifying the result
 
+Run `revayat-novel qa docx` against the actual output and source Book IR. Use `revayat-novel doc-qa check` for Word/LibreOffice layout evidence, and `revayat-novel render-qa <file.docx> --out <render-dir>` for a render run.
+
 ```bash
-$PY scripts/revayat-novel.py qa docx --file out/book.fa.docx --book work/book.json
+revayat-novel qa docx --help
 ```
 
-This reads the saved package, not the builder's own report — and it reads it as
+This reads the saved package, not the builder's own report - and it reads it as
 **OPC**: the XML is parsed with namespaces, the content types are resolved through
 the Default and Override rules, and the relationship targets are resolved to part
 names. That matters because the same document has many legal serialisations: a
 regex looking for one spelling of a tag rejected a package whose relationships
 used a different prefix, and passed a truncated part, where a parse simply fails.
-The archive is bounded before it is read — a member that would write outside the
+The archive is bounded before it is read - a member that would write outside the
 package, or one that expands past a ceiling, is refused rather than examined.
 
 The rows below are the ones this reference is about; `references/findings.md` has
@@ -172,7 +151,7 @@ every code:
 | `picture-aspect` / `picture-too-wide` | error | a picture is drawn at a shape or a width the builder's fitting never produces |
 | `images-lost` | error | fewer pictures in the package than in the book |
 | `dead-link` | error | a TOC entry points at a bookmark that does not exist |
-| `no-rtl` | warning | no `w:bidi` element — the document is not RTL |
+| `no-rtl` | warning | no `w:bidi` element - the document is not RTL |
 
 The note checks compare the **book's** inventory with what the package places, in
 reading order, by content: the correspondence is the sequence of note texts, not
@@ -181,7 +160,7 @@ substituted body, and a set of ids cannot see a duplicated reference.
 
 `doc-qa check` asks a second set of questions, about the assembled book's
 sections. Sizes in the wrong order are each individually legal, so this is
-checked twice — once against the built `w:sectPr` sequence and once against the
+checked twice - once against the built `w:sectPr` sequence and once against the
 rendered page shapes:
 
 | Code | Severity | Meaning |
@@ -189,47 +168,16 @@ rendered page shapes:
 | `section-count` | error | the book declares one number of sections and the document has another: a break was lost or duplicated |
 | `section-size` | error | a section's page size is not the one the book declares for it |
 | `section-property` | error | a section's orientation, margins or start type disagrees with the book |
-| `section-order` | error | the rendered pages do not walk forward through the declared sequence — the renderer disagreed with its own package |
+| `section-order` | error | the rendered pages do not walk forward through the declared sequence - the renderer disagreed with its own package |
 | `section-package-unread` | warning | the built document's sections could not be read back, so their order was not checked |
 
 All five mean the same thing for a reader: **re-build.** None of them is
 something to fix in `book.json`.
 
-## Using a reference template
-
-`--template ref.docx` opens an existing Word file and appends into it, so the
-document inherits its styles, page setup, headers and footers. Build the
-template once in Word with the fonts, margins and heading styles a publisher
-wants, then reuse it.
-
-The builder still applies RTL properties and creates any missing footnote
-styles, so a plain Latin template is a valid starting point.
-
 ## A PDF of the finished book
 
-`doc-qa check --keep-pdf` keeps the rendering it checked and names it in the
-report's `pdf` key. Measured on a real Word export: **4 pages, 50.4 KB, `Vazir`
-and `Vazir-Bold` embedded, the Persian selectable and searchable (2984
-characters read back), the contents page present as text — and
-`doc.get_toc()` returning 0 entries**, because a Word TOC field becomes text in
-the PDF rather than a PDF outline. A reader gets a contents page they can read
-and not one they can click.
+Word or LibreOffice (`soffice`) lays out the editable document for rendering. The exported PDF can have different page locations from the source or another renderer. Verify its links separately if it is part of delivery; the editable DOCX remains the book deliverable.
 
-Its pagination is the rendering program's, so `laid_out_by` travels with it: Word
-and LibreOffice do not paginate identically, and two readers comparing page
-numbers deserve to know why they disagree.
+## What stays exact
 
-## The limitation worth stating plainly
-
-Word is a reflowable format. A Persian paragraph is rarely the same length as
-its English original, so an **editable** document cannot also be page-for-page
-identical to the source PDF. Any tool promising both is either producing
-uneditable text boxes or is wrong.
-
-What *is* exact: image bytes and physical size, aspect ratio, image anchoring
-to the right point in the text, heading hierarchy, chapter breaks, bold and
-italic, footnote placement and numbering, chapter links, and selectable,
-editable, searchable Persian text.
-
-If page-faithful layout matters more than editability for a particular job,
-that is a different output format — a fixed-layout PDF — and a different tool.
+Keep the original encoded image bytes, pixel dimensions, aspect ratio, and authored drawing dimensions where present. The writer should also preserve emphasis, tables, true footnotes, and heading links. If the PDF source must keep its exact pagination, agree on a separate fixed-layout deliverable instead of claiming that a reflowable Word file has identical pages.

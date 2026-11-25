@@ -10,7 +10,7 @@ The principle is the humanizer's: keep every fact, change the shape. Never add a
 number, or quotation that isn't in the source. Look for clusters of tells, not one isolated hit;
 a single «همچنین» is normal Persian.
 
-`persian_lint.py --check --style` flags the phrase-level items below (never auto-fixes them).
+`revayat-novel persian-lint --check --style` flags the phrase-level items below (never auto-fixes them).
 
 ## 1. Bureaucratic verbs and helpers (زبان اداری)
 The single strongest tell. Official Persian avoids simple verbs; models copy it.
@@ -86,5 +86,5 @@ Delete these and state the point:
 3. Rewrite. Vary sentence length. Prefer «است / دارد / کرد» over the helpers. Keep register.
 4. Check: every fact from step 1 survives, nothing new was added, no «—», no rule-of-three that
    wasn't in the source.
-5. Run `persian_lint.py --fix` for mechanics, then `--check --style` to confirm the phrase-level
+5. Run `revayat-novel persian-lint --fix` for mechanics, then `--check --style` to confirm the phrase-level
    tells are gone.

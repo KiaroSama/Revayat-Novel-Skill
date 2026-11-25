@@ -1,0 +1,19 @@
+[package]
+name = "revayat-ooxml"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+image.workspace = true
+quick-xml.workspace = true
+revayat-core.workspace = true
+roxmltree.workspace = true
+serde.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+zip.workspace = true
+
+[lints]
+workspace = true

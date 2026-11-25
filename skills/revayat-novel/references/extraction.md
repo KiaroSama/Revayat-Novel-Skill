@@ -1,266 +1,44 @@
 # Extraction, OCR and difficult books
 
-## The three shapes a PDF arrives in
+## Choose the intake route
 
-`revayat-novel extract` probes every page and classifies the file before doing
-anything:
+Run `revayat-novel doctor` and start the workflow log beside the intended Word file. Preserve the original and use a new work directory for the first extraction.
 
-| `probe.kind` | What it means | What happens |
-| --- | --- | --- |
-| `digital` | ≥92% of pages have a text layer | read directly, no OCR |
-| `scanned` | no page has a text layer | OCRmyPDF with `--force-ocr --deskew` |
-| `mixed` | some pages have text, some do not | OCRmyPDF with `--skip-text` |
+```sh
+revayat-novel extract "source/book.pdf" --out "translation work"
+```
 
-`mixed` is the common case for older titles and the reason page-level detection
-matters. Running OCR over pages that already carry good text replaces accurate
-characters with recognised ones — strictly worse. `--skip-text` leaves those
-pages alone and only works on the images.
+The native PDF route uses `lopdf` for PDF objects and `hayro` for page interpretation and rasterization. Inspect the extraction report and compare the Book IR with the source. Record page count, dimensions and orientation, text order, notes, and image locations. A selectable text layer can still be incomplete or garbled.
 
-Deskew is only applied to fully scanned books. Any actual native text selects
-skip-text mode, even when a short title falls below the classification threshold.
-Only proven OCR pages suppress unreliable font emphasis; native pages retain it.
+| PDF | What to check |
+| --- | --- |
+| Digital | Read the native text and verify its reading order and coverage. |
+| Scanned | Compare recognized text against every relevant source page. Keep the original scan. |
+| Mixed | Retain good native text. Check textless and garbled pages individually before deciding which need OCR. |
+
+A textless page may be a plate, a blank, or a scan containing prose. Do not infer its role from the overall share of textual pages. A plate or blank needs evidence of its role. Unknown coverage blocks delivery.
 
 ## Source-complete OCR evidence
 
-A readable PDF containing some text is not complete OCR. Before promotion or cache
-reuse, verify source/output page count, geometry, native text and available drawn
-image anchors. A failed attempt preserves the previous final artifact. A usable
-nonzero converter exit is accepted only when the artifact independently passes.
+`revayat-novel doctor` reports optional Tesseract availability. Run the OCR sidecar command with the source PDF and work path. Use `revayat-novel ocr-sidecar --help` for source-language options; recognition needs the source language rather than Persian by default.
 
-A silent raster whose purpose is unknown requires `--ocr-page-roles FILE`. The
-UTF-8 JSON envelope has exactly `version: 1`, `source_sha256` of the original PDF,
-and `pages`, an exhaustive ordered list of `{page: N, role: "text"|"image"|"blank"}`.
-Page numbers are one-based. Native text cannot be relabeled image/blank; a blank
-role cannot conceal a drawn image. Approved plates and genuinely blank pages need
-no fabricated OCR characters. `--ocr off` may retain a partial extraction, but its
-unknown coverage blocks complete quality approval and delivery.
+```sh
+revayat-novel ocr-sidecar "source/book.pdf" --out "translation work"
+```
 
-Fresh controlled OCR records `ocr.pdf.proof.json`, binding original/converter/output
-hashes, options, roles, engine and invocation. Changed deskew rasters cannot prove
-pixel identity. Only the verified current-interpreter OCRmyPDF 17.13.0 indexed-graft
-path permits the explicitly weaker `engine-indexed` mapping evidence; unsupported
-engines require independent anchors or refuse. When the selected launcher is an
-OCRmyPDF console script and version 17.13.0 is installed in the skill's interpreter,
-execution uses that interpreter's `-m ocrmypdf`, even if the console script lives
-elsewhere on PATH. Discovery still reports the available launcher; invocation and
-proof bind to the actual selected engine. This is not semantic OCR accuracy or a
-universal proof against arbitrary reordered, fully changed equal-size rasters.
+Install required language data through the operating system's Tesseract installation. If the tool or language data is missing, record the omitted coverage. Review page identities, geometry, and recognized words against the original. Pay particular attention to names, numbers, page edges, columns, and mixed-script passages. Keep the sidecar and its source identity; incompatible or partial OCR evidence does not authorize a full book. Keep usable native text and do not infer bold or italics from OCR font styles. If the sidecar or scan processing produced a replacement page, verify that its identity and placement match the source before reuse.
 
 ## Image fidelity
 
-OCR is invoked with `--optimize 0 --output-type pdf`. That is deliberate:
-OCRmyPDF's default is a PDF/A rewrite with image optimisation, which
-re-encodes the illustrations. Here the pictures matter more than archival
-conformance.
+Retain the original assets byte for byte, with encoded format, SHA-256, pixel dimensions, and authored placement where available. A resized drawing may still refer to original image bytes. If the illustration is part of an entire scan rather than a separate image object, any crop is a derivative. Keep the source page intact and record the crop coordinates and source identity. Never label a crop, deskewed image, or cleaned scan as the original.
 
-Images then come out of the PDF via `Document.extract_image`, which returns the
-*original compressed stream* — not a re-render of the page. The picture in the
-Word file is byte-identical to the picture in the book, and `qa check` verifies
-that with a SHA-256 recorded at extraction time.
+If a watermark or poor scan interferes with recognition, follow [watermarks.md](watermarks.md) and use `revayat-novel clean-scan survey`, `revayat-novel clean-scan preview`, and `revayat-novel clean-scan run` on separate work copies. Compare the result and use a cleaned copy only for the role it was verified to serve.
 
-Physical geometry comes from actual displayed occurrences, not the resource list.
-Repeated draws share original asset bytes but keep distinct bounding boxes,
-transforms and reading order; unused resources are not illustrations. Native Word
-publication retains supported orthogonal rotation/reflection without raster
-rewriting and refuses unsupported shear rather than silently changing its shape.
-Operator-approved image pages retain their artwork even when OCR recognizes a caption.
-MinerU replaces only explicitly verified scan rasters, never arbitrary native plates.
-Large retained OCR rasters with ambiguous placement carry `unknown-page-raster`;
-MinerU retains those originals and reports `replacement_uncertain_pages` rather
-than claiming a resolved replacement or guessing that the raster is disposable.
+## When extraction is incomplete
 
-**Page geometry is a census, not one number.** `book["page"]` reports the
-dominant trim, and `book["source"]["page_geometry"]["pages"]` names every page
-that differs from it — a landscape plate, a rotated scan, a differently trimmed
-insert — keyed by page number, complete rather than sampled. The page route
-overlays that map, so an exceptional page is previewed and checked on its own
-paper instead of against the book's usual shape.
+Verify chapter boundaries, tables, columns, captions, and embedded text against the source before dispatching worksheets. If the source cannot be represented faithfully, keep the original, record the affected units, and obtain a faithful supported copy or transcribe uncertain content under review. Do not synthesize missing source text from context. A corrected or reimported source goes into a new work directory; it does not overwrite an existing translation.
 
-## When OCRmyPDF is not installed
-
-Use the version verified for OCR page mapping:
-
-```bash
-pip install ocrmypdf==17.13.0
-
-# Tesseract, the recognition engine:
-winget install tesseract-ocr.tesseract     # Windows
-brew install tesseract                     # macOS
-sudo apt install tesseract-ocr             # Debian/Ubuntu
-
-# Ghostscript. Verified 2026-09-05: it is NOT in the winget default
-# source, so on Windows take the installer from
-# https://ghostscript.com/releases/gsdnld.html. Its bin/ does not have to
-# go on PATH — the versioned install directory is searched.
-brew install ghostscript                   # macOS
-sudo apt install ghostscript               # Debian/Ubuntu
-```
-
-`revayat-novel.py doctor` reports all three, **and none of them has to be on
-PATH.** It looks in three places, in order: `PATH`; the script directory of the
-interpreter running the skill; then where an ordinary install leaves that tool.
-So Tesseract under `C:\Program Files\Tesseract-OCR`, Ghostscript under a
-versioned `…\gs\gs10.07.1\bin\gswin64c.exe`, MinerU under its own venv, and a
-Homebrew, MacPorts or `pip --user` install on macOS or Linux, are all found
-where they are. On Windows it also tries `gswin64c`/`gswin32c`, because
-Ghostscript does not ship a binary called `gs` there.
-
-The interpreter's own script directory matters because a virtual environment is
-routinely not on PATH: a tool installed beside the skill's other dependencies —
-OCRmyPDF being the usual one — is invisible to a PATH search on every platform,
-not only on Windows.
-
-OCRmyPDF itself looks in fewer places than this does — on Windows the system
-drive and the registry, and off Windows only `PATH` — so the directories found
-here are prepended to the `PATH` of the process it runs in. `ocr.tool_path` in
-the extract report says which ones they were.
-
-The pipeline asks the same function `doctor` does, so a tool `doctor` reports
-present is one the `ocr-sidecar` stage will find — see `troubleshooting.md`.
-
-`--ocr off` proceeds without it, extracting only the pages that already have a
-text layer. Say so explicitly to the user — a book that comes back suspiciously
-short is usually this.
-
-## One scanned page in an otherwise digital book
-
-The page census does not decide on the share of pages with text alone. Twelve
-textual pages and one scanned page of prose is 0.923, which clears the digital
-threshold — and the digital route does no OCR, so that page contributed nothing
-and the book was short by a page with nothing said about it.
-
-So a page with no text is also asked whether it *looks like* a scan: whether one
-image covers at least half of it. That distinction is what makes the share safe
-to use, because the alternative — treating any textless page as a scan — would
-send a book through OCR because of a blank verso.
-
-- a page with no text and a page-sized raster is **prose nobody can read yet**,
-  and it appears in `probe.scan_candidates`
-- a page with no text and no such raster is a blank leaf, a half-title or a
-  plate, and there is nothing on it for OCR to find
-
-Any scan candidate makes the book `mixed`, which runs OCR with `--skip-text`: the
-pages that already have a text layer keep their accurate characters and only the
-scan is recognised. Deskewing stays off for a mixed book, because it rewrites the
-page raster and would damage the good pages.
-
-`cleaned.pdf` and `ocr.pdf` are reused between runs, but only when the inputs
-that produced them are unchanged — the source file's hash, `--ocr`, `--ocr-lang`,
-`--deskew`, `--clean-scan` and `--ghost-threshold`. Replace the source with a
-corrected scan, or change the OCR language, and both are rebuilt; they used to be
-reused merely because they existed, which attached the new file's provenance to
-the old file's text. `--force-ocr` still overrides the cache.
-
-Each OCR attempt writes to its **own** staging file beside the destination and is
-promoted only once it is a readable PDF *that attempt produced*. The destination is
-cleared before the converter starts, so a readable file afterwards can only have come
-from it. A fixed staging name let an interrupted run leave a valid PDF that the next
-attempt — converter failed, nothing written — judged and promoted as its own output,
-certifying old bytes as new-source OCR. A staging file from an earlier run is
-**quarantined** as `*.new.orphaned` rather than deleted, and a failed attempt's own
-becomes `*.new.failed`: that is somebody's OCR output, it simply must not sit where an
-artefact test can mistake it for this run's.
-
-## Colour watermarks on a scan
-
-A scanned book is one raster per page, so a watermark is burned into the pixels:
-there is no image object to drop and no text run to filter. It also degrades OCR
-wherever it crosses a line.
-
-`extract` removes it automatically before OCR. The signal is narrow and
-measured: body text in a scan is *grayscale* — on a real 1785x2577 page every
-text pixel had HSV saturation 0 — while a colour watermark reaches 255. So
-"saturated pixels" selects the watermark and nothing else.
-
-Two guards stop it eating real content:
-
-- a page is only cleaned when its coloured fraction is small. A watermark
-  measured 0.24% of a page; an illustration is orders of magnitude more, so
-  artwork pages are skipped automatically. On a real 70-page book this cleaned
-  52 pages and correctly left 18 illustration pages alone.
-- only saturated pixels change. Grayscale content is untouched.
-
-| Flag | Effect |
-| --- | --- |
-| `--clean-scan auto` | default: clean pages that look like text with a stamp |
-| `--clean-scan off` | never touch the raster |
-| `--clean-scan force` | clean even pages that look like artwork |
-| `--ghost-threshold N` | also whiten grey pixels lighter than N (0-255) |
-
-**Where the watermark lies on top of text, removal is lossy and cannot be
-otherwise.** Those glyph pixels were blended with the stamp when it was applied,
-so the original ink value is not in the file any more. `--ghost-threshold 120`
-does erase the grey remnant, but it eats the letters underneath it too. The
-default therefore removes colour only. For this pipeline that is usually moot:
-the deliverable is built from OCR'd *text*, so the watermark never reaches the
-Word file either way — what matters is which version Tesseract reads better.
-
-## A scanned page is not an illustration
-
-In a scanned book every page *is* one full-page raster. Emitting those as
-pictures would put the whole book into the output twice — once as the recognised
-text, once as photographs of the same pages. Measured on a real 70-page scan,
-that produced a 13.8 MB DOCX instead of 2.6 MB, showing every page a second time.
-
-So a page-sized image is dropped when the page also yielded real text: its
-content is now the text. A page-sized image on a page with little or no text is
-kept, because that is a genuine full-page plate — a cover, a frontispiece, an
-illustration. On the same book this dropped 56 pages and kept 14.
-
-`source.page_scans_dropped` in the extract report says how many went.
-
-What this cannot do is separate a picture that sits *inside* a page of text: the
-whole page is one flat raster, so the illustration and the words around it are
-the same pixels. Such a page is kept whole, and its captions are also recognised
-as text — so they can be translated — which means those few pages show their
-original wording inside the picture as well. **This is what MinerU is for**: its
-layout model crops the figure out, so the Word file gets the picture and the
-translated caption instead of a flat page image with the source language baked
-into it. `--from-mineru` imports that.
-
-## Languages other than English
-
-Pass the Tesseract language code: `--ocr-lang fas` for Persian, `ara`, `deu`,
-`fra`, and so on. `tesseract --list-langs` shows what is installed; extra
-languages are `.traineddata` files from the `tessdata` or `tessdata_best`
-repositories, dropped into Tesseract's own `tessdata` directory.
-
-If you point `TESSDATA_PREFIX` at a directory of your own, **copy the whole
-`tessdata` folder**, not just the language files. It also contains `configs/`,
-and without those Tesseract fails with the misleading
-`read_params_file: Can't open hocr`, which OCRmyPDF reports as
-`TesseractConfigError`.
-
-## When the extraction is poor
-
-Symptoms and what they mean:
-
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| Body paragraphs classified as headings | the book's body font is unusually large relative to the running text | check `source.body_font_pt`; correct levels in `book.json` before chunking |
-| Chapter titles missed | the title is set in the same size as body text and does not start with a chapter word | add the heading manually, or use MinerU |
-| Running heads inlined into paragraphs | the head sits outside the top/bottom 8% band | see `source.running_heads_dropped` to confirm what *was* removed |
-| Illustrations missing entirely | in a scanned book the picture is part of the page raster, not a separate PDF image object | use MinerU — layout detection can find the figure region |
-| Text in reading order but garbled | multi-column layout | use MinerU |
-
-### Importing a stronger extractor
-
-Neither of these is reimplemented here; the adapters import their output.
-
-```bash
-# MinerU: OCR + layout analysis + figure extraction
-mineru -p book.pdf -o work/mineru
-$PY scripts/revayat-novel.py extract --from-mineru work/mineru --out work/
-```
-
-```bash
-# Marker or Docling, or any Markdown you already have
-$PY scripts/revayat-novel.py extract --from-markdown work/book.md --out work/
-```
-
-The Markdown importer resolves `![alt](path)` images relative to the Markdown
-file and copies them into `work/assets/`, so the rest of the pipeline is
-unchanged.
+Use the PDF page route or the pageless chunk route described in [multi-agent-workflow.md](multi-agent-workflow.md). Keep the title, names, and specialist terms pending until Stage 1 checks their sources and locks the chosen forms.
 
 ## EPUB and DOCX
 
@@ -273,69 +51,20 @@ An unspecified source language uses EPUB metadata; an explicit override wins.
 Footnotes are recovered from
 `epub:type="noteref"` links and from `<sup><a href="#id">` markers, with the
 note body pulled from the element the link points at and its leading `1.`
-stripped — Word numbers footnotes itself.
+stripped - Word numbers footnotes itself.
 
 An ordinary link's target travels on its block as `links`, the same field the
 DOCX reader fills, so one place in the builder rebuilds both. The spine is one
 book, so a link into another spine document is an *internal* link once the
 documents are concatenated: `c2.xhtml#later` becomes `#later`, and the anchor it
 points at is carried on the block that owns it. Only the anchors something
-actually links to are kept — a book is full of ids nothing points at. A link to
+actually links to are kept - a book is full of ids nothing points at. A link to
 a whole document with no fragment has nothing to point at once the file
 boundaries are gone; the words stay, the target does not, and
 `link-to-a-whole-document` in `book["source"]["epub_warnings"]` says so.
 
-DOCX input reads paragraphs, runs and styles through python-docx, and reads
-`word/footnotes.xml` and `word/endnotes.xml` directly because python-docx has
-no API for either. Section breaks travel as `book["sections"]`, each entry
-naming the block it opens at and carrying that section's page size,
-orientation, margins, gutter and header/footer distance; the builder puts the
-breaks back. `book["page"]` still reports the first section's geometry, exactly
-as it did when that was the only geometry the reader kept, so nothing
-downstream had to change. Both become footnotes in the Persian edition: that is where
-a Persian reader looks for a note, and it is what the builder writes. The two
-id spaces are kept apart — Word numbers footnotes and endnotes separately, so a
-book with a footnote 1 and an endnote 1 has two notes, not one.
-
-`book["source"]["docx_warnings"]` says what the reader could not carry across
-in full. None of them stops the import; each one exists so the loss is visible
-rather than discovered by a reader of the finished book.
-
-| Warning | What it means |
-| --- | --- |
-| `table-merged-cells` | a table had merged cells; the spans are recorded, so check the rebuilt table looks right |
-| `section-columns-dropped` | that section is set in two or more columns; its page size, orientation and margins are carried but the Persian edition is set in one |
-| `hyperlinks-kept-as-metadata` | every target is on its block as `links`; a live link goes back only where the translation kept the display phrase word for word, and each one that could not be placed is named |
-| `running-heads-dropped` | the source had headers or footers; the Persian edition generates its own instead of copying an English running head onto a Persian page |
+DOCX input reads the OOXML package directly. Check body order, inherited styles, section geometry, native notes, tables, hyperlinks, running heads, and drawing relationships. For content that the importer refuses or cannot preserve, use the recovery notes in [docx-intake-integrity.md](docx-intake-integrity.md). Resolve defects in a faithful copy, and retain the original.
 
 ## What the Book IR holds
 
-`work/book.json` is the source of truth. Markdown deliberately is not — it
-cannot carry image geometry, footnote identity or page setup.
-
-```json
-{
-  "id": "b00042", "type": "paragraph", "page": 12,
-  "bbox": [72, 140, 540, 220],
-  "text": "He whispered, *do not look back*.[[fn:fn0003]]",
-  "target": null
-}
-```
-
-```json
-{
-  "id": "b00043", "type": "image", "page": 12,
-  "asset": "p0012-img002.png",
-  "sha256": "…",
-  "width_pt": 392.0, "height_pt": 230.0,
-  "pixel_width": 1200, "pixel_height": 705,
-  "alt": "", "target_alt": null
-}
-```
-
-Block types: `heading` (with `level`), `paragraph`, `blockquote`, `listitem`,
-`caption`, `verse`, `image`, `pagebreak`, `separator`.
-
-Only `target`, `target_alt`, `meta.title_target` and `meta.author_target` are
-ever written by translation. Everything else is extraction's output and stays
-fixed — which is what makes a re-run reproducible.
+`book.json` is authoritative. It tracks the extracted source, chapters, ordered blocks and runs, assets, notes, and page geometry where available. Assets retain original checksums and dimensions. Do not rebuild from a Markdown export or edit the structured book by hand. Use the locked merge and editorial operations in the [six-stage workflow](multi-agent-workflow.md).

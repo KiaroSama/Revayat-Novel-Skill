@@ -1,0 +1,66 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/revayat-core",
+    "crates/revayat-persian",
+    "crates/revayat-ooxml",
+    "crates/revayat-ingest",
+    "crates/revayat-pipeline",
+    "crates/revayat-installer",
+    "crates/revayat-eval",
+    "crates/revayat-cli",
+]
+
+[workspace.package]
+version = "3.0.0"
+edition = "2024"
+rust-version = "1.100.0"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/KiaroSama/Revayat-Novel-Skill"
+
+[workspace.dependencies]
+anyhow = "1.0.105"
+chrono = { version = "0.4.45", features = ["serde"] }
+clap = { version = "4.6.10", features = ["derive"] }
+encoding_rs = "0.8.44"
+fancy-regex = "0.20.2"
+fs2 = "0.4.3"
+hayro = "0.9.0"
+hayro-interpret = "0.9.0"
+hayro-syntax = "0.9.0"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
+indexmap = { version = "2.11", features = ["serde"] }
+lopdf = "0.47.0"
+proptest = "1.12.0"
+quick-xml = "0.42.0"
+regex = "1.13.2"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "rustls", "gzip", "deflate"] }
+roxmltree = "0.21.2"
+scraper = "0.29.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+trycmd = "1.2.1"
+unicode-bidi = "0.3.18"
+unicode-normalization = "0.1.26"
+url = "2.5.9"
+walkdir = "2.5.1"
+zip = { version = "9.8.2", default-features = false, features = ["deflate"] }
+
+revayat-core = { path = "crates/revayat-core" }
+revayat-persian = { path = "crates/revayat-persian" }
+revayat-ooxml = { path = "crates/revayat-ooxml" }
+revayat-ingest = { path = "crates/revayat-ingest" }
+revayat-pipeline = { path = "crates/revayat-pipeline" }
+revayat-installer = { path = "crates/revayat-installer" }
+revayat-eval = { path = "crates/revayat-eval" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"

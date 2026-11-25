@@ -3,46 +3,12 @@ description: Resume an interrupted Revayat Novel run from its working directory
 argument-hint: [working directory, default ./work]
 ---
 
-Resume the Revayat Novel translation in `${1:-work}`.
-Reuse the recorded serial/parallel preference for this book. If no preference
-was recorded, ask before spawning workers and continue serially until answered.
-The coordinator owns integration and the adjacent workflow log.
+Resume the translation in `${1:-work}` at the first incomplete or stale stage of the [six-stage workflow](../skills/revayat-novel/references/multi-agent-workflow.md). Read the workflow log and inspect the current Book IR, request manifests, glossary, and review records. Preserve journals, old replies, and independent edits. A persistent lock file alone does not mean a process owns it.
 
-For a web novel, verify the original chapter manifest through `web-import --resume`
-as described in `references/web-novels.md`; cached source is not a claim of current
-website freshness. Preserve the existing book on a changed-source refusal.
+Reuse the recorded serial or parallel choice. If none was recorded, ask before spawning workers and work serially until answered. The coordinator owns shared writes and the log. For a web novel, verify the recorded chapter manifest and source snapshots before continuing. Use the resume mode of `revayat-novel web-import` if offered by the installed version. A changed source is a blocker; do not re-extract over a translated book or claim cached chapters are current.
 
-Inspect status before rebuilding. A stale or unverifiable request needs a rebuild
-and a new bound answer; archived replies remain evidence. Which commands resume it depends on how the book was
-cut, and the working directory says which: a `pages/` directory means the page
-route, a `chunks/` directory means the budget route.
+- PDF page route: run `revayat-novel pages status` and `revayat-novel pages next`. Translate only missing or stale worksheets, use `revayat-novel pages merge`, then compare the rendered source and target pages before `revayat-novel pages review` and `revayat-novel pages accept`.
+- Chunk route: use `revayat-novel chunk status` and translate only pending worksheets. For sharded work, validate existing assignments with `revayat-novel batch merge-shards` before `revayat-novel merge <work>`. Rebuild stale requests and generate fresh bound replies; do not change stored request tokens.
+- Later stages: check `revayat-novel meaning status` and `revayat-novel fluency status` against the current book. Continue through the remaining stages, rebuilding with `revayat-novel build <work> --out <file.docx>` when needed. A changed book or DOCX needs renewed evidence before delivery.
 
-Read `references/review-contracts.md` for legacy review migration and interrupted
-transactions. Preserve journals and independent edits; a persistent lock file
-does not mean a process still owns it.
-
-**Page route (`<dir>/pages` exists — every PDF):**
-
-1. `revayat-novel.py pages status --pages <dir>/pages --book <dir>/book.json` —
-   where every page stands. It re-checks each finished page against the book
-   (the manifest path is used when no override is supplied), so a page whose text moved
-   after it was accepted comes back as `stale` instead of being skipped.
-2. `revayat-novel.py pages next --pages <dir>/pages` — the first page still to
-   do. It names the exact worksheet file, so there is nothing to guess.
-3. For that page, the loop from SKILL.md step 4: translate the worksheet,
-   `pages merge`, `render-qa`, look at both rendered images, `pages review`,
-   `pages accept`. Then `pages next` again.
-4. When `next` reports nothing left: typography and the title page, then the
-   bilingual review, the blind Persian pass, `qa check --review … --fluency …`,
-   build, and both step-9 checks.
-
-**Budget route (`<dir>/chunks` exists — EPUB, DOCX, text):**
-
-1. `revayat-novel.py chunk status --chunks <dir>/chunks` to find what is pending.
-2. Translate only the pending worksheets, in batches, as the skill describes.
-3. `revayat-novel.py merge --glossary …`, and re-run any chunk the report names.
-4. Continue with typography and the title page, then the bilingual review,
-   the blind Persian pass, QA, build and verify.
-
-Report how many worksheets were already complete, how many this run finished,
-and — on the page route — how many pages are accepted out of the total.
+Use `revayat-novel <command> --help` for options. Report the resumed stage, how many worksheets were already complete and finished this run, and for PDFs how many source pages are accepted out of the total. Keep unresolved blockers and next actions in the workflow log.

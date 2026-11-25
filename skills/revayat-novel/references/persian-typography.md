@@ -4,7 +4,7 @@
 
 **Never reverse a string, and never pre-shape letters.**
 
-Persian is stored in *logical* order — the order you say the words in. Visual
+Persian is stored in *logical* order - the order you say the words in. Visual
 order is produced at render time by the Unicode bidirectional algorithm, given
 a base direction. Word is told that base direction with `w:bidi` on the
 paragraph and `w:rtl` on the run; the reader's text engine does the rest.
@@ -12,7 +12,7 @@ paragraph and `w:rtl` on the run; the reader's text engine does the rest.
 Reversing a string produces text that happens to look right in one viewer, and
 is broken in every other, unsearchable, uncopyable and impossible to edit. If a
 tool's Persian output shows disconnected letters or words in reverse order, its
-renderer lacks bidi and shaping — that is a bug in the renderer, and the fix is
+renderer lacks bidi and shaping - that is a bug in the renderer, and the fix is
 never to pre-mangle the text.
 
 This is also why the sentence-final full stop needs no special handling. `.` is
@@ -26,16 +26,16 @@ right-to-left paragraph:
 
 > او در سال ۱۹۸۴ با John Smith دیدار کرد.
 
-The builder splits each paragraph into runs by script: Persian runs get
-`w:rtl`, Latin runs do not. That per-run direction is what makes the ordering
-correct — see `split_by_script` in `scripts/build_docx.py`.
+Use `w:bidi` on the paragraph, `w:rtl` for Persian runs, and logical start alignment (`<w:jc w:val="start"/>`). Latin runs keep their reading order.
+
+When a Persian sentence starts with an English word, put `RLI` (`U+2067`) before the word and `PDI` (`U+2069`) after the final punctuation. In plain text or a `dir="auto"` container, prepend `RLM` (`U+200F`) before `RLI` to set paragraph direction. Leave purely English lines unwrapped. An isolate does not replace OOXML direction or script-specific runs.
 
 The same applies in HTML if you ever render a preview: set
 `<html lang="fa" dir="rtl">`, use logical CSS properties
 (`padding-inline-start`, `border-inline-start`) rather than left/right, and
 isolate Latin fragments with `<bdi>` or `unicode-bidi: isolate`.
 
-## What `falint fix` changes
+## What `revayat-novel falint fix` changes
 
 | From | To | Note |
 | --- | --- | --- |
@@ -60,17 +60,17 @@ unambiguous:
 
 - verb prefixes: `می` and `نمی`, and only when the following word can be a
   finite verb. `می` is also the noun *wine*, so `می ناب` (fine wine) and
-  `می رود` (goes) are the same shape — and the word after it decides.
+  `می رود` (goes) are the same shape - and the word after it decides.
 
   **A join needs positive evidence, and the absence of evidence preserves the
   text.** The word must read as a finite verb form: a stem from the closed list in
-  `famorph.py` plus a personal ending, present (`می‌رود`, `می‌نویسم`) or past
+  the linter's recognized stems plus a personal ending, present (`می‌رود`, `می‌نویسم`) or past
   (`می‌رفت`, `می‌رفتند`). Anything else is left exactly as written and reported as
   `zwnj-prefix-undecided` for a reader to settle.
 
   This replaced a test on the **last letter** of the following word, on the
   reasoning that every finite `می`-form ends in م/ی/د/ت. True, and not enough:
-  `سفید` and `تلخی` do too, so `می سفید نوشید` — *he drank white wine* — came out
+  `سفید` and `تلخی` do too, so `می سفید نوشید` - *he drank white wine* - came out
   as `می‌سفید نوشید`. A verb outside the list is a missing ZWNJ somebody has to
   add; a wrongly joined one is a changed sentence nobody notices.
 - plural and possessive suffixes: `ها`, `های`, `هایی`, `هایم`, `هایت`, `هایش`,
@@ -85,8 +85,8 @@ reports it as `zwnj-comparative` and a reader decides; joining it blindly turned
 
 **`تری` and `ترین` are declined after a function word.** They are suffixes on an
 adjective, and a preposition has no comparative: `از تری موهایش` is *from the
-wetness of her hair*, not *from-er*. The excluded set is a closed class —
-prepositions, conjunctions, determiners, particles — which is what makes the check
+wetness of her hair*, not *from-er*. The excluded set is a closed class -
+prepositions, conjunctions, determiners, particles - which is what makes the check
 defensible, and everything outside it is allowed to be an adjective. A declined
 join is reported as `zwnj-comparative-undecided`.
 
@@ -101,14 +101,14 @@ emphasis markers, verbatim spans or footnote tokens. Within the remaining
 prose it also masks:
 
 - URLs and email addresses
-- digit groups joined by `.` `:` `/` `-` — versions, dates, ISBNs
+- digit groups joined by `.` `:` `/` `-` - versions, dates, ISBNs
 - any Latin word
 
 So `https://example.com/a,b?x=1`, `978-0-19-953556-9` and `COVID-19` come
 through a Persian paragraph untouched, while the Persian comma two words later
 is still corrected.
 
-## What `falint lint` reports but will not fix
+## What `revayat-novel falint lint` reports but will not fix
 
 These need a human or a re-translation:
 
@@ -123,19 +123,6 @@ These need a human or a re-translation:
 
 ## Fonts
 
-Word picks the *complex script* font for Persian runs, which is a separate
-setting from the Latin font. The builder sets both: `--font` for Persian
-(`w:rFonts w:cs`), `--latin-font` for Latin (`w:ascii`/`w:hAnsi`).
+The default Persian face is static Vazirmatn, bundled under `skills/revayat-novel/assets/fonts/vazirmatn/`. The OOXML writer sets `w:cs="Vazirmatn"` for complex-script runs and embeds the font. Check the resulting font table, embedded parts, and the actual render. A machine with only the variable font installed may substitute another face; a successful open is not proof of the rendered font.
 
-- `Vazir` — free, modern, widely installed by Persian users. **Default.**
-  Deliberately not `Vazirmatn`, the same family's newer line: it is commonly
-  installed as a *variable* font, and Word will not resolve a variable font for
-  a complex-script run. Measured — a book asking for `Vazirmatn` came back set
-  in Calibri on a machine where Vazirmatn was installed, with every check
-  passing. `render-qa` and `doc-qa` now report that as `font-fallback`.
-- `B Nazanin` — the classic Persian book face; ships with Persian Office setups.
-- `Tahoma` — not a book face, but present on every Windows machine. Use it when
-  the file must render correctly somewhere you do not control.
-
-A font that lacks Persian glyphs is a *different* problem from a renderer that
-lacks shaping. Changing the font fixes missing glyphs only.
+A font lacking Persian glyphs causes missing characters. A renderer lacking shaping separates or reverses glyphs. Diagnose these separately rather than rewriting the stored text.

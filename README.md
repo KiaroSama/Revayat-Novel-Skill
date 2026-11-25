@@ -1,362 +1,206 @@
-<h1 align="center">Revayat Novel — روایت</h1>
+<h1 align="center">Revayat Novel · روایت</h1>
 
 <div align="center">
 
-[![Project CI runs on manual dispatch](https://img.shields.io/badge/CI-manual-2563eb)](.github/workflows/ci.yml)
-[![GPL 3.0 or later](https://img.shields.io/badge/license-GPL%203.0%2B-7c3aed)](LICENSE)
-[![Plugin version 2.0.0](https://img.shields.io/badge/plugin-2.0.0-15803d)](.claude-plugin/plugin.json)
-[![Implemented in Python 3.14.7, supported from Python 3.11](https://img.shields.io/badge/python-3.14.7-8b5cf6)](skills/revayat-novel/requirements.txt)
-[![Windows, macOS and Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0891b2)](.github/workflows/ci.yml)
-[![Claude Code plugin and standalone installers](https://img.shields.io/badge/install-plugin%20%7C%20standalone-0369a1)](install/README.md)
-[![Book workflow documentation](https://img.shields.io/badge/docs-book%20workflow-0f766e)](skills/revayat-novel/SKILL.md)
-[![Published tree (git archive of HEAD) is about 3.4 MB](https://img.shields.io/badge/repo%20size-3.4%20MB-ca8a04)](#how-it-works)
-[![PDF, EPUB, DOCX and text sources](https://img.shields.io/badge/sources-PDF%20%7C%20EPUB%20%7C%20DOCX%20%7C%20TXT-b45309)](skills/revayat-novel/SKILL.md)
-[![Persian Word output](https://img.shields.io/badge/output-Persian%20DOCX-be123c)](skills/revayat-novel/SKILL.md)
-[![Three bundled writing skills](https://img.shields.io/badge/writing%20skills-3%20bundled-4d7c0f)](skills/README.md)
-[![Support donations](https://img.shields.io/badge/Support-donations-d04a9a)](#donate)
+[![CI](https://img.shields.io/github/actions/workflow/status/KiaroSama/Revayat-Novel-Skill/ci.yml?style=flat-square&color=16a34a&label=CI)](.github/workflows/ci.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/KiaroSama/Revayat-Novel-Skill/codeql.yml?style=flat-square&color=0d9488&label=CodeQL)](.github/workflows/codeql.yml)
+[![Gitleaks](https://img.shields.io/github/actions/workflow/status/KiaroSama/Revayat-Novel-Skill/gitleaks.yml?style=flat-square&color=2563eb&label=Gitleaks)](.github/workflows/gitleaks.yml)
+[![License](https://img.shields.io/github/license/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=4f46e5)](LICENSE)
+[![Latest Git tag](https://img.shields.io/github/v/tag/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=7c3aed&label=Version)](https://github.com/KiaroSama/Revayat-Novel-Skill/tags)
+[![Rust 1.100.0](https://img.shields.io/badge/Rust-1.100.0-8b5cf6?style=flat-square)](#installation)
+[![64-bit Windows and Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20(64--bit)-0891b2?style=flat-square)](#installation)
+[![Five plugin formats](https://img.shields.io/badge/Plugins-5%20formats-0284c7?style=flat-square)](#plugin-formats)
+[![Bundled Vazirmatn v33.003](https://img.shields.io/badge/Font-Vazirmatn%20v33.003-059669?style=flat-square)](#vazirmatn-font)
+[![Six-stage multi-agent workflow](https://img.shields.io/badge/Workflow-6--stage%20multi--agent-d97706?style=flat-square)](#six-stage-workflow)
+[![Repository size](https://img.shields.io/github/repo-size/KiaroSama/Revayat-Novel-Skill?style=flat-square&color=ca8a04)](#repository-layout)
+[![Pure Rust](https://img.shields.io/badge/Built%20with-Pure%20Rust-ea580c?style=flat-square)](#architecture)
+[![Four bundled skills](https://img.shields.io/badge/Skills-4%20bundled-65a30d?style=flat-square)](skills/README.md)
+[![Support donations](https://img.shields.io/badge/Support-donations-d04a9a?style=flat-square)](#donate)
 
 </div>
 
-**Translate a whole book into publication-quality Persian, and get a Word file a publisher could work from.**
+**Translate a whole book into Persian and get an editable Word file a publisher can work from.**
 
-An agent skill for Claude Code, Kiro, Codex, Cursor, Cline and any other coding
-agent that can read a `SKILL.md`. It handles the parts that make book translation
-actually hard: scanned pages, illustrations that must keep their size and place,
-names that must not drift across forty chapters, and Persian typography that has
-to be right rather than approximately right.
+Revayat Novel is an agent skill for PDF, EPUB, DOCX, plain text, and web novels. It
+handles scanned pages, keeps illustrations at their original size where the source
+specifies it, and gives the translator a shared glossary so names stay consistent
+across chapters. Start a web novel from a URL or an ordered set of saved HTML or
+text chapters. The [web intake guide](skills/revayat-novel/references/web-novels.md)
+explains how to retain snapshots and resume a run.
 
-Web novels can start from a website link or ordered saved HTML/text chapters;
-the bundled [intake workflow](skills/revayat-novel/references/web-novels.md) preserves
-source snapshots and resumes without overwriting translated work. Native DOCX/PDF
-book guidance ships inside the skill. Optional parallel translation and editing
-asks the user first; one coordinator keeps terminology, integration and QA consistent.
-
-EPUB imports refuse missing chapters, pictures and unresolved explicit notes;
-[recovery guidance](skills/revayat-novel/references/epub-integrity.md) explains
-how to repair the source without deleting content. The opt-in audit replay
-workflow retains tracked-source ZIP, complete reachable HEAD history bundle and
-SHA-256 checksums. Its artifact includes `audit-export_YYYY-MM-DD_HH-mm-ss_UTC.log`
-with UTC INFO/DEBUG/WARNING/ERROR export events, no credentials or book content;
-artifacts expire after seven days. Verify checksums before replaying.
-
-The separate [offline sandbox CI](tests/sandbox/README.md) requires isolation
-proof before a finite synthetic parser/transaction corpus. It is not a complete
-security audit or literary certification.
-
-<div align="left"><a href="LICENSE">GPL-3.0 licensed</a></div>
 <div align="right"><a href="README.fa.md">فارسی</a></div>
 
----
+## Installation
 
-## What it does that a generic translator does not
+Build or install the native `revayat-novel` binary for 64-bit Windows or Linux
+(x64 or arm64). Install the binary separately from the plugin. If a signed
+package for your target is
+available on [Releases](https://github.com/KiaroSama/Revayat-Novel-Skill/releases),
+use that package and follow its notes. To build from this checkout, use Rust
+`1.100.0` through [rustup](https://rustup.rs/). Use a native linker on Linux
+and Visual Studio Build Tools with the C++ workload and Windows SDK on Windows.
+Install a C/C++ toolchain and CMake if needed to build the locked TLS dependencies.
 
-| | |
+Linux, from the repository root:
+
+```bash
+cargo build --release --locked --bin revayat-novel
+install -Dm755 target/release/revayat-novel bin/revayat-novel
+./bin/revayat-novel doctor --json
+./bin/revayat-novel install --agent claude --scope project --path "/path/to/project"
+```
+
+Windows, from the repository root in PowerShell 7:
+
+```powershell
+cargo build --release --locked --bin revayat-novel
+New-Item -ItemType Directory -Force bin | Out-Null
+Copy-Item target/release/revayat-novel.exe bin
+.\bin\revayat-novel.exe doctor --json
+.\bin\revayat-novel.exe install --agent claude --scope project --path 'C:\work\my project'
+```
+
+Use an existing project directory. The installer supports `claude`, `kiro`,
+`codex`, `cursor`, `cline`, `hermes`, `opencode`, and `antigravity`.
+`--agent all` only installs into agent homes that already exist. Use
+`--scope user` for your user profile and `--status` with the same selection to
+check the installation. The installer stages the book skill, fonts and binary,
+and keeps backups when replacing an installation with `--force`. Add the
+appropriate `bin/` directory to `PATH` if your agent cannot find `revayat-novel`.
+
+`doctor --json` reports the native build target, fonts, manifests, and optional
+tools it can find. Install Tesseract with English (`eng`) and Persian (`fas`)
+language packs for OCR as needed. LibreOffice (`soffice`) or Microsoft Word on
+Windows is needed to render Word documents for visual review. Their absence
+limits what you can verify; it does not prevent the core CLI from running.
+
+## Plugin formats
+
+| Host or format | Metadata |
 | --- | --- |
-| **Scanned, digital and mixed books** | Every page is probed for a text layer. Mixed books — the common case for older titles — get `--skip-text` OCR so pages that already read correctly are never re-recognised. |
-| **Illustrations survive intact** | Image bytes are extracted, never re-rendered, and placed in Word at their original physical size and aspect. A SHA-256 recorded at extraction proves the picture in the document is the picture from the book. |
-| **Real Word footnotes** | A genuine `word/footnotes.xml` part, so Word paginates each note to the foot of the page its marker lands on. Not superscript numbers and a list at the end. |
-| **A clickable table of contents** | Real bookmarks and a `TOC` field whose cached result is already a working hyperlink list — so it works whether or not the reader's viewer updates fields. |
-| **Persian typography, not just Persian words** | `ی`/`ک`, `، ؛ ؟`, `«»`, Persian digits, and zero-width non-joiners for `می‌رود` and `کتاب‌ها` — with URLs, identifiers and Latin words protected from every rule. |
-| **Right-to-left done properly** | `w:bidi` on paragraphs, `w:rtl` on Persian runs, and Latin names left-to-right inside them. Nothing is ever reversed to fake direction. |
-| **Names that hold across the book** | A locked glossary is injected into every chunk, so chapter 12 cannot rename a character chapter 3 introduced — and nicknames stay nicknames. |
-| **Watermarks removed from scans** | A colour stamp burned into a scanned page is detected by saturation — body text measures exactly 0, a watermark reaches 255 — and whitened. Pages that are genuinely artwork are left alone automatically. |
-| **Deterministic quality gates** | Missing paragraphs, dropped footnote markers, omissions caught by length ratio, altered images, dead TOC links. Counts and hashes, not a second opinion from a model. |
+| Claude Code | [Plugin](.claude-plugin/plugin.json), [marketplace](.claude-plugin/marketplace.json) |
+| Codex | [Plugin](.codex-plugin/plugin.json), [marketplace](.agents/plugins/marketplace.json) |
+| Cursor | [Plugin](.cursor-plugin/plugin.json), [marketplace](.cursor-plugin/marketplace.json) |
+| Antigravity | [Plugin](.antigravity-plugin/plugin.json) |
+| Agent Plugins | [Standard manifest](plugin.json) |
 
-## Install
+In Claude Code, add the marketplace and install the plugin:
 
-Use Python 3.11 or newer. On Windows, run the installer from PowerShell 7 (`pwsh`). If your administrator manages script execution, follow their policy for running the checked-out installer.
-
-```bash
-git clone https://github.com/KiaroSama/Revayat-Novel-Skill.git
-cd Revayat-Novel-Skill
-pip install -r skills/revayat-novel/requirements.txt
-```
-
-Then install the skill into whichever agents you use:
-
-```bash
-# macOS / Linux
-./install/install.sh
-
-# Windows
-pwsh -NoProfile -File .\install\install.ps1
-```
-
-By default this installs into every agent it finds — Claude Code, Kiro, Codex,
-Cursor, Cline, Hermes, OpenCode and Antigravity. OpenCode and Antigravity also
-get an `AGENTS.md` pointer, because that is how they discover instructions.
-Use `--agent claude` for one, and `--scope project --path <dir>` for a single
-project. Both wrappers require **Python 3.11+ before installation** and use one
-standard-library engine. Updating an existing copy requires `--force` / `-Force`
-in automation; interactive confirmation defaults to **No**, including EOF.
-
-Installation verifies the complete selected payload before replacing any copy.
-Old copies and instruction files are retained in a protected local state area;
-the next invocation recovers an interrupted transaction or refuses conflicting
-edits. Only the owned `AGENTS.md` section changes; surrounding bytes remain exact.
-See [installer safety and recovery](install/README.md) for logs, retained backups,
-inventory maintenance and the limits of multi-directory recovery.
-
-### As a Claude Code plugin
-
-```
+```text
 /plugin marketplace add KiaroSama/Revayat-Novel-Skill
 /plugin install revayat-novel@revayat-novel-skill
 ```
 
-That also gives you `/revayat-novel:translate-book`, `/revayat-novel:revayat-novel-resume` and `/revayat-novel:revayat-novel-qa`.
+Use `/revayat-novel:translate-book` to start, `/revayat-novel:revayat-novel-resume`
+to resume, and `/revayat-novel:revayat-novel-qa` to check a candidate. The bundle
+also includes [`persian`, `great-russian`, and `humanizer` v4.0.0](skills/README.md).
+Pick the editorial skill by the language you are writing; book output is Persian.
 
-The plugin bundles Persian, Humanizer and Great Russian. Choose by the language
-of the prose you are editing. An English or Russian source translated into
-Persian still uses the Persian skill. Revayat Novel produces Persian books; use
-the English and Russian skills for separate editorial work. The standalone book
-skill includes [its own Persian guidance](skills/revayat-novel/references/writing-voice.md).
-See the [upstream revisions and licenses](skills/README.md).
+## Vazirmatn font
 
-### Check the install
+The [Vazirmatn v33.003 bundle](skills/revayat-novel/assets/fonts/vazirmatn/) contains
+Regular, Bold, Medium and Light under the [SIL Open Font License](skills/revayat-novel/assets/fonts/vazirmatn/OFL.txt).
+The Word builder uses Vazirmatn for Persian text and includes the font in the
+package. Use render QA to check what the actual viewer drew. Document XML alone
+cannot prove the viewer used the embedded font or kept the intended layout.
 
-**Python 3.11 or newer** on Linux, macOS or Windows. The CI matrix covers 3.11,
-3.13 and 3.14. If you are upgrading from 1.x on Python 3.10, switch to a supported
-interpreter before updating the skill. Install the declared requirements again
-on upgrade. The Pillow release with the image-decoder fixes requires Python 3.11.
+## Six-stage workflow
 
-```bash
-python skills/revayat-novel/scripts/revayat-novel.py doctor
+Give the agent the source and an output path, for example: “Translate
+`book.epub` into Persian and deliver an editable Word document at `edition.docx`.”
+Use a separate work directory per book. The
+[full workflow](skills/revayat-novel/references/multi-agent-workflow.md) gives
+stage inputs, review roles, and sign-off criteria.
+
+1. **Initial translation:** Inspect the edition, then extract or import it. Write
+   natural Persian that preserves the narrator's register and each speaker's
+   voice. Look up names, titles, and specialist terms using live publisher,
+   author, or field-specific sources. Record spelling decisions and source URLs
+   in the glossary; keep unpublished manuscript text out of public queries.
+2. **Typesetting and layout:** Merge accepted worksheets and build an RTL DOCX.
+   Keep source dimensions where defined, original image bytes and aspect ratios,
+   real Word footnotes and a clickable table of contents.
+3. **Independent review:** Check source meaning and Persian fluency separately.
+   Send all findings to the coordinator before making edits. If a second reviewer
+   is unavailable, disclose that the review was a separate pass by the same agent.
+4. **Apply edits:** Merge corrected replies, keep locked terminology and inline
+   emphasis, and rebuild the candidate. Recheck approvals for the changed revision.
+5. **Re-check the file:** Run book, document, and render checks on the same
+   candidate. Collect the results, fix issues together, and rerun affected checks.
+6. **Final review and delivery:** Deliver only against the completed sign-off for
+   the current revision. Include the Word file and the workflow log.
+
+Parallel work is optional and requires your approval. `batch plan-shards` splits
+one book into independent assignments and `batch merge-shards` reunites replies.
+`batch plan-books` makes a bulk plan with separate work directories and outputs.
+Run all six stages per book. One coordinator owns the glossary, shared book,
+merges, and log, even when several agents translate or review.
+
+In mixed-direction Persian text, `RLI` (`U+2067`) and `PDI` (`U+2069`) isolate a
+Persian line that starts with English. Prefix that line with `RLM` (`U+200F`) in
+plain text or automatic direction. Word uses paragraph RTL, logical start
+alignment and complex-script fonts; reversing strings would corrupt the text.
+
+## CLI examples
+
+With `revayat-novel` on `PATH`, these are individual format and QA steps. They
+assume that the agent has completed the translation and review steps between
+extraction and the final build. Use `<command> --help` for supported options.
+
+```text
+revayat-novel extract "book.epub" --out "work/book"
+revayat-novel web-import "https://example.org/novel/" --out "work/web-book"
+revayat-novel build "work/book" --out "output/edition.docx"
+revayat-novel doc-qa check --help
+revayat-novel persian-lint --check --style "excerpt.txt"
+revayat-novel eval-score --answers "evaluation-answers.json"
 ```
 
-Optional. `skills/revayat-novel/requirements-optional.txt` declares the two
-wheels two stages need — `ocrmypdf` for scanned or mixed PDFs, and `pywin32` for
-the Word render path on Windows. Nothing else needs them, and `doctor` reports
-which are present.
+## Logs and limits
 
-```bash
-pip install -r skills/revayat-novel/requirements-optional.txt
+The coordinator writes a UTF-8 `translation_YYYY-MM-DD_HH-mm-ss_UTC.log` beside
+the Word file. Record intake, changes, refusal reasons, review results, and the
+output revision. For per-command logs, pass `--log-dir <work>`; the binary writes
+them under `<work>/logs/`. Preserve the workflow log and work directory for
+resuming, and redact logs before sharing them. See
+[preservation and logging](skills/revayat-novel/references/preservation-and-logging.md).
 
-# Tesseract (the OCR engine):
-winget install tesseract-ocr.tesseract     # Windows
-brew install tesseract                     # macOS
-sudo apt install tesseract-ocr             # Debian/Ubuntu
+Ask before lengthy OCR or a book over roughly 200,000 source characters. OCR
+coverage does not prove recognition accuracy. Reflowable sources may not define
+fixed page geometry. Stop when extraction misses source material or when review
+or rendering coverage is unknown. The [evaluation cases](evaluation/cases.json)
+and [offline sandbox](tests/sandbox/README.md) are finite checks, not literary
+certification or a complete security audit.
 
-# Ghostscript — not carried by winget; download the installer:
-#   https://ghostscript.com/releases/gsdnld.html
-brew install ghostscript                   # macOS
-sudo apt install ghostscript               # Debian/Ubuntu
-```
+## Architecture
 
-None of them has to be on `PATH`. `doctor` looks on `PATH`, then in the script
-directory of the interpreter you ran `pip install` with — a virtual environment
-usually is not on `PATH` — and then where each installer leaves the tool.
+The CLI and workspace are written in Rust. `book.json` is the authoritative
+intermediate representation. A locked, validated write applies accepted replies
+and preserves recovery evidence. The DOCX writer consumes the book and its
+assets; the QA tools inspect package structure and bind review evidence to a
+specific revision. Optional local programs cover OCR and Word rendering.
 
-## Integrity and review limits
+## Repository layout
 
-Native intake retains authored tables (including empty/nested grids), control-only
-layout, applicable complex-script emphasis and every actual PDF image occurrence.
-Unsupported geometry refuses instead of silently rewriting assets. Page acceptance
-rechecks live glossary/context dependencies; complete current raster evidence is
-required for visual approval. OCR caches carry source/output-bound coverage proofs;
-ambiguous silent raster roles need an explicit `--ocr-page-roles` manifest.
-Approved image-role pages retain artwork even when OCR recognizes a caption;
-ambiguous retained page rasters are preserved and reported during MinerU placement.
+| Path | Contents |
+| --- | --- |
+| `crates/` | CLI, book contracts, ingestion, Persian text, OOXML, pipeline, installer, and evaluation |
+| `bin/` | Staged executable (`revayat-novel.exe` on Windows, `revayat-novel` on Linux) |
+| [`skills/`](skills/README.md) | Book workflow, bundled writing skills and font assets |
+| [`commands/`](commands/) | Claude Code commands |
+| [`evaluation/`](evaluation/) | Recorded translation cases and review protocol |
+| [`.github/workflows/`](.github/workflows/) | Rust CI, dependency and secret checks, and offline sandbox |
 
-The installer supports read-only `--status` (`-Status` in PowerShell); it observes
-stable receipts but does not claim OS-lock exclusivity. Evaluation's
-[adjudication protocol](evaluation/README.md) prepares all 28 cases as pending and
-validates independent result intake—no human literary approval is invented.
-CI may retain only bounded, allowlisted synthetic failure evidence, never real books.
+The original orchestration draws on [deusyu/translate-book](https://github.com/deusyu/translate-book).
+The book representation follows the layout-preservation idea in [BabelDOC](https://github.com/funstory-ai/BabelDOC).
 
-## Use
+## Author
 
-Ask your agent, in whatever words you like:
+[Kiaro Sama](https://github.com/KiaroSama) · [Kiaro.Sama.Dev@gmail.com](mailto:Kiaro.Sama.Dev@gmail.com)
 
-> Translate `book.pdf` into Persian and give me a Word file.
+## License
 
-Or with the plugin: `/translate-book ./book.pdf`
-
-The agent asks whether to use parallel subagents, then runs the pipeline and
-stops at the points where your judgement matters — chiefly the glossary,
-where you decide what each character is called in Persian.
-
-### Or drive it yourself
-
-```bash
-S=skills/revayat-novel/scripts
-# $PY is the interpreter you have: python3 on macOS/Linux, python or py -3 on
-# Windows, where python3 usually does not exist.
-
-$PY $S/revayat-novel.py extract book.pdf --out work/
-$PY $S/revayat-novel.py glossary scan --book work/book.json --out work/glossary.json
-#   … fill in the Persian names in work/glossary.json …
-
-# A PDF is cut by page — one job per source page, so each one can be checked
-# against the page it came from. EPUB, DOCX and plain text have no pages, and
-# take `chunk build --out work/chunks` instead.
-$PY $S/revayat-novel.py pages build --book work/book.json --out work/pages --glossary work/glossary.json
-
-# then, per page: translate work/pages/pageNNNN.md -> out_pageNNNN.md, and
-$PY $S/revayat-novel.py pages     merge   --book work/book.json --pages work/pages --page 1 --glossary work/glossary.json
-$PY $S/revayat-novel.py render-qa --book work/book.json --work work --page 1
-#   … look at renders/source/page-0001.png beside renders/target/page-0001.png …
-$PY $S/revayat-novel.py pages     review  --pages work/pages --page 1 --answer …
-$PY $S/revayat-novel.py pages     accept  --book work/book.json --pages work/pages --page 1
-
-# Finish the published text *before* anybody reads it: typography is mechanical
-# and the title page is published prose. Both move the revision the approvals
-# below are bound to, so running them afterwards makes those approvals stale.
-#   … set meta.title_target / meta.author_target through bookwrite.transaction …
-$PY $S/revayat-novel.py falint fix --book work/book.json
-
-# Read the Persian against the English. Three rubrics are about meaning and
-# block; two are about style and deliberately do not.
-$PY $S/revayat-novel.py meaning sheets --book work/book.json --out work/review
-#   … read work/review/sheet_NNNN.md, write findings to out_sheet_NNNN.md …
-$PY $S/revayat-novel.py meaning record --book work/book.json --out work/review
-$PY $S/revayat-novel.py meaning status --book work/book.json --out work/review
-
-# An independent Persian reading complements the source-grounded review.
-$PY $S/revayat-novel.py fluency sheets --book work/book.json --out work/fluency --meaning work/review
-#   … read work/fluency/sheet_NNNN.md, propose replacements in out_sheet_NNNN.md …
-$PY $S/revayat-novel.py fluency record --book work/book.json --out work/fluency
-$PY $S/revayat-novel.py fluency apply  --book work/book.json --out work/fluency
-#   … the book moved, so repeat the complete `meaning` review above: that re-run
-#       is the comparison against the source, and nothing passes without it …
-$PY $S/revayat-novel.py fluency status --book work/book.json --out work/fluency --meaning work/review
-
-# Nothing left for typography to fix, or the approvals above describe older text.
-$PY $S/revayat-novel.py falint lint  --book work/book.json
-# `--review` and `--fluency` are how the two semantic verdicts are enforced here;
-# without them the report says `semantic-unverified`, which `--strict` blocks on.
-$PY $S/revayat-novel.py qa check --book work/book.json --assets work/assets \
-  --glossary work/glossary.json --review work/review --fluency work/fluency --strict
-$PY $S/revayat-novel.py build  --book work/book.json --out out/book.fa.docx --font "Vazir"
-
-# Two final gates, and the file is not ready until both pass: the package, and
-# the finished book rendered and looked at.
-$PY $S/revayat-novel.py qa     docx  --file out/book.fa.docx --book work/book.json
-$PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
-$PY $S/revayat-novel.py doc-qa review --work work --answer …
-$PY $S/revayat-novel.py doc-qa check --book work/book.json --work work --docx out/book.fa.docx
-```
-
-## How it works
-
-```
-book.pdf / .epub / .docx
-        │
-        ▼  probe every page: digital · scanned · mixed
-   OCRmyPDF ──────── only the pages that need it, images untouched
-        │
-        ▼
-   Book IR  ── blocks, runs, image bytes + geometry, footnotes, page setup
-        │      (book.json — the source of truth; Markdown deliberately is not)
-        ├──────────────▶ glossary.json ── locked names, aliases, character voices
-        ▼
-   chapter-aware worksheets ── term table + neighbouring context per chunk
-        │
-        ▼  translated serially, or in parallel with user consent
-   merge ── every @@ id must return exactly once, or it is a named error
-        │
-        ▼
-   metadata + Persian typography ── settle the published text first
-        ▼
-   bilingual review → independent Persian review → renewed source confirmation
-        │
-        ▼
-   quality gates ── coverage, footnote parity, omissions, image hashes, glossary
-        │
-        ▼
-   build ── python-docx + raw OOXML for footnotes, bookmarks, TOC, bidi
-        │
-        ▼
-   book.fa.docx  +  package-level verification
-```
-
-**The Book IR is the design decision everything else follows from.** Routing a
-book through Markdown loses image geometry, footnote identity and page setup,
-and then no amount of care downstream can get them back. Only inline emphasis
-travels as markup — because models handle `*italic*` far more reliably than a
-bespoke XML dialect, and because QA can verify it by counting.
-
-## What it is honest about
-
-Word reflows. A Persian paragraph is rarely the same length as its English
-original, so an **editable** document cannot also be page-for-page identical to
-the source PDF. Any tool promising both is producing uneditable text boxes.
-
-What *is* exact: image bytes, physical size and aspect; where each picture sits
-in the text; heading hierarchy and chapter breaks; bold and italic; footnote
-placement and numbering — and endnotes, folded in as footnotes; the source's
-section breaks and their page geometry; hyperlink targets, rebuilt as live links
-wherever the translation kept the display phrase; the running heads, carried
-across in Persian; chapter links; and selectable, searchable, editable Persian.
-
-Two more limits worth knowing up front:
-
-- PDF heading detection is a font-size heuristic. On an unusual design it
-  misses; fix the levels in `book.json` before chunking, or use MinerU.
-- In a scanned book an illustration is usually part of the page raster rather
-  than a separate image object, so there is nothing to extract. MinerU's layout
-  model finds those; `--from-mineru` imports its output.
-- `doc-qa check --keep-pdf` will hand you a PDF of the finished book, with the
-  Persian selectable and the font embedded. Its contents page is text rather
-  than a clickable PDF outline, and its pagination is the rendering program's —
-  the `.docx` remains the editable deliverable.
-
-## Documentation
-
-The skill loads these on demand rather than up front:
-
-- [`translation-policy.md`](skills/revayat-novel/references/translation-policy.md) — what a faithful literary translation requires
-- [`persian-typography.md`](skills/revayat-novel/references/persian-typography.md) — RTL, ZWNJ, punctuation, mixed scripts
-- [`extraction.md`](skills/revayat-novel/references/extraction.md) — OCR routing, difficult books, the IR schema
-- [`watermarks.md`](skills/revayat-novel/references/watermarks.md) — removing a colour stamp from a scan, and what it cannot do
-- [`glossary-and-voice.md`](skills/revayat-novel/references/glossary-and-voice.md) — naming policy, aliases, character voice
-- [`docx-and-ooxml.md`](skills/revayat-novel/references/docx-and-ooxml.md) — every build option and what Word structure it produces
-- [`troubleshooting.md`](skills/revayat-novel/references/troubleshooting.md) — the failures you are most likely to hit
-
-## Development
-
-```bash
-pip install -r skills/revayat-novel/requirements.txt
-python -m pytest tests -q
-```
-
-Fixtures are generated, not committed: the suite builds its own PDF, EPUB and
-DOCX, so it stays fast and no third-party book text is vendored in.
-
-`tests/e2e_pipeline.py` runs every stage against a generated book — extract,
-glossary, chunk, merge, typography, semantic reviews, QA, build, package
-verification — so a break
-in the seam between two stages fails even when each module's own tests pass. CI
-runs it on Linux, macOS and Windows.
-
-`python tests/run_audit.py --repo .` runs normal collection including the shared
-contract regressions, retaining JUnit and a result record under `.pytest-tmp/audit/`.
-Reviewer replies in those fixtures simulate protocol states; they do not certify
-linguistic quality. The original benchmark accepts multiple faithful renderings
-and reports unseen ones as `unknown`, without an overall quality score.
-
-See [review-contracts.md](skills/revayat-novel/references/review-contracts.md) for
-explicit approval states, immutable reply archives, retryable freshness refusals
-and legacy migration. An empty edit list or unknown digest never approves delivery.
-Every agent using the skill must keep a UTF-8 workflow log beside the translated
-file, recording translation, corrections and verification. The
-[preservation rules](skills/revayat-novel/references/preservation-and-logging.md)
-also require original page dimensions, original image resolution and documented,
-visually checked derivatives when poor images need improvement.
-[Source-language profiles](skills/revayat-novel/references/source-languages.md)
-cover Japanese, Korean, Chinese, French, Spanish and English to Persian, with
-evidence and uncertainty rules rather than claims of automatic literary quality.
-
-## Credits
-
-The orchestration shape — chunking a book, translating chunks in parallel
-sub-agents with a shared glossary, and resuming a partial run — follows the
-approach demonstrated by [deusyu/translate-book](https://github.com/deusyu/translate-book) (MIT).
-Extraction and OCR routing build on [PyMuPDF](https://github.com/pymupdf/PyMuPDF),
-[OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF) and, optionally,
-[MinerU](https://github.com/opendatalab/MinerU). The intermediate-representation
-approach to preserving layout through translation is the idea behind
-[BabelDOC](https://github.com/funstory-ai/BabelDOC).
+Copyright Kiaro Sama. Revayat Novel is licensed under [GPL-3.0-or-later](LICENSE).
 
 ## Donate
 
@@ -372,19 +216,3 @@ If this project helps you, donations are appreciated.
 | Litecoin (LTC) | LTC | `ltc1qntqnnrunadurnw4cshv3qgspywrueyyeyngwuy` |
 | Solana (SOL) | Solana | `7B2wkczUjmkDhETwQuknBL8sUsbuV7nErxc317TmQuwR` |
 | Polygon (POL) | Polygon | `0x0Bd0BA443a8B9cf15922bf7f0Bb0a4b495fD06Ef` |
-
-## Author
-
-Author: Kiaro Sama
-GitHub: https://github.com/KiaroSama
-
-## License
-
-[GNU General Public License v3.0 or later](LICENSE).
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version. It is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See the licence for details.

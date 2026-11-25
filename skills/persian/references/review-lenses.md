@@ -2,7 +2,7 @@
 
 Run these lenses on the draft. If you can spawn subagents (Claude Code, Cowork), run one per lens
 in parallel for long or important texts. Otherwise run them inline, one after another, in the
-order below. Give each reviewer the source, the draft, and the terminology brief from `lookup.py`.
+order below. Give each reviewer the source, the draft, and the terminology brief from `revayat-novel persian-lookup`.
 
 ## The lenses
 
@@ -11,7 +11,7 @@ order below. Give each reviewer the source, the draft, and the terminology brief
    ambiguity) with severity. Confirm names, numbers, dates, and entities match, and that nothing was
    dropped, added, or softened. This lens has the final say.
 
-2. **terminology-compliance.** Every glossary and idiom entry from `lookup.py` is used consistently
+2. **terminology-compliance.** Every glossary and idiom entry from `revayat-novel persian-lookup` is used consistently
    and correctly.
 
 3. **diction-grammar.** Word precision and syntax. Does each Persian word carry the source's exact
@@ -57,7 +57,7 @@ Confirm on every real translation:
 2. **Checked against the source.** Every proper noun (spelling, transliteration, identity), place
    name, number, date, age, quantity, unit conversion (recomputed, and consistent with the user's
    unit policy), and every polarity or quantifier ("no one" vs "everyone", "missing" vs "present").
-3. **Mechanically clean.** `persian_lint.py --fix` has run, or sections 1 to 4 of
+3. **Mechanically clean.** `revayat-novel persian-lint --fix` has run, or sections 1 to 4 of
    `typography-and-rtl.md` were applied by hand.
 
 The back-translation lens is the fastest way to catch a shifted or dropped meaning.

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "revayat-novel",
+  "displayName": "Revayat Novel",
+  "version": "3.0.0",
+  "description": "Translate books into Persian with a six-stage multi-agent workflow. A pure-Rust native binary builds Word files with the bundled Vazirmatn font.",
+  "suggestedPrompts": [
+    "Translate this EPUB into Persian and keep its illustrations, footnotes, and chapter order.",
+    "Translate this scanned PDF page by page and flag any words the scan leaves uncertain.",
+    "Review this Persian Word file against its source and check that its chapter links work."
+  ],
+  "author": {
+    "name": "Kiaro Sama",
+    "url": "https://github.com/KiaroSama"
+  },
+  "homepage": "https://github.com/KiaroSama/Revayat-Novel-Skill",
+  "repository": "https://github.com/KiaroSama/Revayat-Novel-Skill",
+  "license": "GPL-3.0-or-later",
+  "keywords": ["translation", "persian", "farsi", "rtl", "docx", "ocr", "epub", "pdf", "book", "typography"]
+}

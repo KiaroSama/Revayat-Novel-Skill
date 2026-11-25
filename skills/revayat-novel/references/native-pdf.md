@@ -13,30 +13,13 @@ text coverage and illustrations. A selectable text layer can still be wrong; a
 textless plate is not automatically a failed OCR page. Password-protected or
 unreadable inputs require a usable authorized source, not silent blank output.
 
-Use `extract` from the main skill and review its report. PyMuPDF handles digital
-text, geometry and original embedded images. Source page variants remain part of
-the book; do not rasterize the entire document merely to simplify extraction.
-See [extraction.md](extraction.md) for the actual options and import routes.
+Run `revayat-novel doctor`, then `revayat-novel extract <input.pdf> --out <work>`. The native engine uses `lopdf` to inspect PDF objects and `hayro` to interpret and rasterize pages. Check text order and coverage even if the PDF is searchable.
 
 ## OCR only where it is needed
 
-Select the language printed in the source, including required installed OCR packs.
-The native extraction route distinguishes digital, scanned and mixed inputs;
-preserve usable text pages instead of blindly forcing OCR over everything.
-OCRmyPDF execution is bounded, and its image optimization is disabled for this
-preservation route. Missing engines/languages are prerequisites to resolve.
+Use optional Tesseract for missing or unusable text. Run `revayat-novel ocr-sidecar <input.pdf> --out <work>` and check the installed command's help for source-language options. Verify recognition against the actual page, especially names and numbers. Keep native text where it is accurate. A raster may be an illustration or blank page; account for its role rather than fabricating text. Preserve the original image bytes and dimensions. When a scan contains the image and prose together, any extracted crop is a logged derivative.
 
-Use the native OCR sidecar for word confidence and bounding boxes. Low confidence,
-source/OCR disagreement and missing content require comparison with the page image;
-confidence is a diagnostic, not proof of correctness. Deskewing, denoising or
-watermark cleaning happens on a separate derivative and must not erase punctuation,
-diacritics, line art or other manuscript evidence. Keep original illustrations.
-
-For complex layouts, tables or figures the direct reader cannot preserve, inspect
-the actual page and use the documented external-extraction import route where
-appropriate. Validate imported reading order, cell relationships, notes and figure
-geometry. Do not claim this skill provides general PDF forms or lossless table
-reconstruction. An unsupported structure stays visible until it is resolved.
+See [extraction.md](extraction.md) for intake and [watermarks.md](watermarks.md) for reviewing candidate scan derivatives.
 
 ## Translate and compare pages
 
@@ -59,11 +42,7 @@ page as done, overwrite the source to retry, or continue after an empty extracti
 Keep diagnostics for unresolved failures. Bound external processes and avoid
 running several OCR/render workers against the same mutable book.
 
-Complete meaning/fluency review and final Word package/render QA through the main
-skill. The optional rendered PDF is derived from the reviewed Word output; it does
+Complete meaning and fluency review, build with the bundled Vazirmatn font, and run final package and render checks through the [six-stage workflow](multi-agent-workflow.md). The optional rendered PDF is derived from the reviewed Word output; it does
 not replace the editable Word deliverable or the required adjacent agent log.
 
-Implementation: scripts/read_pdf.py, extract.py, ocr_sidecar.py, sourcepages.py,
-rasters.py, renderqa.py and docqa.py. This guide is independently authored;
-no external scripts or prose are copied. Primary format guidance:
-[PyMuPDF image extraction](https://pymupdf.readthedocs.io/en/latest/recipes-images.html).
+Engine documentation: [hayro](https://docs.rs/hayro/latest/hayro/) and [lopdf](https://docs.rs/lopdf/latest/lopdf/).

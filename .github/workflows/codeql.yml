@@ -5,25 +5,32 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
   schedule:
-    # Weekly, so a newly-published rule finds old code without waiting for a push.
-    - cron: "27 5 * * 1"
+    - cron: '27 5 * * 1'
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   analyse:
-    name: analyse python
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    name: CodeQL (Rust)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: github/codeql-action/init@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          languages: python
+          persist-credentials: false
+      - run: cargo build --workspace --locked
+      - uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          languages: rust
+          # CodeQL extracts Rust with rust-analyzer and only supports this mode.
+          build-mode: none
           queries: security-and-quality
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/analyze@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
-          category: /language:python
+          category: /language:rust

@@ -47,5 +47,4 @@ quality. Keep the bilingual meaning review, independent Persian reading and
 source confirmation after real edits; never ask a model to reconstruct omitted
 source quantities, passages or captions from context.
 
-References: [EPUB 3.3](https://www.w3.org/TR/epub-33/) and
-[Python pathlib path semantics](https://docs.python.org/3/library/pathlib.html).
+Reference: [EPUB 3.3](https://www.w3.org/TR/epub-33/).

@@ -1,0 +1,468 @@
+{"fn": "is_verb_form", "args": ["日本語のテキストsrc/a/b.ts"], "ok": false}
+{"fn": "is_verb_form", "args": ["a..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["é"], "ok": false}
+{"fn": "is_verb_form", "args": ["a😀b😀c"], "ok": false}
+{"fn": "is_verb_form", "args": ["src/a/b.ts"], "ok": false}
+{"fn": "is_verb_form", "args": ["ns:key.path"], "ok": false}
+{"fn": "is_verb_form", "args": ["  padded  "], "ok": false}
+{"fn": "is_verb_form", "args": ["straße"], "ok": false}
+{"fn": "is_verb_form", "args": ["trailing."], "ok": false}
+{"fn": "is_verb_form", "args": ["emoji 👍🏽 mix"], "ok": false}
+{"fn": "is_verb_form", "args": [""], "ok": false}
+{"fn": "is_verb_form", "args": [".leadinghello"], "ok": false}
+{"fn": "is_verb_form", "args": ["emoji 👍🏽 mixns:key.path"], "ok": false}
+{"fn": "is_verb_form", "args": ["a:b:c:"], "ok": false}
+{"fn": "is_verb_form", "args": ["line1\nline2"], "ok": false}
+{"fn": "is_verb_form", "args": ["key_name-1a.b.c"], "ok": false}
+{"fn": "is_verb_form", "args": ["﻿bom"], "ok": false}
+{"fn": "is_verb_form", "args": ["é{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbul"], "ok": false}
+{"fn": "is_verb_form", "args": [":"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.json"], "ok": false}
+{"fn": "is_verb_form", "args": [".leading"], "ok": false}
+{"fn": "is_verb_form", "args": ["a"], "ok": false}
+{"fn": "is_verb_form", "args": ["a.b.c"], "ok": false}
+{"fn": "is_verb_form", "args": ["ab"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbul😀"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.jsona..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello"], "ok": false}
+{"fn": "is_verb_form", "args": ["emoji 👍🏽 mix.leading"], "ok": false}
+{"fn": "is_verb_form", "args": ["a.b.c:"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello world"], "ok": false}
+{"fn": "is_verb_form", "args": ["ΣΊΣΥΦΟΣ"], "ok": false}
+{"fn": "is_verb_form", "args": ["ΣΊΣΥΦΟΣline1\nline2"], "ok": false}
+{"fn": "is_verb_form", "args": ["ΣΊΣΥΦΟΣa.b.c"], "ok": false}
+{"fn": "is_verb_form", "args": ["abc"], "ok": false}
+{"fn": "is_verb_form", "args": ["a:b:c{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["Hello Worlda:b:c"], "ok": false}
+{"fn": "is_verb_form", "args": ["a..bkey_name-1"], "ok": false}
+{"fn": "is_verb_form", "args": ["trailing.trailing."], "ok": false}
+{"fn": "is_verb_form", "args": ["aa:b:c"], "ok": false}
+{"fn": "is_verb_form", "args": ["ünïcödé"], "ok": false}
+{"fn": "is_verb_form", "args": ["a:b:c﻿bom"], "ok": false}
+{"fn": "is_verb_form", "args": ["a:b:c"], "ok": false}
+{"fn": "is_verb_form", "args": ["abcé"], "ok": false}
+{"fn": "is_verb_form", "args": ["HELLO"], "ok": false}
+{"fn": "is_verb_form", "args": ["Hello World"], "ok": false}
+{"fn": "is_verb_form", "args": ["key_name-1"], "ok": false}
+{"fn": "is_verb_form", "args": ["ünïcödéHELLO"], "ok": false}
+{"fn": "is_verb_form", "args": ["a..b.leading"], "ok": false}
+{"fn": "is_verb_form", "args": ["tab\tseparated"], "ok": false}
+{"fn": "is_verb_form", "args": ["日本語のテキスト"], "ok": false}
+{"fn": "is_verb_form", "args": ["a.b.c{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["😀"], "ok": false}
+{"fn": "is_verb_form", "args": ["a:b:csrc/a/b.ts"], "ok": false}
+{"fn": "is_verb_form", "args": ["abca"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello world  padded  "], "ok": false}
+{"fn": "is_verb_form", "args": ["HELLOkey_name-1"], "ok": false}
+{"fn": "is_verb_form", "args": ["{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["aΣΊΣΥΦΟΣ"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.jsoné"], "ok": false}
+{"fn": "is_verb_form", "args": ["ab{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["日本語のテキスト  padded  "], "ok": false}
+{"fn": "is_verb_form", "args": ["ΣΊΣΥΦΟΣkey_name-1"], "ok": false}
+{"fn": "is_verb_form", "args": [".leadingΣΊΣΥΦΟΣ"], "ok": false}
+{"fn": "is_verb_form", "args": ["﻿boma😀b😀c"], "ok": false}
+{"fn": "is_verb_form", "args": ["{name} has {count} itemstrailing."], "ok": false}
+{"fn": "is_verb_form", "args": ["ΣΊΣΥΦΟΣa"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbula..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["{name} has {count} itemsa"], "ok": false}
+{"fn": "is_verb_form", "args": ["ns:key.path./x/**/*.json"], "ok": false}
+{"fn": "is_verb_form", "args": ["ünïcödéemoji 👍🏽 mix"], "ok": false}
+{"fn": "is_verb_form", "args": ["ab﻿bom"], "ok": false}
+{"fn": "is_verb_form", "args": ["a😀b😀cünïcödé"], "ok": false}
+{"fn": "is_verb_form", "args": ["{name} has {count} itemsHELLO"], "ok": false}
+{"fn": "is_verb_form", "args": ["é./x/**/*.json"], "ok": false}
+{"fn": "is_verb_form", "args": ["éemoji 👍🏽 mix"], "ok": false}
+{"fn": "is_verb_form", "args": ["😀a😀b😀c"], "ok": false}
+{"fn": "is_verb_form", "args": ["tab\tseparatedline1\nline2"], "ok": false}
+{"fn": "is_verb_form", "args": ["  padded  tab\tseparated"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello worldkey_name-1"], "ok": false}
+{"fn": "is_verb_form", "args": ["a😀b😀c{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["ünïcödéabc"], "ok": false}
+{"fn": "is_verb_form", "args": ["abcabc"], "ok": false}
+{"fn": "is_verb_form", "args": [".leadingé"], "ok": false}
+{"fn": "is_verb_form", "args": ["aba"], "ok": false}
+{"fn": "is_verb_form", "args": ["Hello Worldstraße"], "ok": false}
+{"fn": "is_verb_form", "args": ["straßeHELLO"], "ok": false}
+{"fn": "is_verb_form", "args": ["Hello Worldline1\nline2"], "ok": false}
+{"fn": "is_verb_form", "args": ["Hello Worlda.b.c"], "ok": false}
+{"fn": "is_verb_form", "args": ["trailing.ΣΊΣΥΦΟΣ"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbul./x/**/*.json"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello worldΣΊΣΥΦΟΣ"], "ok": false}
+{"fn": "is_verb_form", "args": ["a:b:cab"], "ok": false}
+{"fn": "is_verb_form", "args": ["﻿bom😀"], "ok": false}
+{"fn": "is_verb_form", "args": ["tab\tseparatedtrailing."], "ok": false}
+{"fn": "is_verb_form", "args": ["😀ab"], "ok": false}
+{"fn": "is_verb_form", "args": ["Hello Worldİstanbul"], "ok": false}
+{"fn": "is_verb_form", "args": ["abcns:key.path"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbulemoji 👍🏽 mix"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["HELLOΣΊΣΥΦΟΣ"], "ok": false}
+{"fn": "is_verb_form", "args": ["  padded  :"], "ok": false}
+{"fn": "is_verb_form", "args": ["src/a/b.tsns:key.path"], "ok": false}
+{"fn": "is_verb_form", "args": [":src/a/b.ts"], "ok": false}
+{"fn": "is_verb_form", "args": ["a:b:cé"], "ok": false}
+{"fn": "is_verb_form", "args": ["Hello WorldΣΊΣΥΦΟΣ"], "ok": false}
+{"fn": "is_verb_form", "args": ["helloa"], "ok": false}
+{"fn": "is_verb_form", "args": ["a😀b😀ca:b:c"], "ok": false}
+{"fn": "is_verb_form", "args": ["a..ba..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbula"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello worldhello world"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbul{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello worlda"], "ok": false}
+{"fn": "is_verb_form", "args": ["ΣΊΣΥΦΟΣhello world"], "ok": false}
+{"fn": "is_verb_form", "args": ["﻿bomns:key.path"], "ok": false}
+{"fn": "is_verb_form", "args": ["aline1\nline2"], "ok": false}
+{"fn": "is_verb_form", "args": ["abcline1\nline2"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello world﻿bom"], "ok": false}
+{"fn": "is_verb_form", "args": ["日本語のテキストa..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["emoji 👍🏽 mixa:b:c"], "ok": false}
+{"fn": "is_verb_form", "args": ["abcHELLO"], "ok": false}
+{"fn": "is_verb_form", "args": ["straßea"], "ok": false}
+{"fn": "is_verb_form", "args": ["tab\tseparated  padded  "], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.jsonhello world"], "ok": false}
+{"fn": "is_verb_form", "args": ["日本語のテキストemoji 👍🏽 mix"], "ok": false}
+{"fn": "is_verb_form", "args": ["  padded  ns:key.path"], "ok": false}
+{"fn": "is_verb_form", "args": ["abcemoji 👍🏽 mix"], "ok": false}
+{"fn": "is_verb_form", "args": [":  padded  "], "ok": false}
+{"fn": "is_verb_form", "args": ["{name} has {count} itemsé"], "ok": false}
+{"fn": "is_verb_form", "args": [":{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["abns:key.path"], "ok": false}
+{"fn": "is_verb_form", "args": ["ab:"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbulabc"], "ok": false}
+{"fn": "is_verb_form", "args": ["Hello Worldhello"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbul日本語のテキスト"], "ok": false}
+{"fn": "is_verb_form", "args": ["a﻿bom"], "ok": false}
+{"fn": "is_verb_form", "args": ["a.b.ca..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.jsonünïcödé"], "ok": false}
+{"fn": "is_verb_form", "args": ["😀İstanbul"], "ok": false}
+{"fn": "is_verb_form", "args": ["a..b日本語のテキスト"], "ok": false}
+{"fn": "is_verb_form", "args": [".leading日本語のテキスト"], "ok": false}
+{"fn": "is_verb_form", "args": ["a.b.ckey_name-1"], "ok": false}
+{"fn": "is_verb_form", "args": ["abc./x/**/*.json"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbul.leading"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.jsonline1\nline2"], "ok": false}
+{"fn": "is_verb_form", "args": ["😀a..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["HELLOHELLO"], "ok": false}
+{"fn": "is_verb_form", "args": ["ΣΊΣΥΦΟΣ日本語のテキスト"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbulhello"], "ok": false}
+{"fn": "is_verb_form", "args": ["日本語のテキストHELLO"], "ok": false}
+{"fn": "is_verb_form", "args": ["abc.leading"], "ok": false}
+{"fn": "is_verb_form", "args": ["  padded  ﻿bom"], "ok": false}
+{"fn": "is_verb_form", "args": ["a.b.ca.b.c"], "ok": false}
+{"fn": "is_verb_form", "args": ["emoji 👍🏽 mixtab\tseparated"], "ok": false}
+{"fn": "is_verb_form", "args": ["key_name-1:"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.jsonHELLO"], "ok": false}
+{"fn": "is_verb_form", "args": ["key_name-1straße"], "ok": false}
+{"fn": "is_verb_form", "args": ["src/a/b.ts日本語のテキスト"], "ok": false}
+{"fn": "is_verb_form", "args": ["straßeİstanbul"], "ok": false}
+{"fn": "is_verb_form", "args": ["a.leading"], "ok": false}
+{"fn": "is_verb_form", "args": ["line1\nline2abc"], "ok": false}
+{"fn": "is_verb_form", "args": ["a./x/**/*.json"], "ok": false}
+{"fn": "is_verb_form", "args": ["ns:key.path日本語のテキスト"], "ok": false}
+{"fn": "is_verb_form", "args": ["src/a/b.tsΣΊΣΥΦΟΣ"], "ok": false}
+{"fn": "is_verb_form", "args": [".leadingİstanbul"], "ok": false}
+{"fn": "is_verb_form", "args": ["abca:b:c"], "ok": false}
+{"fn": "is_verb_form", "args": ["ns:key.pathabc"], "ok": false}
+{"fn": "is_verb_form", "args": [".leadingsrc/a/b.ts"], "ok": false}
+{"fn": "is_verb_form", "args": ["a..bline1\nline2"], "ok": false}
+{"fn": "is_verb_form", "args": ["line1\nline2{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["HELLOabc"], "ok": false}
+{"fn": "is_verb_form", "args": ["ünïcödéa..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["key_name-1a"], "ok": false}
+{"fn": "is_verb_form", "args": ["ns:key.path  padded  "], "ok": false}
+{"fn": "is_verb_form", "args": ["ünïcödé:"], "ok": false}
+{"fn": "is_verb_form", "args": ["{name} has {count} itemsİstanbul"], "ok": false}
+{"fn": "is_verb_form", "args": ["a.b.cHello World"], "ok": false}
+{"fn": "is_verb_form", "args": ["trailing.ünïcödé"], "ok": false}
+{"fn": "is_verb_form", "args": ["straße./x/**/*.json"], "ok": false}
+{"fn": "is_verb_form", "args": ["key_name-1ünïcödé"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.jsontab\tseparated"], "ok": false}
+{"fn": "is_verb_form", "args": ["key_name-1a:b:c"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.jsonab"], "ok": false}
+{"fn": "is_verb_form", "args": ["trailing.a..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["trailing.key_name-1"], "ok": false}
+{"fn": "is_verb_form", "args": ["trailing.:"], "ok": false}
+{"fn": "is_verb_form", "args": ["line1\nline2a..b"], "ok": false}
+{"fn": "is_verb_form", "args": ["tab\tseparated😀"], "ok": false}
+{"fn": "is_verb_form", "args": ["abctab\tseparated"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.json😀"], "ok": false}
+{"fn": "is_verb_form", "args": ["src/a/b.tsline1\nline2"], "ok": false}
+{"fn": "is_verb_form", "args": ["Hello Worldtrailing."], "ok": false}
+{"fn": "is_verb_form", "args": ["a😀b😀chello world"], "ok": false}
+{"fn": "is_verb_form", "args": ["a.b.ca:b:c"], "ok": false}
+{"fn": "is_verb_form", "args": ["src/a/b.tsa.b.c"], "ok": false}
+{"fn": "is_verb_form", "args": ["hello worlda.b.c"], "ok": false}
+{"fn": "is_verb_form", "args": ["ΣΊΣΥΦΟΣsrc/a/b.ts"], "ok": false}
+{"fn": "is_verb_form", "args": ["İstanbul:"], "ok": false}
+{"fn": "is_verb_form", "args": ["./x/**/*.json{name} has {count} items"], "ok": false}
+{"fn": "is_verb_form", "args": ["key_name-1  padded  "], "ok": false}
+{"fn": "is_verb_form", "args": ["héllo wörld"], "ok": false}
+{"fn": "is_verb_form", "args": ["👍🏽 thumbs"], "ok": false}
+{"fn": "is_verb_form", "args": ["日本語"], "ok": false}
+{"fn": "is_verb_form", "args": ["ılık ırmak"], "ok": false}
+{"fn": "is_verb_form", "args": ["👨‍👩‍👧 family"], "ok": false}
+{"fn": "is_verb_form", "args": ["a b"], "ok": false}
+{"fn": "is_verb_form", "args": ["a😀b"], "ok": false}
+{"fn": "is_verb_form", "args": ["a²b x½ y①"], "ok": false}
+{"fn": "is_verb_form", "args": ["aⅠb Ⅻ"], "ok": false}
+{"fn": "is_verb_form", "args": ["a𐐀b 𝐀bc"], "ok": false}
+{"fn": "is_verb_form", "args": ["कि ٣٤"], "ok": false}
+{"fn": "is_verb_form", "args": ["Iı İi"], "ok": false}
+{"fn": "is_verb_form", "args": ["K K k"], "ok": false}
+{"fn": "is_verb_form", "args": ["ſ s S"], "ok": false}
+{"fn": "is_verb_form", "args": ["x‍y 👨‍👩‍👧"], "ok": false}
+{"fn": "is_verb_form", "args": ["a b c　d"], "ok": false}
+{"fn": "is_verb_form", "args": ["١٢٣ ٤٥"], "ok": false}
+{"fn": "is_verb_form", "args": ["𝟘𝟙 ²³"], "ok": false}
+{"fn": "is_verb_form", "args": ["snake_case foo-bar o'neil"], "ok": false}
+{"fn": "is_verb_form", "args": ["ǅungla Ǆ"], "ok": false}
+{"fn": "is_verb_form", "args": ["one\r\ntwo threefour"], "ok": false}
+{"fn": "is_verb_form", "args": ["café café"], "ok": false}
+{"fn": "is_verb_form", "args": ["ΣΑΣ σας ς"], "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["/x"], "kwargs": {"suffix": "./x/**/*.json"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a..b"], "kwargs": {"suffix": "a:b:c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ünïcödé"], "kwargs": {"suffix": "cö"}, "ok": false}
+{"fn": "takes_comparative", "args": ["emoji 👍🏽 mixhello world"], "kwargs": {"suffix": "key_name-1"}, "ok": false}
+{"fn": "takes_comparative", "args": [""], "kwargs": {"suffix": "src/a/b.ts"}, "ok": false}
+{"fn": "takes_comparative", "args": ["éab"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["😀"], "kwargs": {"suffix": "😀"}, "ok": false}
+{"fn": "takes_comparative", "args": ["abcİstanbul"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": [""], "kwargs": {"suffix": "ünïcödé"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["a:b:c"], "kwargs": {"suffix": "😀"}, "ok": false}
+{"fn": "takes_comparative", "args": ["src/a/b.ts"], "kwargs": {"suffix": "t"}, "ok": false}
+{"fn": "takes_comparative", "args": ["日本語のテキスト"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": [":"], "kwargs": {"suffix": "./x/**/*.json"}, "ok": false}
+{"fn": "takes_comparative", "args": ["tab\tseparatedtrailing."], "kwargs": {"suffix": "HELLO"}, "ok": false}
+{"fn": "takes_comparative", "args": ["*.jsona:b:"], "kwargs": {"suffix": "./x/**/*.jsona:b:c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["cöd"], "kwargs": {"suffix": "ünïcödé"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a😀b😀c"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  "], "kwargs": {"suffix": "İstanbulΣΊΣΥΦΟΣ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["emoji 👍🏽 mixline1\nline2"], "kwargs": {"suffix": "./x/**/*.json"}, "ok": false}
+{"fn": "takes_comparative", "args": ["Hello World"], "kwargs": {"suffix": "a.b.c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["tab\tseparatedΣΊΣΥΦΟΣ"], "kwargs": {"suffix": "tab\tseparated"}, "ok": false}
+{"fn": "takes_comparative", "args": [""], "kwargs": {"suffix": "  padded  "}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {"suffix": "nbu"}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {"suffix": "{name} has {count} items"}, "ok": false}
+{"fn": "takes_comparative", "args": ["tab\ts"], "kwargs": {"suffix": "İstanbultab\tseparated"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello"], "kwargs": {"suffix": "ns:key.path"}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {"suffix": ""}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {"suffix": "ΣΊΣΥΦΟΣ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["l"], "kwargs": {"suffix": "Hello World"}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["日本語のテキスト"], "kwargs": {"suffix": "a..b"}, "ok": false}
+{"fn": "takes_comparative", "args": [".TS"], "kwargs": {"suffix": "src/a/b.ts"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "Hello World"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ab"], "kwargs": {"suffix": "abc"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello"], "kwargs": {"suffix": "hel"}, "ok": false}
+{"fn": "takes_comparative", "args": ["é"], "kwargs": {"suffix": "é"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a😀b😀ctrailing."], "kwargs": {"suffix": "railing"}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {"suffix": "src/a/b.ts"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ΣΊΣΥΦΟΣ"], "kwargs": {"suffix": "ΣΊΣ"}, "ok": false}
+{"fn": "takes_comparative", "args": [""], "kwargs": {"suffix": "ΣΊΣΥΦΟΣ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a..b"], "kwargs": {"suffix": "HELLO"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ns:key.path"], "kwargs": {"suffix": "straße"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a:b:cHELLO"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["日本語のテキスト"], "kwargs": {"suffix": "語のテキ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ünïcödé"], "kwargs": {"suffix": "a:b:cns:key.path"}, "ok": false}
+{"fn": "takes_comparative", "args": ["tab\tseparated.leading"], "kwargs": {"suffix": ""}, "ok": false}
+{"fn": "takes_comparative", "args": ["😀ns:key.path"], "kwargs": {"suffix": "a😀b😀c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "HELLO"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ld"], "kwargs": {"suffix": "hello world"}, "ok": false}
+{"fn": "takes_comparative", "args": ["{name} has {count} items"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["bom"], "kwargs": {"suffix": "﻿bom"}, "ok": false}
+{"fn": "takes_comparative", "args": ["本語のテキス"], "kwargs": {"suffix": "日本語のテキストhello"}, "ok": false}
+{"fn": "takes_comparative", "args": ["key_name-1{name} has {count} items"], "kwargs": {"suffix": "😀"}, "ok": false}
+{"fn": "takes_comparative", "args": ["﻿boma.b.c"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["ΣΊΣΥΦΟΣ"], "kwargs": {"suffix": "aİstanbul"}, "ok": false}
+{"fn": "takes_comparative", "args": ["😀"], "kwargs": {"suffix": "emoji 👍🏽 mix"}, "ok": false}
+{"fn": "takes_comparative", "args": ["本語のテ"], "kwargs": {"suffix": "日本語のテキスト"}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  "], "kwargs": {"suffix": "İstanbul"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a.b.c"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {"suffix": "😀"}, "ok": false}
+{"fn": "takes_comparative", "args": ["trailing."], "kwargs": {"suffix": "  padded  "}, "ok": false}
+{"fn": "takes_comparative", "args": [":"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["😀"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["a.b.c"], "kwargs": {"suffix": ""}, "ok": false}
+{"fn": "takes_comparative", "args": ["trailing."], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["é"], "kwargs": {"suffix": "a.b.c"}, "ok": false}
+{"fn": "takes_comparative", "args": [".leading"], "kwargs": {"suffix": ".leadin"}, "ok": false}
+{"fn": "takes_comparative", "args": ["./x/**/*.json"], "kwargs": {"suffix": "Hello World"}, "ok": false}
+{"fn": "takes_comparative", "args": ["B\tSEPARA"], "kwargs": {"suffix": "tab\tseparated"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a"], "kwargs": {"suffix": "ΣΊΣΥΦΟΣ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["😀"], "kwargs": {"suffix": "src/a/b.ts"}, "ok": false}
+{"fn": "takes_comparative", "args": ["key_name-1"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": [".leading.leading"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["  "], "kwargs": {"suffix": "hello world  padded  "}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbulünïcödé"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["é"], "kwargs": {"suffix": "{name} has {count} items"}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  :"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["Hello World"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["abc"], "kwargs": {"suffix": "HELLOns:key.path"}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  "], "kwargs": {"suffix": "./x/**/*.json"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a..b"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  Hello World"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": [".leading"], "kwargs": {"suffix": "Hello World"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["Hello Worlda:b:c"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["abc"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["a:b:c"], "kwargs": {"suffix": "ésrc/a/b.ts"}, "ok": false}
+{"fn": "takes_comparative", "args": ["line1\nline2"], "kwargs": {"suffix": "a..b"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello world"], "kwargs": {"suffix": "trailing."}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  "], "kwargs": {"suffix": "trailing."}, "ok": false}
+{"fn": "takes_comparative", "args": ["{name} has {count} items"], "kwargs": {"suffix": "é﻿bom"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello world"], "kwargs": {"suffix": "abhello world"}, "ok": false}
+{"fn": "takes_comparative", "args": ["./x/**/*.json"], "kwargs": {"suffix": "helloa"}, "ok": false}
+{"fn": "takes_comparative", "args": ["src/a/b.ts"], "kwargs": {"suffix": "Hello World"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a"], "kwargs": {"suffix": "a"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello"], "kwargs": {"suffix": "ell"}, "ok": false}
+{"fn": "takes_comparative", "args": ["﻿bom"], "kwargs": {"suffix": "ns:key.path"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a.b.ca😀b😀c"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["Hello World"], "kwargs": {"suffix": "{name} has {count} items"}, "ok": false}
+{"fn": "takes_comparative", "args": ["{name} has {count} items"], "kwargs": {"suffix": "straße"}, "ok": false}
+{"fn": "takes_comparative", "args": ["trailing."], "kwargs": {"suffix": "a:b:c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["src/a/b.ts"], "kwargs": {"suffix": "key_name-1İstanbul"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello world"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": [".leading"], "kwargs": {"suffix": "./x/**/*.json"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ns:key.path"], "kwargs": {"suffix": "src/a/b.ts"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a.b.c"], "kwargs": {"suffix": "ab"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "RASSE"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ΣΊΣΥΦΟΣ{name} has {count} items"], "kwargs": {"suffix": "İstanbul"}, "ok": false}
+{"fn": "takes_comparative", "args": ["é"], "kwargs": {"suffix": "tab\tseparated"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a"], "kwargs": {"suffix": "﻿bomtrailing."}, "ok": false}
+{"fn": "takes_comparative", "args": ["ns:key.path"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["Hello World"], "kwargs": {"suffix": "line1\nline2"}, "ok": false}
+{"fn": "takes_comparative", "args": ["/*.json"], "kwargs": {"suffix": "./x/**/*.json"}, "ok": false}
+{"fn": "takes_comparative", "args": ["./x/**/*.json"], "kwargs": {"suffix": "﻿bom"}, "ok": false}
+{"fn": "takes_comparative", "args": ["tab\tseparated"], "kwargs": {"suffix": "Hello World"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ab"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["😀"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["tab\tseparated"], "kwargs": {"suffix": ".leading"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a:b:c"], "kwargs": {"suffix": "src/a/b.tsa😀b😀c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["./x/**/*.jsonstraße"], "kwargs": {"suffix": "hello﻿bom"}, "ok": false}
+{"fn": "takes_comparative", "args": ["u"], "kwargs": {"suffix": "{name} has {count} items"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ns:key.pathHELLO"], "kwargs": {"suffix": "key_name-1"}, "ok": false}
+{"fn": "takes_comparative", "args": ["AB"], "kwargs": {"suffix": "ab"}, "ok": false}
+{"fn": "takes_comparative", "args": ["tab\tseparated"], "kwargs": {"suffix": "  padded  emoji 👍🏽 mix"}, "ok": false}
+{"fn": "takes_comparative", "args": ["Hello Worldline1\nline2"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["./x/**/*.json"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["{name} has {count} items"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["} has {count} items"], "kwargs": {"suffix": "{name} has {count} items"}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["HELLO"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["helloline1\nline2"], "kwargs": {"suffix": "ne"}, "ok": false}
+{"fn": "takes_comparative", "args": ["trailing."], "kwargs": {"suffix": "{name} has {count} itemsline1\nline2"}, "ok": false}
+{"fn": "takes_comparative", "args": ["Hello World"], "kwargs": {"suffix": "lo Wor"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a😀b😀cabc"], "kwargs": {"suffix": "ca"}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  "], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["ngemoji 👍🏽 m"], "kwargs": {"suffix": ".leadingemoji 👍🏽 mix"}, "ok": false}
+{"fn": "takes_comparative", "args": ["日本語のテキスト"], "kwargs": {"suffix": "a.b.c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["line1\nline2"], "kwargs": {"suffix": ":"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a.b.csrc/a/b.ts"], "kwargs": {"suffix": "hello world"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a"], "kwargs": {"suffix": "a😀b😀c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a..b"], "kwargs": {"suffix": "İstanbul"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello world"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["abc"], "kwargs": {"suffix": "trailing."}, "ok": false}
+{"fn": "takes_comparative", "args": [".leading"], "kwargs": {"suffix": ":"}, "ok": false}
+{"fn": "takes_comparative", "args": ["日本語のテキスト"], "kwargs": {"suffix": "テキ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["key_name-1"], "kwargs": {"suffix": ".leading"}, "ok": false}
+{"fn": "takes_comparative", "args": ["y_n"], "kwargs": {"suffix": "key_name-1"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "a"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a😀b😀c"], "kwargs": {"suffix": "ΣΊΣΥΦΟΣ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["src/a/b.ts"], "kwargs": {"suffix": "trailing."}, "ok": false}
+{"fn": "takes_comparative", "args": ["emoji 👍🏽 mix"], "kwargs": {"suffix": "İstanbul"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ab"], "kwargs": {"suffix": "ab"}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  "], "kwargs": {"suffix": "tab\tseparated"}, "ok": false}
+{"fn": "takes_comparative", "args": ["tab\tseparated"], "kwargs": {"suffix": "  padded  İstanbul"}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  abc"], "kwargs": {"suffix": "line1\nline2Hello World"}, "ok": false}
+{"fn": "takes_comparative", "args": ["é"], "kwargs": {"suffix": "ünïcödéa.b.c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straßeİstanbul"], "kwargs": {"suffix": "./x/**/*.json"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a"], "kwargs": {"suffix": "a..b"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a😀b😀c"], "kwargs": {"suffix": "日本語のテキスト"}, "ok": false}
+{"fn": "takes_comparative", "args": ["PADD"], "kwargs": {"suffix": "  padded  "}, "ok": false}
+{"fn": "takes_comparative", "args": ["src/a/b.ts"], "kwargs": {"suffix": "😀"}, "ok": false}
+{"fn": "takes_comparative", "args": ["H"], "kwargs": {"suffix": "helloa..b"}, "ok": false}
+{"fn": "takes_comparative", "args": ["abctab\tseparated"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbulünïcödé"], "kwargs": {"suffix": "nïcöd"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hellotrailing."], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["line1\nline2emoji 👍🏽 mix"], "kwargs": {"suffix": "Hello World./x/**/*.json"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello"], "kwargs": {"suffix": "ΣΊΣΥΦΟΣ﻿bom"}, "ok": false}
+{"fn": "takes_comparative", "args": ["  padded  "], "kwargs": {"suffix": "key_name-1"}, "ok": false}
+{"fn": "takes_comparative", "args": [".leading"], "kwargs": {"suffix": "a😀b😀c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ünïcödéHELLO"], "kwargs": {"suffix": "HELLO"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello world"], "kwargs": {"suffix": "a😀b😀c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["emoji 👍🏽 mix"], "kwargs": {"suffix": "日本語のテキスト"}, "ok": false}
+{"fn": "takes_comparative", "args": [""], "kwargs": {"suffix": "﻿bom"}, "ok": false}
+{"fn": "takes_comparative", "args": ["absrc/a/b.ts"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["ns:key.path"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": [":"], "kwargs": {"suffix": ":"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello world"], "kwargs": {"suffix": "hello wo"}, "ok": false}
+{"fn": "takes_comparative", "args": ["trailing."], "kwargs": {"suffix": "railin"}, "ok": false}
+{"fn": "takes_comparative", "args": ["./x/**/*.jsonab"], "kwargs": {"suffix": "Hello World"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ΣΊΣΥΦΟΣ"], "kwargs": {"suffix": "a:b:c  padded  "}, "ok": false}
+{"fn": "takes_comparative", "args": ["日本語のテキスト"], "kwargs": {"suffix": "ns:key.path"}, "ok": false}
+{"fn": "takes_comparative", "args": ["😀trailing."], "kwargs": {"suffix": "HELLO"}, "ok": false}
+{"fn": "takes_comparative", "args": ["HELLO"], "kwargs": {"suffix": "ΣΊΣΥΦΟΣ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {"suffix": "ab"}, "ok": false}
+{"fn": "takes_comparative", "args": ["HELLO"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {"suffix": "hello world😀"}, "ok": false}
+{"fn": "takes_comparative", "args": ["astraße"], "kwargs": {"suffix": "😀"}, "ok": false}
+{"fn": "takes_comparative", "args": ["emoji 👍🏽 mix"], "kwargs": {"suffix": "😀"}, "ok": false}
+{"fn": "takes_comparative", "args": ["hello"], "kwargs": {"suffix": "HELLO"}, "ok": false}
+{"fn": "takes_comparative", "args": [" Wo"], "kwargs": {"suffix": "Hello World"}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbulkey_name-1"], "kwargs": {"suffix": "😀"}, "ok": false}
+{"fn": "takes_comparative", "args": ["﻿bom"], "kwargs": {"suffix": "a😀b😀c"}, "ok": false}
+{"fn": "takes_comparative", "args": ["src/a/b.ts"], "kwargs": {"suffix": "tab\tseparated"}, "ok": false}
+{"fn": "takes_comparative", "args": ["line1\nline2"], "kwargs": {"suffix": "HELLO"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a"], "kwargs": {}, "ok": false}
+{"fn": "takes_comparative", "args": ["{name} has {count} items"], "kwargs": {"suffix": "a"}, "ok": false}
+{"fn": "takes_comparative", "args": ["héllo wörld"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["👍🏽 thumbs"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["日本語"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": [""], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["é"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["İstanbul"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ılık ırmak"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["👨‍👩‍👧 family"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a b"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ΣΊΣΥΦΟΣ"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a😀b"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["﻿bom"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a²b x½ y①"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["aⅠb Ⅻ"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a𐐀b 𝐀bc"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["कि ٣٤"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["Iı İi"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["K K k"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ſ s S"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["x‍y 👨‍👩‍👧"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["a b c　d"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["١٢٣ ٤٥"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["𝟘𝟙 ²³"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["snake_case foo-bar o'neil"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ǅungla Ǆ"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["one\r\ntwo threefour"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["café café"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["ΣΑΣ σας ς"], "kwargs": {"suffix": "r"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "héllo wörld"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "👍🏽 thumbs"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "日本語"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": ""}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "é"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "İstanbul"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "straße"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "ılık ırmak"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "👨‍👩‍👧 family"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "a b"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "ΣΊΣΥΦΟΣ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "a😀b"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "﻿bom"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "a²b x½ y①"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "aⅠb Ⅻ"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "a𐐀b 𝐀bc"}, "ok": false}
+{"fn": "takes_comparative", "args": ["straße"], "kwargs": {"suffix": "कि ٣٤"}, "ok": false}

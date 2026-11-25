@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0] - 2026-11-25
+
+- Replaced the script-based runtime with one native `revayat-novel` binary for 64-bit Windows and Linux (x64 and arm64), built with Rust 1.100.0. The CLI handles intake, Word output, Persian lint, evaluation, and recoverable installation. OCR and Word rendering still use optional local tools.
+- Added Antigravity and Agent Plugins manifests alongside Claude Code, Codex, and Cursor. The plugin bundles Vazirmatn v33.003 and updates the English writing skill to `humanizer` v4.0.0.
+- Documented six translation stages, live lookup of names and terminology, optional parallel shards, bulk book plans, and bidirectional isolation for Persian text that starts with English.
+- Moved CI and dependency updates to Cargo. Added native installer checks on Linux and Windows and an offline container smoke test.
+
 ## 2.0.0
 
 - The plugin includes Persian, English, and Russian writing skills. Revayat Novel still produces Persian books and selects voice guidance by the language of the editable passage.

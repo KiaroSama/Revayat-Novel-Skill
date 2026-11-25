@@ -69,7 +69,7 @@ Don't calque as «تازه X بود که Y». Persian prefers a simultaneity fra
 - ✓ هم‌زمان با بوق مایکروفر، چراغ‌ها خاموش شدند.
 
 ## P12 · Natural collocations for everyday events
-- "the lights went out" → چراغ‌ها خاموش شدند. Use «برق رفت» only if the context establishes a power outage.
+- "the lights went out" → چراغ‌ها خاموش شدند. If the scene establishes a power outage, use the conversational «برق رفت».
 - "the music disappeared/stopped" → ✓ موسیقی قطع شد (not موسیقی ناپدید شد)
 
 ## P13 · Stock exclamations and suggestion frames: use the Persian idiom
