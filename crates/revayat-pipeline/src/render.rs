@@ -167,6 +167,24 @@ fn executable(path: &Path) -> bool {
     meta.is_file()
 }
 
+pub(crate) fn tesseract() -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["tesseract.exe"]
+    } else {
+        &["tesseract"]
+    };
+    locate(names).or_else(|| {
+        if !cfg!(windows) {
+            return None;
+        }
+        ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"]
+            .into_iter()
+            .filter_map(env::var_os)
+            .map(|base| PathBuf::from(base).join("Tesseract-OCR/tesseract.exe"))
+            .find(|path| executable(path))
+    })
+}
+
 pub(crate) fn libreoffice() -> Option<PathBuf> {
     let names: &[&str] = if cfg!(windows) {
         &["soffice.com", "soffice.exe", "libreoffice.exe"]

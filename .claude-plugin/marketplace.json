@@ -1,9 +1,11 @@
 {
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
   "name": "revayat-novel-skill",
   "description": "Persian book translation with a six-stage multi-agent workflow, a pure-Rust native binary, and the bundled Vazirmatn font.",
   "owner": {
     "name": "Kiaro Sama",
-    "url": "https://github.com/KiaroSama"
+    "url": "https://github.com/KiaroSama",
+    "email": "Kiaro.Sama.Dev@gmail.com"
   },
   "plugins": [
     {
@@ -13,10 +15,14 @@
       "version": "3.0.0",
       "author": {
         "name": "Kiaro Sama",
-        "url": "https://github.com/KiaroSama"
+        "url": "https://github.com/KiaroSama",
+        "email": "Kiaro.Sama.Dev@gmail.com"
       },
       "repository": "https://github.com/KiaroSama/Revayat-Novel-Skill",
       "license": "GPL-3.0-or-later"
     }
-  ]
+  ],
+  "metadata": {
+    "description": "Persian book translation with a six-stage multi-agent workflow, a pure-Rust native binary, and the bundled Vazirmatn font."
+  }
 }

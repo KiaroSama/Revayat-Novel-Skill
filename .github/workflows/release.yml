@@ -1,0 +1,323 @@
+name: Release & Sign
+
+'on':
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build, sign, and publish (e.g. v3.0.0)'
+        type: string
+        default: 'v3.0.0'
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+  build:
+    name: Build release (${{ matrix.name }})
+    needs: validate
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            ext: .exe
+          - name: windows-arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            ext: .exe
+          - name: linux-x64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            ext: ''
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            ext: ''
+    env:
+      TAG: ${{ inputs.tag }}
+      TARGET_NAME: ${{ matrix.name }}
+      RUST_TARGET: ${{ matrix.target }}
+      EXT: ${{ matrix.ext }}
+    steps:
+      - name: Check release tag
+        shell: bash
+        run: |
+          export LC_ALL=C
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] ||
+             ! git check-ref-format "refs/tags/$TAG"; then
+            printf '%s\n' 'Use a version tag such as v3.0.0 or v3.0.0-rc.1.' >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned native Rust toolchain
+        shell: bash
+        run: |
+          rustup set default-host "$RUST_TARGET"
+          rustup toolchain install "1.100.0-$RUST_TARGET" --profile minimal
+          rustup default "1.100.0-$RUST_TARGET"
+
+      - name: Build and check the release binary
+        shell: bash
+        run: |
+          version=$(rustc --version --verbose)
+          if [[ "$version" != 'rustc 1.100.0 '* ]] || ! grep -Fxq "host: $RUST_TARGET" <<< "$version"; then
+            printf '%s\n' 'Expected Rust 1.100.0 on the matrix host target.' >&2
+            exit 1
+          fi
+          cargo build --workspace --release --locked --target "$RUST_TARGET" --bin revayat-novel
+          mkdir -p dist
+          binary="dist/revayat-novel-${TAG}-${TARGET_NAME}${EXT}"
+          cp "target/$RUST_TARGET/release/revayat-novel${EXT}" "$binary"
+          "$binary" --version
+          "$binary" --help
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-binaries-${{ matrix.name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-and-release:
+    name: Sign and publish release
+    needs: build
+    runs-on: windows-2025
+    timeout-minutes: 20
+    environment: revayat-novel-signing
+    permissions:
+      contents: write # Create the release and upload assets.
+      attestations: write # Publish build provenance.
+      id-token: write # Get the OIDC token for provenance.
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-binaries-*
+          path: release-assets/
+          merge-multiple: true
+
+      - name: Sign and verify the release files
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+          LINUX_SIGNING_ED25519_PRIVATE_PEM: ${{ secrets.LINUX_SIGNING_ED25519_PRIVATE_PEM }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $assets = Join-Path $env:GITHUB_WORKSPACE 'release-assets'
+          $prefix = "revayat-novel-$env:RELEASE_TAG"
+          $windows = @("$prefix-windows-x64.exe", "$prefix-windows-arm64.exe")
+          $linux = @("$prefix-linux-x64", "$prefix-linux-arm64")
+          $binaries = $windows + $linux
+          $downloaded = @(Get-ChildItem -LiteralPath $assets -Force)
+          if ($downloaded.Count -ne $binaries.Count) { throw 'Expected exactly four release binaries.' }
+          foreach ($name in $binaries) {
+            $file = Get-Item -LiteralPath (Join-Path $assets $name)
+            if ($file.Name -cne $name -or $file.PSIsContainer -or $file.Length -le 0 -or
+                ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+              throw "Invalid release binary: $name"
+            }
+          }
+          foreach ($name in 'WINDOWS_SIGNING_PFX_BASE64', 'WINDOWS_SIGNING_PFX_PASSWORD', 'LINUX_SIGNING_ED25519_PRIVATE_PEM') {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Missing signing secret: $name"
+            }
+          }
+
+          function New-TamperedCopy($source, $copy, [switch]$PeFile) {
+            Copy-Item -LiteralPath $source -Destination $copy
+            $stream = [IO.File]::Open($copy, 'Open', 'ReadWrite', 'None')
+            try {
+              if ($PeFile) {
+                # Change a hashed code byte without touching the signature or PE headers.
+                $pe = [System.Reflection.PortableExecutable.PEReader]::new($stream, 'LeaveOpen')
+                try {
+                  $section = $pe.PEHeaders.SectionHeaders | Where-Object {
+                    $_.SizeOfRawData -gt 0 -and ($_.SectionCharacteristics -band 0x20)
+                  } | Select-Object -First 1
+                  if (!$section) { throw 'No code section found in the Windows binary.' }
+                  $stream.Position = $section.PointerToRawData
+                } finally {
+                  $pe.Dispose()
+                }
+              }
+              $value = $stream.ReadByte()
+              if ($value -lt 0) { throw 'No byte available for the tamper test.' }
+              $stream.Position--
+              $stream.WriteByte([byte]($value -bxor 1))
+            } finally {
+              $stream.Dispose()
+            }
+          }
+
+          $publicDir = Join-Path $env:GITHUB_WORKSPACE 'docs/signing'
+          $certificate = Join-Path $publicDir 'revayat-novel-codesign.cer'
+          $publicKey = Join-Path $publicDir 'revayat-novel-release-ed25519.pub.pem'
+          $thumbprint = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($certificate).Thumbprint
+          $sdkBins = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+          $signtool = Get-ChildItem -Path "$sdkBins/*/x64/signtool.exe" -File |
+            Where-Object { $_.Directory.Parent.Name -as [version] } |
+            Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
+          if (!$signtool) { throw 'Windows SDK SignTool was not found.' }
+          $openssl = 'C:\Program Files\Git\mingw64\bin\openssl.exe'
+          if (!(Test-Path -LiteralPath $openssl -PathType Leaf)) {
+            $openssl = (Get-Command openssl.exe -CommandType Application | Select-Object -First 1).Source
+          }
+
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          $key = Join-Path $env:RUNNER_TEMP 'ed25519.pem'
+          $utf8 = [Text.UTF8Encoding]::new($false)
+          try {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64))
+            [IO.File]::WriteAllText($key, $env:LINUX_SIGNING_ED25519_PRIVATE_PEM, $utf8)
+          } catch {
+            throw 'Could not write the temporary signing keys.'
+          } finally {
+            Remove-Item Env:WINDOWS_SIGNING_PFX_BASE64, Env:LINUX_SIGNING_ED25519_PRIVATE_PEM
+          }
+
+          $tamperedExe = Join-Path $env:RUNNER_TEMP 'tampered-release.exe'
+          $store = 'Cert:\CurrentUser\My'
+          if (Test-Path -LiteralPath "$store\$thumbprint") { throw 'The signing certificate is already installed.' }
+          $imported = @()
+          try {
+            $password = ConvertTo-SecureString $env:WINDOWS_SIGNING_PFX_PASSWORD -AsPlainText -Force
+            Remove-Item Env:WINDOWS_SIGNING_PFX_PASSWORD
+            $imported = @(Import-PfxCertificate -FilePath $pfx -CertStoreLocation $store -Password $password)
+            if (!($imported | Where-Object { $_.HasPrivateKey -and $_.Thumbprint -eq $thumbprint })) {
+              throw 'The PFX does not contain the expected signing key.'
+            }
+            foreach ($name in $windows) {
+              $exe = Join-Path $assets $name
+              $null = & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 $thumbprint /d 'Revayat Novel' /du 'https://github.com/KiaroSama/Revayat-Novel-Skill' $exe 2>&1
+              if ($LASTEXITCODE -ne 0) { throw "SignTool failed for $name (exit $LASTEXITCODE)." }
+              $signature = Get-AuthenticodeSignature -LiteralPath $exe
+              if (!$signature.SignerCertificate -or $signature.SignerCertificate.Thumbprint -ne $thumbprint -or
+                  !$signature.TimeStamperCertificate -or $signature.Status -notin 'Valid', 'UnknownError') {
+                throw "Authenticode verification failed for $name ($($signature.Status))."
+              }
+              New-TamperedCopy $exe $tamperedExe -PeFile
+              if ((Get-AuthenticodeSignature -LiteralPath $tamperedExe).Status -ne 'HashMismatch') {
+                throw "Authenticode did not report a hash mismatch after changing $name."
+              }
+            }
+          } finally {
+            foreach ($cert in $imported | Where-Object HasPrivateKey) {
+              Remove-Item -LiteralPath "$store\$($cert.Thumbprint)" -DeleteKey
+            }
+          }
+
+          function Sign-Ed25519($file) {
+            & $openssl pkeyutl -sign -rawin -inkey $key -in $file -out "$file.sig"
+            if ($LASTEXITCODE -ne 0) { throw "Ed25519 signing failed for $file." }
+            & $openssl pkeyutl -verify -pubin -inkey $publicKey -rawin -in $file -sigfile "$file.sig"
+            if ($LASTEXITCODE -ne 0) { throw "Ed25519 verification failed for $file." }
+          }
+          $tamperedBin = Join-Path $env:RUNNER_TEMP 'tampered-release'
+          foreach ($name in $linux) {
+            $bin = Join-Path $assets $name
+            Sign-Ed25519 $bin
+            New-TamperedCopy $bin $tamperedBin
+            $null = & $openssl pkeyutl -verify -pubin -inkey $publicKey -rawin -in $tamperedBin -sigfile "$bin.sig" 2>&1
+            if ($LASTEXITCODE -ne 1) { throw "Expected Ed25519 to reject the changed $name (exit $LASTEXITCODE)." }
+          }
+
+          $sums = foreach ($name in $binaries) {
+            $hash = Get-FileHash -LiteralPath (Join-Path $assets $name) -Algorithm SHA256
+            "$($hash.Hash.ToLowerInvariant())  $name"
+          }
+          $manifest = Join-Path $assets 'SHA256SUMS.txt'
+          [IO.File]::WriteAllText($manifest, ($sums -join "`n") + "`n", $utf8)
+          Sign-Ed25519 $manifest
+          Copy-Item -LiteralPath $certificate, $publicKey -Destination $assets
+
+      - name: Overwrite and remove temporary signing files
+        if: always()
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($name in 'codesign.pfx', 'ed25519.pem', 'tampered-release.exe', 'tampered-release') {
+            $path = Join-Path $env:RUNNER_TEMP $name
+            if (!(Test-Path -LiteralPath $path)) { continue }
+            try {
+              $stream = [IO.File]::Open($path, 'Open', 'Write', 'None')
+              try {
+                $zeros = [byte[]]::new(65536)
+                while ($stream.Position -lt $stream.Length) {
+                  $count = [Math]::Min($zeros.Length, $stream.Length - $stream.Position)
+                  $stream.Write($zeros, 0, $count)
+                }
+                $stream.Flush($true)
+              } finally {
+                $stream.Dispose()
+              }
+            } catch {
+              $failed = $true
+            } finally {
+              try { Remove-Item -LiteralPath $path -Force } catch { $failed = $true }
+            }
+          }
+          if ($failed) { throw 'Could not overwrite and remove every temporary signing file.' }
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            release-assets/revayat-novel-${{ inputs.tag }}-*
+            !release-assets/*.sig
+
+      - name: Publish signed release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PROMPT_DISABLED: '1'
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $view = gh release view "$env:RELEASE_TAG" --json tagName 2>&1
+          $exists = $LASTEXITCODE -eq 0
+          if (!$exists -and ($view -join "`n").Trim() -cne 'release not found') {
+            throw 'GitHub CLI could not confirm whether the release exists.'
+          }
+
+          # GitHub ignores --target when the tag already exists.
+          $tag = git tag --list "$env:RELEASE_TAG"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check the release tag.' }
+          if ($tag) {
+            $tagSha = git rev-parse --verify "refs/tags/$env:RELEASE_TAG^{commit}"
+            if ($LASTEXITCODE -ne 0 -or $tagSha -ne $env:GITHUB_SHA) {
+              throw 'The release tag does not point to the commit that built the binaries.'
+            }
+          } elseif ($exists) {
+            throw 'GitHub reported a release but its tag was missing from checkout.'
+          }
+
+          $assets = @(Get-ChildItem -LiteralPath 'release-assets' -File | ForEach-Object FullName)
+          if ($exists) {
+            gh release upload "$env:RELEASE_TAG" @assets --clobber
+          } else {
+            gh release create "$env:RELEASE_TAG" @assets --target "$env:GITHUB_SHA" `
+              --title "Revayat Novel $env:RELEASE_TAG" --notes 'Signed revayat-novel binaries for Windows and Linux (x64 and arm64). See docs/signing/README.md for verification commands.'
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI failed to publish the release assets.' }
